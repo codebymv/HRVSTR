@@ -17,8 +17,15 @@ export default defineConfig({
     testTimeout: 10000, // Increase timeout to 10 seconds
   },
   server: {
-     port: 5173,
-     host: true // Explicitly set host to true
+    port: 5173,
+    host: true, // Explicitly set host to true
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        secure: false,
+      }
+    }
   },
   // Ensure base is correctly set for deployment if needed
   base: '/',

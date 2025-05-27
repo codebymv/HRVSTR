@@ -2,8 +2,13 @@
  * API Service - Manages proxy URL and API configuration
  */
 
-// Get the proxy URL from environment variables or use the default
+// Get the proxy URL from environment variables or use relative path
 export const getProxyUrl = (): string => {
+  // In production, use relative path
+  if (import.meta.env.PROD) {
+    return '/api';
+  }
+  // In development, use the proxy URL from env or default
   return import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
 };
 

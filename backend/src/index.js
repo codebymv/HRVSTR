@@ -47,7 +47,7 @@ const limiter = rateLimit({
 
 // Configure CORS with specific options
 const corsOptions = {
-  origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:3001'],
+  origin: true, // Allow all origins in production
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: [
     'Content-Type', 
@@ -84,10 +84,7 @@ app.options('*', cors(corsOptions));
 app.use((req, res, next) => {
   // Set CORS headers
   const origin = req.headers.origin;
-  if (corsOptions.origin.includes(origin) || !origin) {
-    res.header('Access-Control-Allow-Origin', origin || '*');
-  }
-  
+  res.header('Access-Control-Allow-Origin', origin || '*');
   res.header('Access-Control-Allow-Methods', corsOptions.methods.join(','));
   res.header('Access-Control-Allow-Headers', corsOptions.allowedHeaders.join(','));
   res.header('Access-Control-Expose-Headers', corsOptions.exposedHeaders.join(','));
