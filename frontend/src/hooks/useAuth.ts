@@ -1,41 +1,25 @@
-import { useCallback } from 'react';
-import { useAuth0 } from '@auth0/auth0-react';
+import { useContext } from 'react';
+import { AuthContext } from '../contexts/AuthContext';
 
 export function useAuth() {
-  const { 
-    getAccessTokenSilently, 
-    isAuthenticated, 
-    isLoading, 
-    loginWithRedirect, 
-    logout, 
-    user 
-  } = useAuth0();
+  const context = useContext(AuthContext);
 
-  const getAccessToken = useCallback(async () => {
-    try {
-      const token = await getAccessTokenSilently();
-      return token;
-    } catch (error) {
-      console.error('Error getting access token:', error);
-      throw error;
-    }
-  }, [getAccessTokenSilently]);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
 
-  // Add role checking if needed for your application
-  const hasRole = useCallback((role: string) => {
-    if (!user) return false;
-    // Adjust the namespace based on your Auth0 configuration
-    const roles = user['https://hrvstr.com/roles'] || [];
-    return Array.isArray(roles) && roles.includes(role);
-  }, [user]);
+  const { user, loading, isAuthenticated, signIn, signOut } = context;
+
+  // Removed Auth0 specific functions like getAccessToken and hasRole
+  // If you need role-based access with Google OAuth, it needs to be implemented
+  // within the AuthContext and User interface.
 
   return {
-    getAccessToken,
-    isAuthenticated,
-    isLoading,
-    loginWithRedirect,
-    logout,
     user,
-    hasRole
+    loading,
+    isAuthenticated,
+    signIn,
+    signOut,
+    // hasRole is removed as it was Auth0 specific
   };
 }
