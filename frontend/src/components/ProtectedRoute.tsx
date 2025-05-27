@@ -11,7 +11,7 @@ export const ProtectedRoute = ({
   children, 
   requiredRole 
 }: ProtectedRouteProps) => {
-  const { isAuthenticated, isLoading, hasRole } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
     return <div className="flex justify-center items-center h-full">
@@ -19,17 +19,9 @@ export const ProtectedRoute = ({
     </div>;
   }
 
-  // For development purposes, bypass authentication check
-  // This will allow access to protected routes without authentication
-  // Remove this in production
-  const bypassAuth = true; // Set to true for development, false for production
-
-  if (!isAuthenticated && !bypassAuth) {
+  if (!isAuthenticated) {
+    // Redirect to home page if not authenticated
     return <Navigate to="/" replace />;
-  }
-
-  if (requiredRole && !hasRole(requiredRole) && !bypassAuth) {
-    return <Navigate to="/unauthorized" replace />;
   }
 
   return <>{children}</>;

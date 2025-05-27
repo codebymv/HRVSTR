@@ -140,6 +140,17 @@ app.use('/api/earnings', earningsRoutes);
 app.use('/api/sentiment', sentimentRoutes);
 app.use('/api/yahoo', yahooRoutes);
 
+// Serve static files from the frontend build directory in production
+if (process.env.NODE_ENV === 'production') {
+  const frontendBuildPath = path.join(__dirname, '../../frontend/dist');
+  app.use(express.static(frontendBuildPath));
+
+  // Handle all other routes by serving the frontend's index.html
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(frontendBuildPath, 'index.html'));
+  });
+}
+
 // Error handling middleware (must be after routes)
 app.use(errorHandler);
 
