@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Default theme (dark) */
+  --bg-primary: #030712; /* black/very dark gray for bg */
+  --bg-secondary: #111827;
+  --bg-tertiary: #1f2937;
+  --accent-primary: #2563eb; /* blue for accents */
+  --accent-secondary: #3b82f6;
+  --text-primary: #f9fafb;
+  --text-secondary: #d1d5db;
+  --text-muted: #9ca3af;
+  --border-color: #374151;
+}
+
+/* Light theme - Stone/beige color palette */
+.light-theme {
+  --bg-primary: #e7e5e4; /* stone-200 background */
+  --bg-secondary: #d6d3d1; /* stone-300 */
+  --bg-tertiary: #a8a29e; /* stone-400 */
+  --accent-primary: #2563eb; /* keep blue for accents */
+  --accent-secondary: #3b82f6;
+  --text-primary: #44403c; /* stone-700 */
+  --text-secondary: #57534e; /* stone-600 */
+  --text-muted: #78716c; /* stone-500 */
+  --border-color: #a8a29e; /* stone-400 */
+}
+
+/* Apply theme variables */
+.bg-theme-primary {
+  background-color: var(--bg-primary);
+}
+
+.bg-theme-secondary {
+  background-color: var(--bg-secondary);
+}
+
+.bg-theme-tertiary {
+  background-color: var(--bg-tertiary);
+}
+
+.text-theme-primary {
+  color: var(--text-primary);
+}
+
+.text-theme-secondary {
+  color: var(--text-secondary);
+}
+
+.text-theme-muted {
+  color: var(--text-muted);
+}
+
+.border-theme {
+  border-color: var(--border-color);
+}
+
+.accent-theme-primary {
+  background-color: var(--accent-primary);
+}
+
+.accent-theme-secondary {
+  background-color: var(--accent-secondary);
+}
