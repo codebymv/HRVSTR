@@ -17,6 +17,12 @@ export default defineConfig({
     testTimeout: 10000, // Increase timeout to 10 seconds
   },
   server: {
-     port: 5173
+     port: 5173,
+     host: true // Explicitly set host to true
+  },
+  // Ensure base is correctly set for deployment if needed
+  base: '/',
+  build: {
+    copyPublicDir: true // Explicitly copy public directory content to build output root
   }
 });
