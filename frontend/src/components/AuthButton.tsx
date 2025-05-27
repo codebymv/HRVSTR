@@ -1,10 +1,10 @@
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from '../contexts/AuthContext';
 import { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { Sun, Moon, User } from 'lucide-react';
 
 export const AuthButton = () => {
-  const { isAuthenticated, isLoading, user, loginWithRedirect, logout } = useAuth();
+  const { loading, user, signIn, signOut } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -24,7 +24,7 @@ export const AuthButton = () => {
   }, []);
 
   // Handle loading state
-  if (isLoading) {
+  if (loading) {
     return (
       <button 
         disabled 
@@ -37,7 +37,7 @@ export const AuthButton = () => {
   }
 
   // Authenticated user with avatar dropdown
-  if (isAuthenticated) {
+  if (user) {
     const isLight = theme === 'light';
     const dropdownBgColor = isLight ? 'bg-stone-300' : 'bg-gray-900';
     const dropdownBorderColor = isLight ? 'border-stone-400' : 'border-gray-800';
@@ -92,7 +92,7 @@ export const AuthButton = () => {
               
               {/* Sign Out */}
               <button
-                onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
+                onClick={() => signOut()}
                 className={`w-full text-left px-4 py-2 text-sm text-red-500 ${hoverBgColor}`}
               >
                 Sign out
@@ -107,7 +107,7 @@ export const AuthButton = () => {
   // Not authenticated - show login button
   return (
     <button 
-      onClick={() => loginWithRedirect()}
+      onClick={() => signIn()}
       className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm"
     >
       Log In

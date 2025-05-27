@@ -1,5 +1,5 @@
 import React from 'react';
-import { ListChecks, Settings, BarChart2, TrendingUp } from 'lucide-react';
+import { ListChecks, Settings, BarChart2, TrendingUp, Home } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -20,12 +20,17 @@ const Sidebar: React.FC = () => {
     <aside className={`hidden lg:flex flex-col ${bgColor} border-r ${borderColor} w-64 h-screen sticky top-0`}>
       <nav className="flex-1 p-4 space-y-1">
         <p className={`text-xs font-semibold ${headerColor} uppercase tracking-wider mt-2 mb-2 px-3`}>
-          Main
+          Navigation
         </p>
+        
+        <NavLink to="/home" className={({isActive}) => `flex items-center space-x-3 px-3 py-2 rounded-lg ${isActive ? `${activeItemBg} ${activeItemText} font-medium` : `${textColor} ${hoverBg} ${hoverText} transition-colors`}`}>
+          <Home size={20} />
+          <span>Home</span>
+        </NavLink>
         
         <NavLink to="/sentiment" className={({isActive}) => `flex items-center space-x-3 px-3 py-2 rounded-lg ${isActive ? `${activeItemBg} ${activeItemText} font-medium` : `${textColor} ${hoverBg} ${hoverText} transition-colors`}`}>
           <BarChart2 size={20} />
-          <span>Sentiment Scraper</span>
+          <span>Sentiment Analysis</span>
         </NavLink>
         
         <NavLink to="/sec-filings" className={({isActive}) => `flex items-center space-x-3 px-3 py-2 rounded-lg ${isActive ? `${activeItemBg} ${activeItemText} font-medium` : `${textColor} ${hoverBg} ${hoverText} transition-colors`}`}>

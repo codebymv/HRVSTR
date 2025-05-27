@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { ChartData } from '../../types';
-import { BarChart2, Loader2 } from 'lucide-react';
+import { BarChart2, Loader2, MessageSquare, TrendingUp, Globe } from 'lucide-react';
 import { Bar } from 'react-chartjs-2';
 import ProgressBar from '../ProgressBar';
 import {
@@ -34,6 +34,65 @@ const SentimentChart: React.FC<SentimentChartProps> = ({
   // Get theme context
   const { theme } = useTheme();
   const isLight = theme === 'light';
+
+  // Calculate source distribution percentages
+  const calculateSourcePercentages = (data: ChartData[]) => {
+    if (!data || data.length === 0) {
+      console.log('No data available for source calculation');
+      return { reddit: 0, finviz: 0, yahoo: 0 };
+    }
+
+    console.log('Raw data for source calculation:', JSON.parse(JSON.stringify(data)));
+    
+    // Initialize source counts
+    const sourceCounts = {
+      reddit: 0,
+      finviz: 0,
+      yahoo: 0,
+      other: 0  // Track any unexpected sources
+    };
+
+    // Sum up source counts from all data points
+    data.forEach(item => {
+      const sources = item.sources || {};
+      console.log(`Sources for ${item.date}:`, sources);
+      
+      // Process each source in the item
+      Object.entries(sources).forEach(([source, count]) => {
+        const lowerSource = source.toLowerCase();
+        if (lowerSource.includes('reddit')) {
+          sourceCounts.reddit += count;
+        } else if (lowerSource.includes('finviz')) {
+          sourceCounts.finviz += count;
+        } else if (lowerSource.includes('yahoo')) {
+          sourceCounts.yahoo += count;
+        } else {
+          sourceCounts.other += count;
+          console.log(`Found unexpected source: ${source}`);
+        }
+      });
+    });
+
+    const total = Object.values(sourceCounts).reduce((sum, count) => sum + count, 0);
+    console.log('Final source counts:', { ...sourceCounts, total });
+
+    if (total === 0) {
+      console.log('No source data found');
+      return { reddit: 0, finviz: 0, yahoo: 0 };
+    }
+
+    // Calculate percentages (only for the three main sources)
+    const percentages = {
+      reddit: Math.round((sourceCounts.reddit / total) * 100),
+      finviz: Math.round((sourceCounts.finviz / total) * 100),
+      yahoo: Math.round((sourceCounts.yahoo / total) * 100)
+    };
+
+    console.log('Final calculated percentages:', percentages);
+    return percentages;
+  };
+
+  const sourcePercentages = calculateSourcePercentages(data);
   
   // Helper to detect hourly data (1-day view)
   const isHourlyData = (d: ChartData[]): boolean => {
@@ -208,20 +267,26 @@ const SentimentChart: React.FC<SentimentChartProps> = ({
           </div>
         )}
       </div>
-      <div className="text-xs flex flex-wrap items-center gap-2 text-neutral-500 dark:text-neutral-400">
-        <span>Data sources:</span>
-        <div className="flex space-x-2">
-          <span className="bg-orange-500 rounded-full px-2 py-0.5 text-white">
-            Reddit (30%)
+      <div className="text-xs flex flex-wrap items-center justify-between gap-3 text-neutral-500 dark:text-neutral-400">
+        <div className="flex items-center space-x-2">
+          <span className="flex items-center space-x-1 bg-stone-100 dark:bg-gray-700 rounded-full px-2 py-0.5">
+            <MessageSquare size={12} className="text-orange-500" />
+            <span>{sourcePercentages.reddit}%</span>
           </span>
-          <span className="bg-amber-500 rounded-full px-2 py-0.5 text-white">
-            Finviz (40%)
+          <span className="flex items-center space-x-1 bg-stone-100 dark:bg-gray-700 rounded-full px-2 py-0.5">
+            <TrendingUp size={12} className="text-amber-500" />
+            <span>{sourcePercentages.finviz}%</span>
           </span>
-          <span className="bg-green-500 rounded-full px-2 py-0.5 text-white">
-            Yahoo (30%)
+          <span className="flex items-center space-x-1 bg-stone-100 dark:bg-gray-700 rounded-full px-2 py-0.5">
+            <Globe size={12} className="text-blue-500" />
+            <span>{sourcePercentages.yahoo}%</span>
           </span>
+          {/* <span className="hidden sm:inline-flex items-center space-x-1 bg-stone-100 dark:bg-gray-700 rounded-full px-2 py-0.5">
+            <Layers size={12} className="text-gray-500" />
+            <span>Combined</span>
+          </span> */}
         </div>
-        <span className="ml-auto">
+        <span className="text-xs text-neutral-500 dark:text-neutral-400">
           Last updated: {new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
         </span>
       </div>

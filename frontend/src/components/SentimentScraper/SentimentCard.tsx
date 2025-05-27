@@ -18,7 +18,7 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
     price,
     changePercent,
     newsCount = 0,
-    analystRating,
+    // Remove unused analystRating variable
     confidence, // No default - will calculate if not provided
     strength = Math.round(Math.abs(score * 100)), // Calculate strength as percentage of score
     volume = 0, // Discussion volume
@@ -113,19 +113,22 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
           )}
           {source === 'finviz' && (
             <>
-              <span className="block">
-                ${(price as number)?.toFixed(2) || 'N/A'}
-                {changePercent != null && !isNaN(changePercent as unknown as number) && (
-                  <span className="inline-flex items-center ml-1">
-                    {changePercent >= 0 ? (
-                      <ArrowUpRight size={14} className="text-green-500" />
-                    ) : (
-                      <ArrowDownRight size={14} className="text-red-500" />
-                    )}
-                    {Math.abs(changePercent as number).toFixed(2)}%
-                  </span>
-                )}
-              </span>
+              {/* Only show price if it's a valid number */}
+              {price !== undefined && price !== null && !isNaN(Number(price)) ? (
+                <span className="block">
+                  ${Number(price).toFixed(2)}
+                  {changePercent !== undefined && changePercent !== null && !isNaN(Number(changePercent)) && (
+                    <span className="inline-flex items-center ml-1">
+                      {Number(changePercent) >= 0 ? (
+                        <ArrowUpRight size={14} className="text-green-500" />
+                      ) : (
+                        <ArrowDownRight size={14} className="text-red-500" />
+                      )}
+                      {Math.abs(Number(changePercent)).toFixed(2)}%
+                    </span>
+                  )}
+                </span>
+              ) : null}
               {newsCount !== undefined && <span className="block">{newsCount} news articles</span>}
               
               {/* Volume indicator if available */}
@@ -141,19 +144,22 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
           )}
           {source === 'yahoo' && (
             <>
-              <span className="block">
-                ${(price as number)?.toFixed(2) || 'N/A'}
-                {changePercent != null && !isNaN(changePercent as unknown as number) && (
-                  <span className="inline-flex items-center ml-1">
-                    {changePercent >= 0 ? (
-                      <ArrowUpRight size={14} className="text-green-500" />
-                    ) : (
-                      <ArrowDownRight size={14} className="text-red-500" />
-                    )}
-                    {Math.abs(changePercent as number).toFixed(2)}%
-                  </span>
-                )}
-              </span>
+              {/* Only show price if it's a valid number */}
+              {price !== undefined && price !== null && !isNaN(Number(price)) ? (
+                <span className="block">
+                  ${Number(price).toFixed(2)}
+                  {changePercent !== undefined && changePercent !== null && !isNaN(Number(changePercent)) && (
+                    <span className="inline-flex items-center ml-1">
+                      {Number(changePercent) >= 0 ? (
+                        <ArrowUpRight size={14} className="text-green-500" />
+                      ) : (
+                        <ArrowDownRight size={14} className="text-red-500" />
+                      )}
+                      {Math.abs(Number(changePercent)).toFixed(2)}%
+                    </span>
+                  )}
+                </span>
+              ) : null}
               {newsCount !== undefined && <span className="block">{newsCount} news articles</span>}
               
               {/* Volume indicator if available */}

@@ -24,6 +24,9 @@ export interface SentimentData {
   changePercent?: number;
   analystRating?: string;
   newsCount?: number;
+  // Source tracking
+  sources?: Record<string, number>;
+  
   // Test-only properties
   _test_flag?: string;
 }

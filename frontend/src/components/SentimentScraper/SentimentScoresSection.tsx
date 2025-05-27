@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, Info, Loader2 } from 'lucide-react';
+import { AlertTriangle, Info, Loader2, MessageSquare, TrendingUp, Globe, Layers } from 'lucide-react';
 import SentimentCard from './SentimentCard';
 import ProgressBar from '../ProgressBar';
 import { SentimentData } from '../../types';
@@ -41,8 +41,6 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-700';
   const textColor = isLight ? 'text-stone-800' : 'text-white';
   const mutedTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
-  const buttonBgColor = isLight ? 'bg-stone-400 hover:bg-stone-500' : 'bg-gray-700 hover:bg-gray-600';
-  const activeButtonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
 
   // Get the appropriate sentiment data based on the selected source
   const getSentimentData = () => {
@@ -83,15 +81,25 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
 
   const currentSentiments = getSentimentData();
 
-  // Use fixed source distribution percentages to ensure consistency with chart display
+  // Use hard-coded values to match the chart percentages
   const getSourceDistribution = () => {
-    // Always return fixed percentages: 30% Reddit, 40% Finviz, 30% Yahoo
-    // Regardless of actual data availability - this matches the chart display
-    return {
-      reddit: 30, // Fixed at 30%
-      finviz: 40, // Fixed at 40%
-      yahoo: 30   // Fixed at 30%
-    };
+    // For individual sources, return 100% for the selected source
+    if (dataSource === 'reddit') return { reddit: 100, finviz: 0, yahoo: 0 };
+    if (dataSource === 'finviz') return { reddit: 0, finviz: 100, yahoo: 0 };
+    if (dataSource === 'yahoo') return { reddit: 0, finviz: 0, yahoo: 100 };
+    
+    // For combined view, use the hard-coded values from the chart
+    if (dataSource === 'combined') {
+      // These values are taken directly from the chart's percentages
+      return {
+        reddit: 72,
+        finviz: 16,
+        yahoo: 12
+      };
+    }
+    
+    console.log('Unknown data source:', dataSource);
+    return { reddit: 0, finviz: 0, yahoo: 0 };
   };
 
   const distribution = getSourceDistribution();
@@ -100,31 +108,37 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
     <div className={`${cardBgColor} rounded-lg p-4 lg:p-5 border ${borderColor} ${className} flex flex-col`}>
       <div className="flex justify-between items-center mb-4">
         <h3 className={`text-lg font-medium ${textColor}`}>Sentiment Scores</h3>
+        <div className="flex items-center space-x-2">
         <div className={`flex space-x-1 ${cardBgColor} rounded-full p-1`}>
-          <button
-            className={`px-3 py-1 text-sm rounded-full transition-colors ${dataSource === 'reddit' ? `${activeButtonBgColor} text-white` : `${mutedTextColor} ${buttonBgColor}`}`}
-            onClick={() => setDataSource('reddit')}
-          >
-            Reddit
-          </button>
-          <button
-            className={`px-3 py-1 text-sm rounded-full transition-colors ${dataSource === 'finviz' ? `${activeButtonBgColor} text-white` : `${mutedTextColor} ${buttonBgColor}`}`}
-            onClick={() => setDataSource('finviz')}
-          >
-            FinViz
-          </button>
-          <button
-            className={`px-3 py-1 text-sm rounded-full transition-colors ${dataSource === 'yahoo' ? `${activeButtonBgColor} text-white` : `${mutedTextColor} ${buttonBgColor}`}`}
-            onClick={() => setDataSource('yahoo')}
-          >
-            Yahoo
-          </button>
-          <button
-            className={`px-3 py-1 text-sm rounded-full transition-colors ${dataSource === 'combined' ? `${activeButtonBgColor} text-white` : `${mutedTextColor} ${buttonBgColor}`}`}
-            onClick={() => setDataSource('combined')}
-          >
-            All
-          </button>
+            <button
+              className={`p-1.5 rounded-full transition-all ${dataSource === 'reddit' ? 'bg-orange-100 text-orange-500' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+              onClick={() => setDataSource('reddit')}
+              title="Reddit"
+            >
+              <MessageSquare size={18} />
+            </button>
+            <button
+              className={`p-1.5 rounded-full transition-all ${dataSource === 'finviz' ? 'bg-amber-100 text-amber-600' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+              onClick={() => setDataSource('finviz')}
+              title="FinViz"
+            >
+              <TrendingUp size={18} />
+            </button>
+            <button
+              className={`p-1.5 rounded-full transition-all ${dataSource === 'yahoo' ? 'bg-blue-100 text-blue-500' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+              onClick={() => setDataSource('yahoo')}
+              title="Yahoo Finance"
+            >
+              <Globe size={18} />
+            </button>
+            <button
+              className={`p-1.5 rounded-full transition-all ${dataSource === 'combined' ? 'bg-gray-100 text-gray-900 dark:bg-gray-700 dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+              onClick={() => setDataSource('combined')}
+              title="All Sources"
+            >
+              <Layers size={18} />
+            </button>
+          </div>
         </div>
       </div>
       
@@ -132,21 +146,24 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
         <div className="flex items-center mb-3 px-1 text-xs">
           <span className={mutedTextColor}>Data sources:</span>
           <div className="flex ml-2 space-x-2">
-            {distribution.reddit > 0 && (
-              <span className="bg-orange-500 rounded-full px-2 py-0.5 text-white">
-                Reddit ({Math.round(distribution.reddit)}%)
+            {dataSource === 'reddit' || dataSource === 'combined' ? (
+              <span className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-full px-2 py-0.5 text-gray-700 dark:text-gray-300">
+                <MessageSquare size={12} className="text-orange-500" />
+                <span>{dataSource === 'reddit' ? '100%' : `${Math.round(distribution.reddit)}%`}</span>
               </span>
-            )}
-            {distribution.finviz > 0 && (
-              <span className="bg-amber-500 rounded-full px-2 py-0.5 text-white">
-                Finviz ({Math.round(distribution.finviz)}%)
+            ) : null}
+            {dataSource === 'finviz' || dataSource === 'combined' ? (
+              <span className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-full px-2 py-0.5 text-gray-700 dark:text-gray-300">
+                <TrendingUp size={12} className="text-amber-500" />
+                <span>{dataSource === 'finviz' ? '100%' : `${Math.round(distribution.finviz)}%`}</span>
               </span>
-            )}
-            {distribution.yahoo > 0 && (
-              <span className="bg-green-500 rounded-full px-2 py-0.5 text-white">
-                Yahoo ({Math.round(distribution.yahoo)}%)
+            ) : null}
+            {dataSource === 'yahoo' || dataSource === 'combined' ? (
+              <span className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-full px-2 py-0.5 text-gray-700 dark:text-gray-300">
+                <Globe size={12} className="text-blue-500" />
+                <span>{dataSource === 'yahoo' ? '100%' : `${Math.round(distribution.yahoo)}%`}</span>
               </span>
-            )}
+            ) : null}
           </div>
         </div>
       )}

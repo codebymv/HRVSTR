@@ -177,6 +177,11 @@ const SentimentDashboard: React.FC = () => {
   // Special state to track time range transitions - prevents flickering
   const [isTransitioning, setIsTransitioning] = useState<boolean>(false);
 
+  // Pagination state for Reddit posts
+  const [redditPage, setRedditPage] = useState(1);
+  const [hasMorePosts, setHasMorePosts] = useState(true);
+  const POSTS_PER_PAGE = 10;
+
   const loadData = async () => {
     // Cancel all pending requests
     requestManagerRef.current.abort();
@@ -257,59 +262,29 @@ const SentimentDashboard: React.FC = () => {
     }
     
     try {
-      // Step 2: Fetch Reddit posts (once for all time ranges) and filter them
-      try {
-        if (cachedRedditPosts.length === 0) {
-          updateProgress(30, 'Fetching Reddit posts...');
-          const postsSignal = requestManagerRef.current.getSignal(REQUEST_KEYS.redditPosts);
-          const posts = await fetchRedditPosts(postsSignal);
-          logger.log(`Fetched ${posts.length} Reddit posts`);
-          setCachedRedditPosts(posts);
-        } else {
-          updateProgress(30, 'Using cached Reddit posts...');
-        }
+      // Step 2: Fetch Reddit posts with pagination
+      if (cachedRedditPosts.length === 0 || Date.now() - cacheTimestamp > CACHE_EXPIRY) {
+        updateProgress(30, 'Fetching Reddit posts...');
+        const postsSignal = requestManagerRef.current.getSignal(REQUEST_KEYS.redditPosts);
         
-        // Always filter posts based on selected time range (even on initial load)
-        if (cachedRedditPosts.length > 0) {
-          // Calculate the cutoff date based on the selected time range
-          const now = new Date();
-          let cutoffDate: Date;
-          
-          switch (timeRange) {
-            case '1d':
-              cutoffDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-              break;
-            case '1w':
-              cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-              break;
-            case '1m':
-              cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-              break;
-            case '3m':
-            default:
-              cutoffDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-              break;
-          }
-          
-          // Filter posts to only include those after the cutoff date
-          const filteredPosts = cachedRedditPosts.filter(post => {
-            const postDate = new Date(post.created);
-            return postDate >= cutoffDate;
-          });
-          
-          logger.log(`Filtered ${filteredPosts.length} posts from ${cachedRedditPosts.length} cached posts for ${timeRange} view`);
-          
-          // Immediately display the filtered posts
-          setRedditPosts(filteredPosts.length > 0 ? filteredPosts : []);
-        } else {
-          // No cached posts available yet
-          setRedditPosts([]);
+        try {
+          const posts = await fetchRedditPosts(postsSignal);
+          setCachedRedditPosts(posts);
+          setRedditPosts(posts.slice(0, POSTS_PER_PAGE));
+          setHasMorePosts(posts.length > POSTS_PER_PAGE);
+          setRedditPage(1);
+        } catch (error: any) {
+          logger.error('Error fetching Reddit posts:', error);
+          setErrors(prev => ({
+            ...prev,
+            posts: error.message || 'Failed to fetch Reddit posts'
+          }));
         }
-      } catch (error: unknown) {
-        console.error('Error processing Reddit posts:', error);
-      } finally {
-        // Always update the loading state for posts
-        setLoading(prev => ({ ...prev, posts: false }));
+      } else {
+        // Use cached posts
+        setRedditPosts(cachedRedditPosts.slice(0, POSTS_PER_PAGE));
+        setHasMorePosts(cachedRedditPosts.length > POSTS_PER_PAGE);
+        setRedditPage(1);
       }
     } catch (error: unknown) {
     // Ignore aborted request errors
@@ -796,10 +771,72 @@ const chartDataResult = generateChartData(combinedSentimentLocal, timeRange);
         return postDate >= cutoffDate;
       });
       
+      // Reset pagination when time range changes
+      setRedditPage(1);
+      setRedditPosts(filteredPosts.slice(0, POSTS_PER_PAGE));
+      setHasMorePosts(filteredPosts.length > POSTS_PER_PAGE);
+      
       console.log(`Displaying ${filteredPosts.length} Reddit posts for ${timeRange} time range`);
-      setRedditPosts(filteredPosts);
     }
   }, [cachedRedditPosts, timeRange]);
+
+  // Add load more posts handler
+  const handleLoadMorePosts = useCallback(() => {
+    // Don't load if already loading or no more posts
+    if (!hasMorePosts || loading.posts) {
+      return;
+    }
+
+    // Set loading state for posts
+    updateLoadingState({ posts: true });
+
+    try {
+      const nextPage = redditPage + 1;
+      const startIndex = (nextPage - 1) * POSTS_PER_PAGE;
+      const endIndex = startIndex + POSTS_PER_PAGE;
+      
+      // Calculate cutoff date based on current time range
+      const now = new Date();
+      let cutoffDate: Date;
+      
+      switch (timeRange) {
+        case '1d':
+          cutoffDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          break;
+        case '1w':
+          cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case '1m':
+          cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        case '3m':
+        default:
+          cutoffDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+          break;
+      }
+      
+      // Filter posts based on time range
+      const filteredPosts = cachedRedditPosts.filter(post => {
+        const postDate = new Date(post.created);
+        return postDate >= cutoffDate;
+      });
+      
+      // Get the next page of filtered posts
+      const newPosts = filteredPosts.slice(startIndex, endIndex);
+      
+      // Only update if we have new posts
+      if (newPosts.length > 0) {
+        setRedditPosts(prev => [...prev, ...newPosts]);
+        setRedditPage(nextPage);
+        setHasMorePosts(endIndex < filteredPosts.length);
+      } else {
+        setHasMorePosts(false);
+      }
+    } finally {
+      // Always reset loading state
+      updateLoadingState({ posts: false });
+    }
+  }, [redditPage, hasMorePosts, loading.posts, cachedRedditPosts, timeRange]);
 
   return (
     <div className={`flex-1 ${isLight ? 'bg-stone-200' : 'bg-gray-950'} pb-8`}>
@@ -886,12 +923,14 @@ const chartDataResult = generateChartData(combinedSentimentLocal, timeRange);
             </div>
             
             {/* Top Reddit Posts */}
-            <RedditPostsSection 
+            <RedditPostsSection
               posts={redditPosts}
               isLoading={loading.posts}
               loadingProgress={loadingProgress}
               loadingStage={loadingStage}
               error={errors.posts}
+              hasMore={hasMorePosts}
+              onLoadMore={handleLoadMorePosts}
             />
           </div>
           

@@ -16,4 +16,7 @@ export default defineConfig({
     setupFiles: ['./setupTests.ts'],
     testTimeout: 10000, // Increase timeout to 10 seconds
   },
+  server: {
+     port: 5173
+  }
 });
