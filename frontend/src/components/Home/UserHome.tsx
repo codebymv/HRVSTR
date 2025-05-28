@@ -102,7 +102,7 @@ const UserHome: React.FC = () => {
   // Theme-specific styling
   const isLight = theme === 'light';
   const bgColor = isLight ? 'bg-stone-200' : 'bg-gray-950';
-  const textColor = isLight ? 'text-stone-800' : 'text-white';
+  const textColor = isLight ? 'text-stone-700' : 'text-white';
   const welcomeTextColor = isLight ? 'text-stone-600' : 'text-white';
   const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-900';
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
