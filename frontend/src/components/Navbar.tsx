@@ -1,15 +1,46 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 // Import all icons but comment out unused ones for future use
-import { Menu, Home, BarChart2, ListChecks, TrendingUp, Settings, HelpCircle } from 'lucide-react';
+import { Menu, Home, BarChart2, ListChecks, TrendingUp, Settings, HelpCircle, X } from 'lucide-react';
 // import { Bell, Search, User, Sun, Moon } from 'lucide-react'; // Commented out for now
-import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { AuthButton } from './AuthButton';
+import { useAuth } from '../contexts/AuthContext';
 
 const Navbar: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { theme } = useTheme();
+  const location = useLocation();
+  const { isAuthenticated } = useAuth();
+  const menuRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  
+  // Handle clicks outside the menu
+  useEffect(() => {
+    // Generic handler that works for both mouse and touch events
+    const handleClickOutside = (event: Event) => {
+      // Ensure we have a valid target
+      const target = event.target as Node;
+      
+      if (isMenuOpen && 
+          menuRef.current && 
+          buttonRef.current && 
+          !menuRef.current.contains(target) && 
+          !buttonRef.current.contains(target)) {
+        setIsMenuOpen(false);
+      }
+    };
+    
+    // Add both event listeners for mouse and touch devices
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    
+    // Clean up event listeners on unmount
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isMenuOpen]);
   
   // Create theme-specific styling
   const isLight = theme === 'light';
@@ -33,23 +64,28 @@ const Navbar: React.FC = () => {
         <div className="flex items-center justify-between h-14 py-2">
           {/* Logo Section - Enhanced for better display on all devices */}
           <div className="flex-shrink-0 flex items-center">
-            <button
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className={`lg:hidden p-2 mr-3 rounded-full ${hoverBgColor} transition-colors`}
-            >
-              <Menu size={20} className={iconColor} />
-            </button>
+            {isAuthenticated && (
+              <button
+                ref={buttonRef}
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                className={`lg:hidden p-2 mr-3 rounded-full ${hoverBgColor} transition-colors`}
+                aria-expanded={isMenuOpen}
+                aria-label="Toggle navigation menu"
+              >
+                <Menu size={20} className={iconColor} />
+              </button>
+            )}
             
             {/* Centered HRVSTR Logo with improved sizing */}
             <div className="h-10 flex items-center justify-center">
               <a href="/">
-            <img 
-              src="/hrvstr_logo.png" 
-              alt="HRVSTR" 
-              className="h-full w-auto max-h-10" 
-              style={{ filter: logoFilter }}
-            />
-            </a>
+                <img 
+                  src="/hrvstr_logo.png" 
+                  alt="HRVSTR" 
+                  className="h-full w-auto max-h-10" 
+                  style={{ filter: logoFilter }}
+                />
+              </a>
             </div>
           </div>
           
@@ -93,49 +129,77 @@ const Navbar: React.FC = () => {
       </div>
       
       {/* Mobile menu */}
-      {isMenuOpen && (
-        <div className={`lg:hidden ${bgColor} p-4 border-t ${borderColor}`}>
-          {/* Mobile search - commented out for now
-          <div className="flex relative w-full mb-4">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search size={18} className={iconColor} />
-            </div>
-            <input
-              type="text"
-              placeholder="Search for a ticker or company..."
-              className={`${inputBgColor} w-full pl-10 pr-4 py-2 rounded-lg ${inputTextColor} text-sm focus:outline-none focus:ring-2 focus:ring-blue-500`}
-            />
+      {isAuthenticated && isMenuOpen && (
+        <div 
+          ref={menuRef}
+          className={`lg:hidden ${bgColor} p-4 border-t ${borderColor} fixed w-full z-50`}
+          aria-label="Mobile navigation">
+          {/* Close button */}
+          <div className="flex justify-end mb-2">
+            <button 
+              onClick={() => setIsMenuOpen(false)}
+              className={`p-2 rounded-full ${hoverBgColor} transition-colors`}
+              aria-label="Close menu"
+            >
+              <X size={20} className={iconColor} />
+            </button>
           </div>
-          */}
+          
+          {/* Mobile navigation with direct links */}
           <nav className="grid gap-2">
-            <NavLink to="/" className={({isActive}) => `flex items-center space-x-3 py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>
+            <a 
+              href="/"
+              className={`flex items-center space-x-3 py-2 px-3 ${location.pathname === '/' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
+              onClick={() => setIsMenuOpen(false)}
+            >
               <Home size={20} />
               <span>Home</span>
-            </NavLink>
-            {/* <NavLink to="/watchlists" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Watchlists</NavLink> */}
-            <NavLink to="/sentiment" className={({isActive}) => `flex items-center space-x-3 py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>
+            </a>
+            
+            <a 
+              href="/sentiment"
+              className={`flex items-center space-x-3 py-2 px-3 ${location.pathname === '/sentiment' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
+              onClick={() => setIsMenuOpen(false)}
+            >
               <BarChart2 size={20} />
               <span>Sentiment</span>
-            </NavLink>
-            {/* <NavLink to="/historical" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Historical Data</NavLink> */}
-            {/* <NavLink to="/alerts" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Alerts</NavLink> */}
-            {/* <NavLink to="/settings" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Settings</NavLink> */}
-            <NavLink to="/sec-filings" className={({isActive}) => `flex items-center space-x-3 py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>
+            </a>
+            
+            <a 
+              href="/sec-filings"
+              className={`flex items-center space-x-3 py-2 px-3 ${location.pathname === '/sec-filings' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
+              onClick={() => setIsMenuOpen(false)}
+            >
               <ListChecks size={20} />
               <span>SEC Filings</span>
-            </NavLink>
-            <NavLink to="/earnings" className={({isActive}) => `flex items-center space-x-3 py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>
+            </a>
+            
+            <a 
+              href="/earnings"
+              className={`flex items-center space-x-3 py-2 px-3 ${location.pathname === '/earnings' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
+              onClick={() => setIsMenuOpen(false)}
+            >
               <TrendingUp size={20} />
               <span>Earnings</span>
-            </NavLink>
-            <NavLink to="/settings" className={({isActive}) => `flex items-center space-x-3 py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>
+            </a>
+            
+            <a 
+              href="/settings"
+              className={`flex items-center space-x-3 py-2 px-3 ${location.pathname === '/settings' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
+              onClick={() => setIsMenuOpen(false)}
+            >
               <Settings size={20} />
               <span>Settings</span>
-            </NavLink>
-            <NavLink to="/help" className={({isActive}) => `flex items-center space-x-3 py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>
+            </a>
+            
+            <a 
+              href="/help"
+              className={`flex items-center space-x-3 py-2 px-3 ${location.pathname === '/help' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
+              onClick={() => setIsMenuOpen(false)}
+            >
               <HelpCircle size={20} />
               <span>Help</span>
-            </NavLink>
+            </a>
           </nav>
         </div>
       )}

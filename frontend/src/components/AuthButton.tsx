@@ -1,5 +1,6 @@
 import { useAuth } from '../contexts/AuthContext';
 import { useState, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router-dom'; // Added useLocation
 import { useTheme } from '../contexts/ThemeContext';
 import { Sun, Moon, User } from 'lucide-react';
 
@@ -14,6 +15,7 @@ export const AuthButton = () => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const location = useLocation(); // Added location hook
 
   // Handle clicks outside of dropdown to close it
   useEffect(() => {
@@ -28,6 +30,11 @@ export const AuthButton = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  // Close dropdown on route change
+  useEffect(() => {
+    setDropdownOpen(false);
+  }, [location.pathname]);
 
   // Handle loading state
   if (loading) {

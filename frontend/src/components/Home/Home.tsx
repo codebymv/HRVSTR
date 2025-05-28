@@ -55,10 +55,17 @@ const Home: React.FC = () => {
         <div className="text-center mb-16">
           {/* Logo */}
           <div className="flex justify-center mb-8">
+            {/* Show full logo on sm screens and up */}
             <img 
               src="/hrvstr_logo.png" 
-              alt="HRVSTR" 
-              className="h-16 md:h-24 w-auto object-contain"
+              alt="HRVSTR Logo"
+              className="hidden sm:block h-16 md:h-24 w-auto object-contain"
+            />
+            {/* Show icon on screens smaller than sm */}
+            <img 
+              src="/hrvstr_icon.png" 
+              alt="HRVSTR Icon"
+              className="block sm:hidden h-16 w-auto object-contain"
             />
           </div>
           
