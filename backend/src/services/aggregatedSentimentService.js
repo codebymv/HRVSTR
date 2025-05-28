@@ -86,7 +86,7 @@ async function getAggregatedSentiment(tickers, timeRange = '1w', sources = ['red
     const avgScore = t.scoreCount ? t.scoreSum / t.scoreCount : 0;
     
     // Calculate average confidence if available
-    let confidence = 70; // Default confidence
+    let confidence = 50; // Default confidence for combined data
     if (t.confidenceSum && t.confidenceCount) {
       confidence = Math.round(t.confidenceSum / t.confidenceCount);
     }
@@ -94,17 +94,18 @@ async function getAggregatedSentiment(tickers, timeRange = '1w', sources = ['red
     // Use strength if available, otherwise calculate from score
     const strength = t.strengthSum && t.strengthCount 
       ? Math.round(t.strengthSum / t.strengthCount)
-      : sentimentUtils.getSentimentStrength(avgScore);
+      : Math.round(Math.abs(avgScore) * 100);
     
+    // Use the enhanced formatSentimentData function
     return sentimentUtils.formatSentimentData(
       t.ticker, 
       avgScore, 
       t.postCount, 
       t.commentCount, 
-      t.sources.join(','), 
+      'combined', 
       new Date().toISOString(),
-      confidence,
-      strength
+      confidence, // baseConfidence from aggregation
+      strength // strength as percentage
     );
   }).sort((a, b) => Math.abs(b.score) - Math.abs(a.score));
 

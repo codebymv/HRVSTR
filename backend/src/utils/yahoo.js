@@ -206,7 +206,7 @@ async function analyzeYahooNewsSentiment(ticker, limit = 10) {
     const hasValidSentiments = validSentiments > 0;
     const avgScore = hasValidSentiments ? totalScore / validSentiments : 0;
     const avgConfidence = hasValidSentiments 
-      ? Math.min(100, Math.round((totalConfidence / validSentiments) * 1.5))
+      ? Math.min(100, Math.round((totalConfidence / validSentiments) * 100))
       : 0;
       
     if (!hasValidSentiments) {
@@ -214,23 +214,23 @@ async function analyzeYahooNewsSentiment(ticker, limit = 10) {
       return getNeutralSentiment(ticker, 'No valid sentiment results');
     }
     
-    // Format the sentiment data using the utility function
+    // Use the enhanced formatSentimentData function
     const sentimentData = sentimentUtils.formatSentimentData(
       ticker,
       avgScore,
-      newsItems.length, // postCount
+      newsItems.length, // postCount (using news count)
       0, // commentCount (not applicable for Yahoo)
       'yahoo',
-      new Date().toISOString()
+      new Date().toISOString(),
+      avgConfidence, // baseConfidence from sentiment analysis
+      Math.round(Math.abs(avgScore) * 100) // strength as percentage
     );
     
     // Add additional Yahoo-specific fields
     return {
       ...sentimentData,
-      comparative: avgScore,
       newsItems: sentimentResults,
-      strength: Math.min(10, Math.abs(avgScore) * 5), // Scale to 0-10 range
-      confidence: Math.max(sentimentData.confidence, avgConfidence) // Use the higher confidence value
+      newsCount: newsItems.length
     };
   } catch (error) {
     console.error(`Error analyzing Yahoo news sentiment for ${ticker}:`, error.message);

@@ -11,15 +11,27 @@ cacheManager.registerRateLimit('sec-institutional', 20, 60); // 20 requests per 
 cacheManager.registerRateLimit('sec-filing', 50, 60); // 50 requests per minute for individual filings
 
 /**
- * Helper function to determine cache TTL based on data type
+ * Helper function to determine cache TTL based on data type and data freshness
  */
-function getCacheTtl(dataType) {
+function getCacheTtl(dataType, isMarketHours = false) {
+  // During market hours (9:30 AM - 4:00 PM ET), use shorter cache times
+  // Outside market hours, use longer cache times since filings are less frequent
+  
+  const now = new Date();
+  const etHour = now.getHours() - 5; // Approximate ET conversion (ignoring DST)
+  const isMarketOpen = etHour >= 9 && etHour <= 16;
+  
   switch (dataType) {
-    case 'insider-trades': return 30 * 60; // 30 minutes
-    case 'institutional-holdings': return 60 * 60; // 1 hour
-    case 'filing-details': return 24 * 60 * 60; // 24 hours (filings don't change)
-    case 'abnormal-activity': return 15 * 60; // 15 minutes
-    default: return 30 * 60; // 30 minutes default
+    case 'insider-trades': 
+      return isMarketOpen ? 15 * 60 : 45 * 60; // 15 min during market, 45 min after
+    case 'institutional-holdings': 
+      return isMarketOpen ? 30 * 60 : 90 * 60; // 30 min during market, 90 min after
+    case 'filing-details': 
+      return 24 * 60 * 60; // 24 hours (filings don't change)
+    case 'abnormal-activity': 
+      return isMarketOpen ? 10 * 60 : 30 * 60; // 10 min during market, 30 min after
+    default: 
+      return isMarketOpen ? 20 * 60 : 60 * 60; // 20 min during market, 60 min after
   }
 }
 
@@ -312,33 +324,52 @@ function clearCache(req, res, next) {
 
     // Clear all SEC-related cache keys
     const patterns = [
-      'sec-insider-trades',
-      'sec-insider-ticker',
-      'sec-institutional-holdings',
-      'sec-institutional-ticker',
-      'sec-abnormal-activity',
-      'sec-filing',
-      'sec-summary'
+      'sec-insider-trades*',
+      'sec-insider-ticker*',
+      'sec-institutional-holdings*',
+      'sec-institutional-ticker*',
+      'sec-abnormal-activity*',
+      'sec-filing*',
+      'sec-summary*'
     ];
 
+    console.log('Starting SEC cache clearing operation...');
+
     patterns.forEach(pattern => {
-      const cleared = cacheManager.clearCacheByPattern(pattern);
-      if (cleared > 0) {
-        clearedKeys.push(pattern);
-        totalCleared += cleared;
+      try {
+        const cleared = cacheManager.clearCacheByPattern(pattern);
+        if (cleared > 0) {
+          clearedKeys.push(pattern);
+          totalCleared += cleared;
+          console.log(`Cleared ${cleared} entries for pattern: ${pattern}`);
+        } else {
+          console.log(`No entries found for pattern: ${pattern}`);
+        }
+      } catch (patternError) {
+        console.error(`Error clearing pattern ${pattern}:`, patternError.message);
       }
     });
 
-    console.log(`Cleared ${totalCleared} items from SEC data cache`);
+    console.log(`Cache clearing completed. Total cleared: ${totalCleared} items`);
+    
     res.json({ 
       success: true, 
       message: `Cleared ${totalCleared} items from cache`, 
       clearedCount: totalCleared,
-      clearedKeys
+      clearedKeys,
+      patterns: patterns,
+      timestamp: new Date().toISOString()
     });
   } catch (error) {
     console.error(`Error clearing cache: ${error.message}`);
-    next(error);
+    
+    // Provide a more detailed error response
+    res.status(500).json({
+      success: false,
+      error: 'Failed to clear cache',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
   }
 }
 
@@ -439,6 +470,77 @@ function analyzeInstitutionalActivity(holdings) {
   };
 }
 
+/**
+ * Get both insider trades and institutional holdings in parallel for optimal loading
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next function
+ */
+async function getSecDataParallel(req, res, next) {
+  try {
+    const { timeRange = '1m', insiderLimit = 100, institutionalLimit = 50, refresh = 'false' } = req.query;
+    
+    // Use parallel cache keys for both data types
+    const insiderCacheKey = `sec-insider-trades-${timeRange}-${insiderLimit}`;
+    const institutionalCacheKey = `sec-institutional-holdings-${timeRange}-${institutionalLimit}`;
+    
+    const insiderTtl = getCacheTtl('insider-trades');
+    const institutionalTtl = getCacheTtl('institutional-holdings');
+    
+    // Fetch both datasets in parallel for optimal performance
+    const [insiderResult, institutionalResult] = await Promise.all([
+      cacheManager.getOrFetch(insiderCacheKey, 'sec-insider', async () => {
+        console.log(`Fetching fresh SEC insider trades data for ${timeRange}`);
+        const insiderTrades = await secService.fetchInsiderTrades(timeRange, parseInt(insiderLimit));
+        return {
+          timeRange,
+          insiderTrades,
+          count: insiderTrades.length,
+          source: 'sec-edgar',
+          refreshed: true,
+          lastUpdated: new Date().toISOString()
+        };
+      }, insiderTtl, refresh === 'true'),
+      
+      cacheManager.getOrFetch(institutionalCacheKey, 'sec-institutional', async () => {
+        console.log(`Fetching fresh SEC institutional holdings data for ${timeRange}`);
+        const institutionalHoldings = await secService.fetchInstitutionalHoldings(timeRange, parseInt(institutionalLimit));
+        return {
+          timeRange,
+          institutionalHoldings,
+          count: institutionalHoldings.length,
+          source: 'sec-edgar',
+          refreshed: true,
+          lastUpdated: new Date().toISOString()
+        };
+      }, institutionalTtl, refresh === 'true')
+    ]);
+
+    // Combine results for a single response
+    const combinedResult = {
+      timeRange,
+      insiderTrades: {
+        data: insiderResult.insiderTrades,
+        count: insiderResult.count,
+        lastUpdated: insiderResult.lastUpdated
+      },
+      institutionalHoldings: {
+        data: institutionalResult.institutionalHoldings,
+        count: institutionalResult.count,
+        lastUpdated: institutionalResult.lastUpdated
+      },
+      source: 'sec-edgar',
+      refreshed: refresh === 'true',
+      fetchedAt: new Date().toISOString()
+    };
+
+    res.json(combinedResult);
+  } catch (error) {
+    console.error(`SEC Parallel Data Fetch Error: ${error.message}`);
+    next(error);
+  }
+}
+
 module.exports = {
   getInsiderTrades,
   getInsiderTradesByTicker,
@@ -447,5 +549,6 @@ module.exports = {
   getAbnormalActivity,
   getFilingDetails,
   getTickerSummary,
-  clearCache
+  clearCache,
+  getSecDataParallel
 };

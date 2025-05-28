@@ -45,8 +45,8 @@ export function aggregateByTicker(data: SentimentData[]): SentimentData[] {
     
     // Determine sentiment category based on average score
     let sentiment: 'bullish' | 'bearish' | 'neutral';
-    if (avgScore >= 0.6) sentiment = 'bullish';
-    else if (avgScore <= 0.4) sentiment = 'bearish';
+    if (avgScore > 0.1) sentiment = 'bullish';
+    else if (avgScore < -0.1) sentiment = 'bearish';
     else sentiment = 'neutral';
     
     // Sum post and comment counts

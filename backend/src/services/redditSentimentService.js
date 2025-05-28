@@ -30,30 +30,38 @@ function analyzeTickerSentiment(ticker, posts) {
   );
 
   const sentimentScores = [];
+  const sentimentConfidences = [];
   let totalScore = 0;
+  let totalConfidence = 0;
   
   relevantPosts.forEach(post => {
     const text = `${post.data.title} ${post.data.selftext}`;
-    const score = sentimentUtils.analyzeSentiment(text);
+    const sentimentResult = sentimentUtils.analyzeSentiment(text);
+    
+    // Use the enhanced sentiment analysis results
+    const score = sentimentResult.comparative || 0;
+    const confidence = sentimentResult.confidence || 0;
+    
     sentimentScores.push(score);
+    sentimentConfidences.push(confidence);
     totalScore += score;
+    totalConfidence += confidence;
   });
 
-  const avgScore = relevantPosts.length > 0 ? totalScore / relevantPosts.length : 0.5;
+  const avgScore = relevantPosts.length > 0 ? totalScore / relevantPosts.length : 0;
+  const avgConfidence = relevantPosts.length > 0 ? Math.round(totalConfidence / relevantPosts.length) : 0;
   
-  // Calculate confidence based on number of relevant posts
-  const confidence = Math.min(100, Math.round((relevantPosts.length / posts.length) * 200));
-  
-  return {
+  // Use the enhanced formatSentimentData function with proper confidence
+  return sentimentUtils.formatSentimentData(
     ticker,
-    score: avgScore,
-    sentiment: avgScore > 0.6 ? 'bullish' : avgScore < 0.4 ? 'bearish' : 'neutral',
-    source: 'reddit',
-    timestamp: new Date().toISOString(),
-    postCount: relevantPosts.length,
-    commentCount: relevantPosts.reduce((sum, post) => sum + (post.data.num_comments || 0), 0),
-    confidence
-  };
+    avgScore,
+    relevantPosts.length, // postCount
+    relevantPosts.reduce((sum, post) => sum + (post.data.num_comments || 0), 0), // commentCount
+    'reddit',
+    new Date().toISOString(),
+    avgConfidence, // baseConfidence from sentiment analysis
+    Math.round(Math.abs(avgScore) * 100) // strength as percentage
+  );
 }
 
 async function getRedditTickerSentiment(timeRange = '1w') {
@@ -192,7 +200,9 @@ async function getRedditMarketSentiment(timeRange = '1w') {
         if (bucket) {
           bucket.posts.push(post);
           const text = `${post.data.title} ${post.data.selftext}`;
-          const score = sentimentUtils.analyzeSentiment(text);
+          const sentimentResult = sentimentUtils.analyzeSentiment(text);
+          // Use comparative score for consistency
+          const score = sentimentResult.comparative || 0;
           bucket.sentimentScores.push(score);
         }
       });
@@ -207,9 +217,39 @@ async function getRedditMarketSentiment(timeRange = '1w') {
       buckets.forEach(bucket => {
         if (bucket.posts.length > 0) {
           const totalPosts = bucket.sentimentScores.length;
-          const bull = bucket.sentimentScores.filter(s => s > 0.6).length / totalPosts;
-          const bear = bucket.sentimentScores.filter(s => s < 0.4).length / totalPosts;
-          const neut = 1 - bull - bear;
+          
+          // Debug: Log actual sentiment score distribution
+          const scoresAbove15 = bucket.sentimentScores.filter(s => s > 0.15).length;
+          const scoresBelow15 = bucket.sentimentScores.filter(s => s < -0.15).length;
+          const scoresBetween = totalPosts - scoresAbove15 - scoresBelow15;
+          console.log(`Bucket ${bucket.start.toISOString()}: ${totalPosts} posts, ${scoresAbove15} bullish (>0.15), ${scoresBelow15} bearish (<-0.15), ${scoresBetween} neutral`);
+          
+          // Sample some scores for debugging
+          if (bucket.sentimentScores.length > 0) {
+            const sampleScores = bucket.sentimentScores.slice(0, 5);
+            console.log(`Sample scores:`, sampleScores);
+          }
+          
+          // Use the same sentiment classification logic as formatSentimentData
+          // This ensures consistency between ticker and market sentiment
+          let bullCount = 0;
+          let bearCount = 0;
+          let neutCount = 0;
+          
+          bucket.sentimentScores.forEach(score => {
+            if (score > 0.15) {          // Same threshold as formatSentimentData
+              bullCount++;
+            } else if (score < -0.15) {   // Same threshold as formatSentimentData
+              bearCount++;
+            } else {
+              neutCount++;
+            }
+          });
+          
+          // Convert to percentages
+          const bull = bullCount / totalPosts;
+          const bear = bearCount / totalPosts;
+          const neut = neutCount / totalPosts;
           
           timestamps.push(bucket.start.toISOString());
           bullish.push(bull);

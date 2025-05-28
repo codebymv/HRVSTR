@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { TimeRange } from '../../types';
-import { clearSecCache } from '../../services/api';
+import { clearSecCache, fetchSecDataParallel } from '../../services/api';
 import { RefreshCw, Loader2 } from 'lucide-react';
 import ProgressBar from '../ProgressBar';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -85,16 +85,24 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     }
   });
   
-  // Combined loading state
-  const [loading, setLoading] = useState({
-    insiderTrades: insiderTradesData.length === 0,
-    institutionalHoldings: institutionalHoldingsData.length === 0
-  });
-  
-  // Separate reload trigger state based on cache age
-  const [shouldReload, setShouldReload] = useState({
-    insiderTrades: insiderTradesData.length === 0 || isDataStale(lastFetchTime.insiderTrades),
-    institutionalHoldings: institutionalHoldingsData.length === 0 || isDataStale(lastFetchTime.institutionalHoldings)
+  // Combined loading and data freshness state - simplified to prevent race conditions
+  const [loadingState, setLoadingState] = useState<{
+    insiderTrades: { isLoading: boolean; needsRefresh: boolean };
+    institutionalHoldings: { isLoading: boolean; needsRefresh: boolean };
+  }>(() => {
+    const insiderNeedsRefresh = insiderTradesData.length === 0 || isDataStale(lastFetchTime.insiderTrades);
+    const institutionalNeedsRefresh = institutionalHoldingsData.length === 0 || isDataStale(lastFetchTime.institutionalHoldings);
+    
+    return {
+      insiderTrades: { 
+        isLoading: insiderNeedsRefresh, 
+        needsRefresh: insiderNeedsRefresh 
+      },
+      institutionalHoldings: { 
+        isLoading: institutionalNeedsRefresh, 
+        needsRefresh: institutionalNeedsRefresh 
+      }
+    };
   });
   
   // Error state
@@ -136,31 +144,32 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     localStorage.setItem('secFilings_activeTab', activeTab);
   }, [activeTab]);
   
-  // Handle loading updates from child components
+  // Handle loading updates from child components - simplified
   const handleInsiderTradesLoading = (isLoading: boolean, progress: number, stage: string, data?: any[], error?: string | null) => {
-    // When loading completes, turn off reload trigger as well
-    if (!isLoading && loading.insiderTrades) {
-      setShouldReload(prev => ({ ...prev, insiderTrades: false }));
-      
-      // If data was provided, update the state and last fetch time
-      if (data) {
-        setInsiderTradesData(data);
-        setLastFetchTime(prev => ({
-          ...prev,
-          insiderTrades: Date.now()
-        }));
+    setLoadingState(prev => ({
+      ...prev,
+      insiderTrades: { 
+        isLoading, 
+        needsRefresh: false // Once loading starts, no more refresh needed
       }
-      
-      // Update error state if provided
-      if (error !== undefined) {
-        setErrors(prev => ({ ...prev, insiderTrades: error }));
-      }
+    }));
+    
+    // When loading completes successfully, update data and timestamps
+    if (!isLoading && data) {
+      setInsiderTradesData(data);
+      setLastFetchTime(prev => ({
+        ...prev,
+        insiderTrades: Date.now()
+      }));
     }
     
-    setLoading(prev => ({ ...prev, insiderTrades: isLoading }));
+    // Update error state if provided
+    if (error !== undefined) {
+      setErrors(prev => ({ ...prev, insiderTrades: error }));
+    }
     
     // Only update overall progress if this is the active tab
-    if (activeTab === 'insider' || isLoading === false) {
+    if (activeTab === 'insider' || !isLoading) {
       setLoadingProgress(progress);
       setLoadingStage(stage);
       
@@ -171,31 +180,32 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     }
   };
   
-  // Handle loading updates from institutional holdings tab
+  // Handle loading updates from institutional holdings tab - simplified
   const handleInstitutionalHoldingsLoading = (isLoading: boolean, progress: number, stage: string, data?: any[], error?: string | null) => {
-    // When loading completes, turn off reload trigger as well
-    if (!isLoading && loading.institutionalHoldings) {
-      setShouldReload(prev => ({ ...prev, institutionalHoldings: false }));
-      
-      // If data was provided, update the state and last fetch time
-      if (data) {
-        setInstitutionalHoldingsData(data);
-        setLastFetchTime(prev => ({
-          ...prev,
-          institutionalHoldings: Date.now()
-        }));
+    setLoadingState(prev => ({
+      ...prev,
+      institutionalHoldings: { 
+        isLoading, 
+        needsRefresh: false // Once loading starts, no more refresh needed
       }
-      
-      // Update error state if provided
-      if (error !== undefined) {
-        setErrors(prev => ({ ...prev, institutionalHoldings: error }));
-      }
+    }));
+    
+    // When loading completes successfully, update data and timestamps
+    if (!isLoading && data) {
+      setInstitutionalHoldingsData(data);
+      setLastFetchTime(prev => ({
+        ...prev,
+        institutionalHoldings: Date.now()
+      }));
     }
     
-    setLoading(prev => ({ ...prev, institutionalHoldings: isLoading }));
+    // Update error state if provided
+    if (error !== undefined) {
+      setErrors(prev => ({ ...prev, institutionalHoldings: error }));
+    }
     
     // Only update overall progress if this is the active tab
-    if (activeTab === 'institutional' || isLoading === false) {
+    if (activeTab === 'institutional' || !isLoading) {
       setLoadingProgress(progress);
       setLoadingStage(stage);
       
@@ -228,34 +238,72 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
       // Call the API function to clear cache
       await clearSecCache();
       
-      // Now that cache is cleared, set the stage to 50% before refreshing data
-      setLoadingProgress(50);
-      setLoadingStage('Loading fresh data...');
+      // Now that cache is cleared, set the stage to 25% before fetching fresh data
+      setLoadingProgress(25);
+      setLoadingStage('Fetching fresh data in parallel...');
       
       if (onLoadingProgressChange) {
-        onLoadingProgressChange(50, 'Loading fresh data...');
+        onLoadingProgressChange(25, 'Fetching fresh data in parallel...');
       }
       
-      // After cache is cleared, we'll set loading states
-      setLoading({
-        insiderTrades: true,
-        institutionalHoldings: true
-      });
+      // Use parallel fetching for optimal refresh performance
+      setLoadingProgress(50);
+      setLoadingStage('Loading insider trades and institutional holdings...');
       
-      // Set reload flags for both components
-      setShouldReload({
-        insiderTrades: true,
-        institutionalHoldings: true
-      });
+      if (onLoadingProgressChange) {
+        onLoadingProgressChange(50, 'Loading insider trades and institutional holdings...');
+      }
       
-      // Clear cached last fetch time to force fresh data
+      // Fetch both data types in parallel with refresh=true
+      const parallelData = await fetchSecDataParallel(timeRange, true);
+      
+      // Update progress
+      setLoadingProgress(75);
+      setLoadingStage('Processing data...');
+      
+      if (onLoadingProgressChange) {
+        onLoadingProgressChange(75, 'Processing data...');
+      }
+      
+      // Update both datasets simultaneously
+      setInsiderTradesData(parallelData.insiderTrades);
+      setInstitutionalHoldingsData(parallelData.institutionalHoldings);
+      
+      // Update last fetch times for both
+      const now = Date.now();
       setLastFetchTime({
+        insiderTrades: now,
+        institutionalHoldings: now
+      });
+      
+      // Clear loading states since we're handling the data directly
+      setLoadingState({
+        insiderTrades: { isLoading: false, needsRefresh: false },
+        institutionalHoldings: { isLoading: false, needsRefresh: false }
+      });
+      
+      // Clear any previous errors
+      setErrors({
         insiderTrades: null,
         institutionalHoldings: null
       });
-      localStorage.removeItem('secFilings_lastFetchTime');
+      
+      // Final progress update
+      setLoadingProgress(100);
+      setLoadingStage('Refresh complete');
+      
+      if (onLoadingProgressChange) {
+        onLoadingProgressChange(100, 'Refresh complete');
+      }
       
       setIsRefreshing(false);
+      
+      // Reset progress after a short delay
+      setTimeout(() => {
+        setLoadingProgress(0);
+        setLoadingStage('Ready');
+      }, 1000);
+      
     } catch (error) {
       console.error('Error refreshing SEC data:', error);
       setIsRefreshing(false);
@@ -263,6 +311,19 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
       // Show error state
       setLoadingProgress(0);
       setLoadingStage('Error refreshing data');
+      
+      // Set error states for both tabs
+      const errorMessage = error instanceof Error ? error.message : 'Failed to refresh SEC data';
+      setErrors({
+        insiderTrades: errorMessage,
+        institutionalHoldings: errorMessage
+      });
+      
+      // Reset loading states on error
+      setLoadingState({
+        insiderTrades: { isLoading: false, needsRefresh: false },
+        institutionalHoldings: { isLoading: false, needsRefresh: false }
+      });
       
       if (onLoadingProgressChange) {
         onLoadingProgressChange(0, 'Error refreshing data');
@@ -284,7 +345,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
             value={timeRange}
             onChange={(e) => handleTimeRangeChange(e.target.value as TimeRange)}
             className={`py-1 px-2 rounded text-sm ${cardBg} ${textColor} border ${cardBorder}`}
-            disabled={loading.insiderTrades || loading.institutionalHoldings}
+            disabled={loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading}
           >
             <option value="1d">1 Day</option>
             <option value="1w">1 Week</option>
@@ -295,11 +356,11 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
           {/* Refresh button - now combines cache clearing and data refresh */}
           <button
             onClick={handleRefresh}
-            disabled={isRefreshing || loading.insiderTrades || loading.institutionalHoldings}
-            className={`p-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white ${(isRefreshing || loading.insiderTrades || loading.institutionalHoldings) ? 'opacity-50' : ''}`}
+            disabled={isRefreshing || loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading}
+            className={`p-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white ${(isRefreshing || loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading) ? 'opacity-50' : ''}`}
             title="Refresh SEC data"
           >
-            {(isRefreshing || loading.insiderTrades || loading.institutionalHoldings) ? (
+            {(isRefreshing || loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading) ? (
               <Loader2 size={18} className="text-white animate-spin" />
             ) : (
               <RefreshCw size={18} className="text-white" />
@@ -329,7 +390,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
       </div>
       
       {/* Loading progress bar - shown only when active tab is loading */}
-      {(activeTab === 'insider' && loading.insiderTrades) || (activeTab === 'institutional' && loading.institutionalHoldings) ? (
+      {(activeTab === 'insider' && loadingState.insiderTrades.isLoading) || (activeTab === 'institutional' && loadingState.institutionalHoldings.isLoading) ? (
         <div className={`${cardBg} rounded-lg p-4 mb-4 border ${cardBorder}`}>
           <div className="flex flex-col items-center">
             <p className={`text-sm font-medium ${textColor} mb-2`}>{loadingStage}</p>
@@ -346,18 +407,18 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
         {activeTab === 'insider' ? (
           <InsiderTradesTab
             timeRange={timeRange}
-            isLoading={loading.insiderTrades}
+            isLoading={loadingState.insiderTrades.isLoading}
             onLoadingChange={handleInsiderTradesLoading}
-            forceReload={shouldReload.insiderTrades}
+            forceReload={loadingState.insiderTrades.needsRefresh}
             initialData={insiderTradesData}
             error={errors.insiderTrades}
           />
         ) : (
           <InstitutionalHoldingsTab
             timeRange={timeRange}
-            isLoading={loading.institutionalHoldings}
+            isLoading={loadingState.institutionalHoldings.isLoading}
             onLoadingChange={handleInstitutionalHoldingsLoading}
-            forceReload={shouldReload.institutionalHoldings}
+            forceReload={loadingState.institutionalHoldings.needsRefresh}
             initialData={institutionalHoldingsData}
             error={errors.institutionalHoldings}
           />

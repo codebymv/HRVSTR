@@ -48,24 +48,6 @@ const InsiderTradesTab: React.FC<InsiderTradesTabProps> = ({
     }
   }, [initialData, propError]);
   
-  // Load data when component mounts or forceReload changes
-  useEffect(() => {
-    // If we have initialData and don't need to force reload, use the cache
-    if (initialData && initialData.length > 0 && !forceReload) {
-      console.log('Using cached insider trades data, no reload needed');
-      // Still need to detect abnormal activity on cached data
-      detectAbnormalActivity(initialData as InsiderTrade[]);
-      return;
-    }
-    
-    // Otherwise load fresh data with forceReload flag
-    // We set the refresh parameter based on whether this is a forced reload or initial load
-    console.log(`Loading fresh insider trades data with forceReload=${forceReload}`);
-    // Only force an API refresh if forceReload is explicitly true
-    const shouldRefresh = forceReload === true;
-    loadData(shouldRefresh);
-  }, [timeRange, forceReload, initialData.length]);
-  
   // Load data based on timeRange, forceReload, and initialData
   const [sortConfig, setSortConfig] = useState<{
     key: string;
@@ -369,18 +351,39 @@ const InsiderTradesTab: React.FC<InsiderTradesTabProps> = ({
   // Load data when component mounts or when explicitly requested
   // Using a ref to track if we've started loading to avoid repeat calls
   const isLoadingRef = React.useRef(false);
+  const lastLoadParamsRef = React.useRef({ timeRange: '', forceReload: false });
   
   useEffect(() => {
-    // If we're supposed to be loading and haven't started yet
-    if ((isLoading || forceReload) && !isLoadingRef.current) {
+    // Create a unique key for the current load parameters
+    const currentParams = { timeRange, forceReload };
+    const paramsChanged = JSON.stringify(currentParams) !== JSON.stringify(lastLoadParamsRef.current);
+    
+    // Only load if:
+    // 1. We're supposed to be loading AND haven't started yet
+    // 2. OR the parameters have changed (timeRange or forceReload)
+    if ((isLoading && !isLoadingRef.current) || (paramsChanged && forceReload)) {
       // Mark that we've started the loading process
       isLoadingRef.current = true;
-      loadData(forceReload);
+      lastLoadParamsRef.current = currentParams;
+      
+      // Determine if we should use cached data or fetch fresh
+      const hasValidCache = initialData && initialData.length > 0 && !forceReload;
+      
+      if (hasValidCache) {
+        console.log('Using cached insider trades data, no API call needed');
+        // Process cached data for abnormal activity detection
+        detectAbnormalActivity(initialData as InsiderTrade[]);
+        // Notify parent that loading is complete
+        onLoadingChange(false, 100, 'Insider trades loaded from cache', initialData, null);
+      } else {
+        console.log(`Loading fresh insider trades data: timeRange=${timeRange}, forceReload=${forceReload}`);
+        loadData(forceReload);
+      }
     } else if (!isLoading && !forceReload) {
       // Reset the ref when loading is complete
       isLoadingRef.current = false;
     }
-  }, [timeRange, isLoading, forceReload]);
+  }, [timeRange, isLoading, forceReload, initialData.length, onLoadingChange]);
   
   const sortedTrades = sortInsiderTrades(insiderTrades);
   

@@ -60,6 +60,7 @@ const InstitutionalHoldingsTab: React.FC<InstitutionalHoldingsTabProps> = ({
     const shouldRefresh = forceReload === true;
     loadData(shouldRefresh);
   }, [timeRange, forceReload, initialData.length]);
+  
   const [sortConfig, setSortConfig] = useState<{
     key: string;
     direction: 'ascending' | 'descending';
@@ -212,18 +213,37 @@ const InstitutionalHoldingsTab: React.FC<InstitutionalHoldingsTabProps> = ({
   // Load data when component mounts or when explicitly requested
   // Using a ref to track if we've started loading to avoid repeat calls
   const isLoadingRef = React.useRef(false);
+  const lastLoadParamsRef = React.useRef({ timeRange: '', forceReload: false });
   
   useEffect(() => {
-    // If we're supposed to be loading and haven't started yet
-    if ((isLoading || forceReload) && !isLoadingRef.current) {
+    // Create a unique key for the current load parameters
+    const currentParams = { timeRange, forceReload };
+    const paramsChanged = JSON.stringify(currentParams) !== JSON.stringify(lastLoadParamsRef.current);
+    
+    // Only load if:
+    // 1. We're supposed to be loading AND haven't started yet
+    // 2. OR the parameters have changed (timeRange or forceReload)
+    if ((isLoading && !isLoadingRef.current) || (paramsChanged && forceReload)) {
       // Mark that we've started the loading process
       isLoadingRef.current = true;
-      loadData(forceReload);
+      lastLoadParamsRef.current = currentParams;
+      
+      // Determine if we should use cached data or fetch fresh
+      const hasValidCache = initialData && initialData.length > 0 && !forceReload;
+      
+      if (hasValidCache) {
+        console.log('Using cached institutional holdings data, no API call needed');
+        // Notify parent that loading is complete
+        onLoadingChange(false, 100, 'Institutional holdings loaded from cache', initialData, null);
+      } else {
+        console.log(`Loading fresh institutional holdings data: timeRange=${timeRange}, forceReload=${forceReload}`);
+        loadData(forceReload);
+      }
     } else if (!isLoading && !forceReload) {
       // Reset the ref when loading is complete
       isLoadingRef.current = false;
     }
-  }, [timeRange, isLoading, forceReload]);
+  }, [timeRange, isLoading, forceReload, initialData.length, onLoadingChange]);
   
   const sortedHoldings = sortInstitutionalHoldings(institutionalHoldings);
   

@@ -27,6 +27,18 @@ export interface SentimentData {
   // Source tracking
   sources?: Record<string, number>;
   
+  // Debug information
+  debug?: {
+    rawScore?: number;
+    sentimentThreshold?: string;
+    confidenceBreakdown?: {
+      base: number;
+      source: string;
+      dataVolume: number;
+      final: number;
+    };
+  };
+  
   // Test-only properties
   _test_flag?: string;
 }

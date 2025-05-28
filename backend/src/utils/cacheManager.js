@@ -70,6 +70,30 @@ class CacheManager {
   }
   
   /**
+   * Clear cache entries that match a pattern
+   * @param {string} pattern - Pattern to match against cache keys
+   * @returns {number} Number of keys cleared
+   */
+  clearCacheByPattern(pattern) {
+    const keys = this.cache.keys();
+    let clearedCount = 0;
+    
+    // Convert pattern to regex (simple wildcard support)
+    const regexPattern = pattern.replace(/\*/g, '.*');
+    const regex = new RegExp(regexPattern, 'i');
+    
+    keys.forEach(key => {
+      if (regex.test(key)) {
+        this.cache.del(key);
+        clearedCount++;
+      }
+    });
+    
+    console.log(`Cleared ${clearedCount} cache entries matching pattern: ${pattern}`);
+    return clearedCount;
+  }
+  
+  /**
    * Get cache statistics
    * @returns {Object} Cache stats
    */

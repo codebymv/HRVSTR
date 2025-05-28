@@ -1,6 +1,7 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const cacheManager = require('../utils/cacheManager');
+const sentimentUtils = require('../utils/sentiment');
 
 // Rate-limit: 10 requests / 60 s
 cacheManager.registerRateLimit('finviz-sentiment', 10, 60);
@@ -54,32 +55,39 @@ async function getFinvizTickerSentiment(tickers) {
         const newsCount = $('table.news-table tr').length;
         
         // Calculate sentiment score based on price change and news volume
-        let score = 0.5; // neutral
-        if (changePercent > 0) score = 0.5 + Math.min(0.4, changePercent / 10);
-        else score = 0.5 - Math.min(0.4, Math.abs(changePercent) / 10);
+        let score = 0; // Start with neutral
         
-        // Determine sentiment category
-        let sentiment;
-        if (score > 0.6) sentiment = 'bullish';
-        else if (score < 0.4) sentiment = 'bearish';
-        else sentiment = 'neutral';
+        // Convert price change to sentiment score using tanh for better distribution
+        if (!isNaN(changePercent)) {
+          // Use tanh to convert percentage change to -1 to 1 range
+          // Divide by 5 to make it less sensitive (5% change = ~0.76 score)
+          score = Math.tanh(changePercent / 5);
+        }
         
-        // Calculate confidence based on news volume and price movement
-        const confidence = Math.min(100, Math.round(30 + (newsCount * 2) + (Math.abs(changePercent) * 5)));
+        // Calculate confidence based on news volume and price movement strength
+        let confidence = 30; // Base confidence for FinViz data
+        confidence += Math.min(20, newsCount * 2); // Up to 20 points for news volume
+        confidence += Math.min(25, Math.abs(changePercent) * 2.5); // Up to 25 points for strong moves
+        confidence = Math.min(100, Math.round(confidence));
         
-        const tickerData = {
-          ticker: ticker.toUpperCase(),
-          sentiment,
-          source: 'finviz',
-          timestamp: new Date().toISOString(),
-          confidence,
-          score: parseFloat(score.toFixed(2)),
-          price: price.toFixed(2),
-          changePercent: changePercent.toFixed(2),
-          analystRating: ratings[0] || 'N/A',
-          newsCount,
-          url
-        };
+        // Use the enhanced formatSentimentData function
+        const tickerData = sentimentUtils.formatSentimentData(
+          ticker.toUpperCase(),
+          score,
+          newsCount, // postCount (using news count)
+          0, // commentCount (not applicable for FinViz)
+          'finviz',
+          new Date().toISOString(),
+          confidence, // baseConfidence
+          Math.round(Math.abs(score) * 100) // strength as percentage
+        );
+        
+        // Add FinViz-specific fields
+        tickerData.price = price.toFixed(2);
+        tickerData.changePercent = changePercent.toFixed(2);
+        tickerData.analystRating = ratings[0] || 'N/A';
+        tickerData.newsCount = newsCount;
+        tickerData.url = url;
 
         sentimentData.push(tickerData);
       } catch (error) {

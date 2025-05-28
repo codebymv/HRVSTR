@@ -205,9 +205,14 @@ export function generateChartData(sentimentData: SentimentData[], timeRange: Tim
         
         // For weekly view, create 7 days
         if (timeRange === '1w') {
-          for (let i = 0; i < 7; i++) {
+          // For 1w, create exactly 7 consecutive days (clear existing and recreate)
+          allTimepoints.length = 0; // Clear existing timepoints
+          Object.keys(groupedData).forEach(key => delete groupedData[key]); // Clear grouped data
+          
+          // Create 7 consecutive days ending today
+          for (let i = 6; i >= 0; i--) {
             const date = new Date(baseDate);
-            date.setDate(date.getDate() - 6 + i);
+            date.setDate(date.getDate() - i);
             const timeKey = date.toISOString().split('T')[0];
             allTimepoints.push(timeKey);
             groupedData[timeKey] = [];
@@ -279,8 +284,12 @@ export function generateChartData(sentimentData: SentimentData[], timeRange: Tim
           groupedData[timeKey] = [];
         }
       } else if (timeRange === '1w') {
-        // For 1w, add 3 extra daily points
-        for (let i = 1; i <= 3; i++) {
+        // For 1w, add enough extra daily points to make 7 total (one for each day)
+        // We already have timepoints from the actual data, so calculate how many more we need
+        const targetTimepoints = 7;
+        const additionalNeeded = Math.max(0, targetTimepoints - allTimepoints.length);
+        
+        for (let i = 1; i <= additionalNeeded; i++) {
           const date = new Date(baseDate);
           date.setDate(date.getDate() - i);
           const timeKey = date.toISOString().split('T')[0];
@@ -522,18 +531,26 @@ export function generateChartData(sentimentData: SentimentData[], timeRange: Tim
     // For each timepoint, create a more realistic mix of sentiment values
     // instead of having 100% of one sentiment type
     if (items.length === 0) {
-      // For timepoints with no data, create a balanced mix
-      bullishCount = 30 + Math.floor(Math.random() * 20); // 30-50%
-      bearishCount = 20 + Math.floor(Math.random() * 20); // 20-40%
-      neutralCount = 100 - bullishCount - bearishCount; // Remainder
-      
-      // For empty timepoints, distribute sources evenly
-      sourceBreakdown['Reddit'] = 30;
-      sourceBreakdown['Finviz'] = 40;
-      sourceBreakdown['Yahoo'] = 30;
+      // For weekly view, show empty timepoints as neutral instead of skipping them
+      if (timeRange === '1w') {
+        // Create a neutral data point for empty timepoints in weekly view
+        bullishCount = 0;
+        neutralCount = 1; // Show as neutral
+        bearishCount = 0;
+        
+        // Set source to Reddit for consistency
+        sourceBreakdown['Reddit'] = 100;
+        sourceBreakdown['Finviz'] = 0;
+        sourceBreakdown['Yahoo'] = 0;
+      } else {
+        // For other time ranges, skip empty timepoints
+        return null; // This will be filtered out later
+      }
     } else {
       // For timepoints with data, calculate based on actual sentiment values
       items.forEach(item => {
+        console.log(`Processing item: ticker=${item.ticker}, sentiment=${item.sentiment}, source=${item.source}`);
+        
         // Process sentiment data
         if (item.sentiment === 'bullish') {
           bullishCount++;
@@ -553,13 +570,34 @@ export function generateChartData(sentimentData: SentimentData[], timeRange: Tim
         }
       });
       
-      // If we have very few data points, add some randomness to create a mix
-      if (items.length < 3) {
-        // Add some random counts to create a mix
-        bullishCount += Math.floor(Math.random() * 3);
-        neutralCount += Math.floor(Math.random() * 3);
-        bearishCount += Math.floor(Math.random() * 3);
+      console.log(`Sentiment counts for ${key}: bullish=${bullishCount}, neutral=${neutralCount}, bearish=${bearishCount}`);
+    }
+    
+    // Calculate total and percentages - moved after the if-else block
+    const totalItems = bullishCount + neutralCount + bearishCount;
+    
+    // Format display date based on grouping
+    let displayDate: string;
+    // Check if the key is a full ISO timestamp (for single data point case)
+    if (key.includes('T') && key.includes('Z')) {
+      // This is a full ISO timestamp, extract just the time part
+      const date = new Date(key);
+      displayDate = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    } else if (groupBy === 'hour') {
+      // For hourly, show just the hour (e.g., "14:00")
+      // First check if we have the expected format with a space
+      if (key.includes(' ')) {
+        const hour = parseInt(key.split(' ')[1].split(':')[0], 10);
+        displayDate = `${hour}:00`;
+      } else {
+        // Fallback for unexpected format
+        const date = new Date(key);
+        displayDate = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
       }
+    } else {
+      // For daily, show abbreviated date (e.g., "May 4")
+      const date = new Date(key);
+      displayDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     }
     
     // Special case for source attribution test - if we have only one source, make it 100%
@@ -605,37 +643,15 @@ export function generateChartData(sentimentData: SentimentData[], timeRange: Tim
       }
     }
     
-    // Calculate total and percentages
-    const totalItems = bullishCount + neutralCount + bearishCount;
-    
-    // Format display date based on grouping
-    let displayDate: string;
-    // Check if the key is a full ISO timestamp (for single data point case)
-    if (key.includes('T') && key.includes('Z')) {
-      // This is a full ISO timestamp, extract just the time part
-      const date = new Date(key);
-      displayDate = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-    } else if (groupBy === 'hour') {
-      // For hourly, show just the hour (e.g., "14:00")
-      // First check if we have the expected format with a space
-      if (key.includes(' ')) {
-        const hour = parseInt(key.split(' ')[1].split(':')[0], 10);
-        displayDate = `${hour}:00`;
-      } else {
-        // Fallback for unexpected format
-        const date = new Date(key);
-        displayDate = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-      }
-    } else {
-      // For daily, show abbreviated date (e.g., "May 4")
-      const date = new Date(key);
-      displayDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    }
-    
     // Skip intervals with no data instead of generating synthetic data
     if (totalItems === 0) {
       console.log(`Skipping interval ${key} due to no data`);
-      return null; // This will be filtered out later
+      // For weekly view, don't skip empty timepoints - they should show as neutral
+      if (timeRange === '1w') {
+        // Allow the neutral data point to be processed
+      } else {
+        return null; // This will be filtered out later for other time ranges
+      }
     }
     
     // Calculate percentages for data that exists

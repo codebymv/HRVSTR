@@ -40,6 +40,13 @@ router.get('/institutional-holdings', validateSecInstitutional, secController.ge
 router.get('/institutional-holdings/:ticker', validateSecInstitutional, secController.getInstitutionalHoldingsByTicker);
 
 /**
+ * @route GET /api/sec/parallel
+ * @desc Get both insider trades and institutional holdings in parallel for optimal loading
+ * @access Public
+ */
+router.get('/parallel', validateSecInsider, secController.getSecDataParallel);
+
+/**
  * @route GET /api/sec/abnormal-activity
  * @desc Detect abnormal trading activity patterns from insider trades
  * @access Public

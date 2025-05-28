@@ -106,9 +106,13 @@ async function getYahooTickerSentiment(tickers) {
         
         // Ensure we have valid sentiment data with proper fallbacks
         const hasValidSentiment = sentimentResult && typeof sentimentResult.score === 'number';
-        const score = hasValidSentiment ? sentimentResult.score : 0.5;
+        const rawScore = hasValidSentiment ? sentimentResult.score : 0;
         const comparative = hasValidSentiment ? (sentimentResult.comparative || 0) : 0;
         const newsCount = (sentimentResult && typeof sentimentResult.newsCount === 'number') ? sentimentResult.newsCount : 0;
+        
+        // Use the comparative score directly (already in -1 to 1 range)
+        // This ensures Yahoo Finance scores are in the same range as Reddit scores
+        const normalizedScore = comparative;
         
         // Ensure we have valid price and change data
         const price = stockData?.price && !isNaN(parseFloat(stockData.price)) 
@@ -128,14 +132,14 @@ async function getYahooTickerSentiment(tickers) {
           baseConfidence + newsVolumeBonus + sentimentStrengthBonus
         ));
         
-        // Determine sentiment
+        // Determine sentiment using -1 to 1 range with 0.1/-0.1 thresholds
         let sentiment = 'neutral';
         if (comparative > 0.1) sentiment = 'bullish';
         if (comparative < -0.1) sentiment = 'bearish';
         
         sentimentData.push({
           ticker: ticker.toUpperCase(),
-          score: score,
+          score: comparative, // Use comparative score directly
           sentiment: sentiment,
           source: 'yahoo',
           timestamp: new Date().toISOString(),
@@ -143,7 +147,7 @@ async function getYahooTickerSentiment(tickers) {
           changePercent: changePercent,
           newsCount: newsCount,
           confidence: confidence,
-          strength: Math.min(10, Math.abs(comparative) * 2), // Strength from 0-10
+          strength: Math.round(Math.abs(comparative) * 100), // Convert to 0-100 percentage
           lastUpdated: new Date().toISOString()
         });
         
@@ -202,8 +206,13 @@ async function getYahooMarketSentiment() {
           const priceChangeScore = Math.tanh((indexInfo?.changePercent || 0) / 2) * 0.5 + 0.5;
           const newsSentimentScore = sentimentResult.score;
           
+          // Use news sentiment comparative score directly (already in -1,1 range)
+          const newsSentimentComparative = sentimentResult.comparative;
+          
           // Weighted average (60% price action, 40% news sentiment)
-          const score = (priceChangeScore * 0.6) + (newsSentimentScore * 0.4);
+          // Convert price change to -1,1 range first for consistency
+          const priceChangeComparative = Math.tanh((indexInfo?.changePercent || 0) / 2);
+          const score = (priceChangeComparative * 0.6) + (newsSentimentComparative * 0.4);
           
           // Calculate confidence based on volume and news count
           const volumeScore = Math.min(1, Math.log10((indexInfo?.volume || 0) / 1000000) / 3);

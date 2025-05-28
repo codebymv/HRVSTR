@@ -1,8 +1,8 @@
 import { SentimentData } from '../../types';
 
-// Updated sentiment thresholds to match backend
-const BULLISH_THRESHOLD = 0.2;
-const BEARISH_THRESHOLD = -0.2;
+// Updated sentiment thresholds to match backend -1 to 1 range
+const BULLISH_THRESHOLD = 0.1;
+const BEARISH_THRESHOLD = -0.1;
 
 /**
  * Calculate the average sentiment score for a given ticker
@@ -55,14 +55,12 @@ export const getConfidenceColor = (confidence: number): string => {
 
 /**
  * Calculate sentiment strength percentage
- * @param score Normalized sentiment score (-1 to 1)
- * @returns Percentage value (0-1000%)
+ * @param score Sentiment score (-1 to 1 range)
+ * @returns Percentage value (0-100%)
  */
 export const calculateSentimentStrength = (score: number): number => {
-  // Convert normalized score to percentage with amplification for visualization
-  const absScore = Math.abs(score);
-  const amplified = Math.min(10, Math.pow(absScore * 5, 1.5));
-  return Math.round(amplified * 100);
+  // Convert score (-1 to 1) to percentage based on absolute value
+  return Math.round(Math.abs(score) * 100); // 0-100 range
 };
 
 /**

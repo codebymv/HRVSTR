@@ -40,7 +40,10 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
   
   const scoreTextColor = getSentimentTextColor(score);
   // Use strength value if available, otherwise calculate from score
-  const scoreValue = strength ? strength.toString() : (Math.abs(score * 100) * 10).toFixed(0);
+  // For -1 to 1 range, convert to percentage properly
+  const scoreValue = strength !== undefined && strength > 0 
+    ? strength.toString() 
+    : Math.round(Math.abs(score) * 100).toString(); // Convert -1 to 1 range to 0-100 percentage
   
   // Add detailed debug log to see what data is received by the component
   console.log(`🔍 CARD (${ticker}):`, { 
@@ -48,6 +51,11 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
     confidenceType: typeof confidence, 
     score: score,
     hasConfidence: confidence !== undefined,
+    sentiment: data.sentiment,
+    scoreThreshold: score > 0.15 ? 'BULLISH (>0.15)' : score < -0.15 ? 'BEARISH (<-0.15)' : 'NEUTRAL (±0.15)',
+    strengthPercent: scoreValue,
+    source: source,
+    debug: data.debug || 'No debug info',
     entireData: JSON.stringify(data)
   });
   
@@ -62,15 +70,15 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
         <div>
           <h3 className={`text-xl font-bold ${headingTextColor}`}>{ticker}</h3>
           <div className="flex items-center mt-1">
-            {score > 0.2 ? (
+            {score > 0.1 ? (
               <ArrowUpRight size={20} className="text-green-500" />
-            ) : score < -0.2 ? (
+            ) : score < -0.1 ? (
               <ArrowDownRight size={20} className="text-red-500" />
             ) : (
               <Minus size={20} className="text-yellow-500" />
             )}
             <span className={`ml-1 text-sm font-medium capitalize ${scoreTextColor}`}>
-              {score > 0.2 ? 'bullish' : score < -0.2 ? 'bearish' : 'neutral'}
+              {score > 0.1 ? 'bullish' : score < -0.1 ? 'bearish' : 'neutral'}
             </span>
             
             {/* Confidence indicator - only show if provided by backend */}
@@ -219,7 +227,7 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
         <div className={`h-2 ${isLight ? 'bg-stone-400' : 'bg-gray-700'} rounded-full overflow-hidden relative`}>
           <div 
             className={`h-full ${
-              score > 0.2 ? 'bg-green-500' : score < -0.2 ? 'bg-red-500' : 'bg-yellow-500'
+              score > 0.1 ? 'bg-green-500' : score < -0.1 ? 'bg-red-500' : 'bg-yellow-500'
             }`}
             style={{ width: `${Math.min(100, parseInt(scoreValue))}%` }}
           ></div>
