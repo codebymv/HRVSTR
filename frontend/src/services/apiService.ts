@@ -4,12 +4,16 @@
 
 // Get the proxy URL from environment variables or use relative path
 export const getProxyUrl = (): string => {
-  // In production, use relative path
-  if (import.meta.env.PROD) {
-    return '/api';
+  // In production, use the Railway backend service URL
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.PROD) {
+    return 'https://backend-production-81ee.up.railway.app';
   }
   // In development, use the proxy URL from env or default
-  return import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
+    return (import.meta as any).env.VITE_PROXY_URL || 'http://localhost:3001';
+  }
+  // Fallback for other environments
+  return 'http://localhost:3001';
 };
 
 /**
