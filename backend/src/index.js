@@ -53,7 +53,7 @@ const limiter = rateLimit({
 
 // Configure CORS with specific options
 const corsOptions = {
-  origin: true, // Allow all origins in production
+  origin: ['https://hrvstr.up.railway.app', 'http://localhost:5173', 'http://localhost:3000'], // Allow specific origins
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: [
     'Content-Type', 
