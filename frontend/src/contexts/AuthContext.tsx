@@ -64,7 +64,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login(backendToken);
         const userWithToken = { ...userData, token: backendToken };
         setUser(userWithToken);
-        localStorage.setItem('user', JSON.stringify(userData));
+        try {
+          localStorage.setItem('user', JSON.stringify(userData));
+        } catch (storageError) {
+          console.error('Error saving user data to localStorage:', storageError);
+        }
         
       } catch (error) {
         console.error('Google login failed:', error);
@@ -82,25 +86,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Initialize authentication state from localStorage
   useEffect(() => {
     const initializeAuth = () => {
-      const savedToken = localStorage.getItem('auth_token');
-      const tokenExpiry = localStorage.getItem('token_expiry');
-      const savedUser = localStorage.getItem('user');
-      
-      if (savedToken && tokenExpiry && savedUser) {
-        const expiryTime = parseInt(tokenExpiry);
-        if (Date.now() < expiryTime - EXPIRATION_BUFFER) {
-          const userData = JSON.parse(savedUser);
-          setToken(savedToken);
-          setUser({ ...userData, token: savedToken });
-          setIsAuthenticated(true);
-        } else {
-          // Token is expired, clear everything
-          localStorage.removeItem('auth_token');
-          localStorage.removeItem('token_expiry');
-          localStorage.removeItem('user');
+      try {
+        const savedToken = localStorage.getItem('auth_token');
+        const tokenExpiry = localStorage.getItem('token_expiry');
+        const savedUser = localStorage.getItem('user');
+        
+        if (savedToken && tokenExpiry && savedUser) {
+          const expiryTime = parseInt(tokenExpiry);
+          if (Date.now() < expiryTime - EXPIRATION_BUFFER) {
+            // Add null check before parsing JSON
+            if (savedUser && savedUser !== 'undefined' && savedUser !== 'null') {
+              try {
+                const userData = JSON.parse(savedUser);
+                setToken(savedToken);
+                setUser({ ...userData, token: savedToken });
+                setIsAuthenticated(true);
+              } catch (parseError) {
+                console.error('Error parsing saved user data:', parseError);
+                // Clear corrupted data
+                localStorage.removeItem('auth_token');
+                localStorage.removeItem('token_expiry');
+                localStorage.removeItem('user');
+              }
+            }
+          } else {
+            // Token is expired, clear everything
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('token_expiry');
+            localStorage.removeItem('user');
+          }
         }
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        // Clear all auth data on any error
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('token_expiry');
+        localStorage.removeItem('user');
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     initializeAuth();
@@ -143,6 +167,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (user) {
               const updatedUser = { ...user, token: newToken };
               setUser(updatedUser);
+              try {
+                localStorage.setItem('user', JSON.stringify({ ...user, token: newToken }));
+              } catch (storageError) {
+                console.error('Error saving user to localStorage:', storageError);
+              }
             }
             
             // Retry the original request with new token
@@ -187,7 +216,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (user) {
           const updatedUser = { ...user, token: newToken };
           setUser(updatedUser);
-          localStorage.setItem('user', JSON.stringify({ ...user, token: newToken }));
+          try {
+            localStorage.setItem('user', JSON.stringify({ ...user, token: newToken }));
+          } catch (storageError) {
+            console.error('Error saving user to localStorage:', storageError);
+          }
         }
         
         console.log('Token refreshed successfully');
@@ -199,7 +232,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Check token expiry and refresh if needed
     const checkAndRefreshToken = () => {
-      const expiryTime = parseInt(localStorage.getItem('token_expiry') || '0');
+      const expiryTimeString = localStorage.getItem('token_expiry');
+      if (!expiryTimeString || expiryTimeString === 'null' || expiryTimeString === 'undefined') {
+        return;
+      }
+      
+      const expiryTime = parseInt(expiryTimeString);
+      if (isNaN(expiryTime)) {
+        console.error('Invalid token expiry time:', expiryTimeString);
+        return;
+      }
+      
       const timeUntilExpiry = expiryTime - Date.now();
       
       // Refresh if token expires within the buffer time
@@ -251,7 +294,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       login(backendToken);
       const userWithToken = { ...userData, token: backendToken };
       setUser(userWithToken);
-      localStorage.setItem('user', JSON.stringify(userData));
+      try {
+        localStorage.setItem('user', JSON.stringify(userData));
+      } catch (storageError) {
+        console.error('Error saving user data to localStorage:', storageError);
+      }
       
     } catch (error) {
       console.error('Google login failed:', error);
@@ -271,20 +318,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const expiryTime = Date.now() + (24 * 60 * 60 * 1000);
     setToken(newToken);
     setIsAuthenticated(true);
-    localStorage.setItem('auth_token', newToken);
-    localStorage.setItem('token_expiry', expiryTime.toString());
+    try {
+      localStorage.setItem('auth_token', newToken);
+      localStorage.setItem('token_expiry', expiryTime.toString());
+    } catch (storageError) {
+      console.error('Error saving auth data to localStorage:', storageError);
+    }
   };
 
   const logout = () => {
     setToken(null);
     setUser(null);
     setIsAuthenticated(false);
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('token_expiry');
-    localStorage.removeItem('user');
+    
+    try {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('token_expiry');
+      localStorage.removeItem('user');
+    } catch (storageError) {
+      console.error('Error clearing localStorage:', storageError);
+    }
     
     // Sign out from Google
-    googleLogout();
+    try {
+      googleLogout();
+    } catch (googleError) {
+      console.error('Error signing out from Google:', googleError);
+    }
     
     // Optional: Call backend logout endpoint
     try {
