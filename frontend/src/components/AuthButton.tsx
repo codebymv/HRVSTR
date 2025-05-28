@@ -4,7 +4,13 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Sun, Moon, User } from 'lucide-react';
 
 export const AuthButton = () => {
-  const { isAuthenticated, loading, user, signIn, signOut } = useAuth();
+  const { 
+    isAuthenticated, 
+    loading, 
+    user, 
+    signIn, 
+    signOut
+  } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -104,10 +110,10 @@ export const AuthButton = () => {
     );
   }
 
-  // Not authenticated - show login button
+  // Not authenticated - show login button that directly triggers OAuth
   return (
     <button 
-      onClick={() => signIn()}
+      onClick={signIn}
       className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm"
     >
       Log In

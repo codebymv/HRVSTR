@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { CredentialResponse } from '@react-oauth/google';
+import { CredentialResponse, googleLogout, useGoogleLogin } from '@react-oauth/google';
 
 interface User {
   id: string;
@@ -31,43 +31,80 @@ const REFRESH_INTERVAL = 30 * 60 * 1000;
 const EXPIRATION_BUFFER = 5 * 60 * 1000;
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [token, setToken] = useState<string | null>(() => {
-    // Initialize from localStorage
-    const savedToken = localStorage.getItem('auth_token');
-    const tokenExpiry = localStorage.getItem('token_expiry');
-    
-    if (savedToken && tokenExpiry) {
-      const expiryTime = parseInt(tokenExpiry);
-      if (Date.now() < expiryTime - EXPIRATION_BUFFER) {
-        return savedToken;
-      } else {
-        // Token is expired or about to expire, clear it
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('token_expiry');
-        localStorage.removeItem('user');
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  // Use Google Login hook for direct OAuth
+  const googleLogin = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      setLoading(true);
+      try {
+        // Get user info from Google using the access token
+        const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+          headers: {
+            Authorization: `Bearer ${tokenResponse.access_token}`,
+          },
+        });
+        
+        const googleUser = await userInfoResponse.json();
+        
+        // Send the Google user info to your backend
+        const response = await axios.post('/api/auth/google-login', {
+          googleId: googleUser.id,
+          email: googleUser.email,
+          name: googleUser.name,
+          picture: googleUser.picture
+        });
+
+        const { token: backendToken, user: userData } = response.data;
+        
+        // Store the backend token and user info
+        login(backendToken);
+        const userWithToken = { ...userData, token: backendToken };
+        setUser(userWithToken);
+        localStorage.setItem('user', JSON.stringify(userData));
+        
+      } catch (error) {
+        console.error('Google login failed:', error);
+        handleGoogleError();
+      } finally {
+        setLoading(false);
       }
-    }
-    return null;
+    },
+    onError: () => {
+      console.error('Google login failed');
+      setLoading(false);
+    },
   });
 
-  const [user, setUser] = useState<User | null>(() => {
-    // Initialize user from localStorage only if we have a valid token
-    const savedUser = localStorage.getItem('user');
-    const savedToken = localStorage.getItem('auth_token');
-    const tokenExpiry = localStorage.getItem('token_expiry');
-    
-    if (savedUser && savedToken && tokenExpiry) {
-      const expiryTime = parseInt(tokenExpiry);
-      if (Date.now() < expiryTime - EXPIRATION_BUFFER) {
-        const userData = JSON.parse(savedUser);
-        return { ...userData, token: savedToken };
+  // Initialize authentication state from localStorage
+  useEffect(() => {
+    const initializeAuth = () => {
+      const savedToken = localStorage.getItem('auth_token');
+      const tokenExpiry = localStorage.getItem('token_expiry');
+      const savedUser = localStorage.getItem('user');
+      
+      if (savedToken && tokenExpiry && savedUser) {
+        const expiryTime = parseInt(tokenExpiry);
+        if (Date.now() < expiryTime - EXPIRATION_BUFFER) {
+          const userData = JSON.parse(savedUser);
+          setToken(savedToken);
+          setUser({ ...userData, token: savedToken });
+          setIsAuthenticated(true);
+        } else {
+          // Token is expired, clear everything
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('token_expiry');
+          localStorage.removeItem('user');
+        }
       }
-    }
-    return null;
-  });
+      setLoading(false);
+    };
 
-  const [loading, setLoading] = useState<boolean>(false);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!token);
+    initializeAuth();
+  }, []);
 
   // Update user token when token changes
   useEffect(() => {
@@ -182,6 +219,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [token, user]);
 
   const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
+    // Keep this for backward compatibility if needed
     if (!credentialResponse.credential) {
       console.error('No credential received from Google');
       return;
@@ -245,6 +283,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('token_expiry');
     localStorage.removeItem('user');
     
+    // Sign out from Google
+    googleLogout();
+    
     // Optional: Call backend logout endpoint
     try {
       axios.post('/api/auth/logout');
@@ -253,40 +294,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Launch Google OAuth directly
+  // Direct sign in - triggers Google OAuth popup immediately
   const signIn = () => {
-    // Use Google's OAuth popup flow
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    if (!clientId) {
-      console.error('Google Client ID not configured');
-      return;
-    }
-
-    const redirectUri = window.location.origin;
-    const scope = 'openid profile email';
-    
-    const authUrl = `https://accounts.google.com/oauth/authorize?` +
-      `client_id=${clientId}&` +
-      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-      `scope=${encodeURIComponent(scope)}&` +
-      `response_type=code&` +
-      `access_type=offline&` +
-      `prompt=select_account`; // This forces account selection
-    
-    // Open in popup
-    const popup = window.open(
-      authUrl,
-      'google-auth',
-      'width=500,height=600,scrollbars=yes,resizable=yes'
-    );
-    
-    // Listen for popup messages (you'd need to handle the OAuth callback)
-    const checkClosed = setInterval(() => {
-      if (popup?.closed) {
-        clearInterval(checkClosed);
-        // Handle popup closed - could check for auth state change
-      }
-    }, 1000);
+    googleLogin();
   };
 
   const signOut = logout;
@@ -302,7 +312,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       signIn, 
       signOut, 
       handleGoogleSuccess, 
-      handleGoogleError 
+      handleGoogleError
     }}>
       {children}
     </AuthContext.Provider>
