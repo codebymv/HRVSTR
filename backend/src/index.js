@@ -90,7 +90,7 @@ app.options('*', cors(corsOptions));
 app.use((req, res, next) => {
   // Set CORS headers
   const origin = req.headers.origin;
-  res.header('Access-Control-Allow-Origin', origin || '*');
+  if (['https://hrvstr.up.railway.app', 'http://localhost:5173', 'http://localhost:3000'].includes(origin)) { res.header('Access-Control-Allow-Origin', origin); }
   res.header('Access-Control-Allow-Methods', corsOptions.methods.join(','));
   res.header('Access-Control-Allow-Headers', corsOptions.allowedHeaders.join(','));
   res.header('Access-Control-Expose-Headers', corsOptions.exposedHeaders.join(','));
