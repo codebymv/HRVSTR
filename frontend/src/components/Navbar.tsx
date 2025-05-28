@@ -1,6 +1,6 @@
 import React from 'react';
 // Import all icons but comment out unused ones for future use
-import { Menu } from 'lucide-react';
+import { Menu, Home, BarChart2, ListChecks, TrendingUp, Settings } from 'lucide-react';
 // import { Bell, Search, User, Sun, Moon } from 'lucide-react'; // Commented out for now
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
@@ -106,14 +106,30 @@ const Navbar: React.FC = () => {
           </div>
           */}
           <nav className="grid gap-2">
-            <NavLink to="/" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Home</NavLink>
+            <NavLink to="/" className={({isActive}) => `flex items-center space-x-3 py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>
+              <Home size={20} />
+              <span>Home</span>
+            </NavLink>
             {/* <NavLink to="/watchlists" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Watchlists</NavLink> */}
-            <NavLink to="/sentiment" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Sentiment</NavLink>
+            <NavLink to="/sentiment" className={({isActive}) => `flex items-center space-x-3 py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>
+              <BarChart2 size={20} />
+              <span>Sentiment</span>
+            </NavLink>
             {/* <NavLink to="/historical" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Historical Data</NavLink> */}
             {/* <NavLink to="/alerts" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Alerts</NavLink> */}
             {/* <NavLink to="/settings" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Settings</NavLink> */}
-            <NavLink to="/sec-filings" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>SEC Filings</NavLink>
-            <NavLink to="/earnings" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Earnings</NavLink>
+            <NavLink to="/sec-filings" className={({isActive}) => `flex items-center space-x-3 py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>
+              <ListChecks size={20} />
+              <span>SEC Filings</span>
+            </NavLink>
+            <NavLink to="/earnings" className={({isActive}) => `flex items-center space-x-3 py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>
+              <TrendingUp size={20} />
+              <span>Earnings</span>
+            </NavLink>
+            <NavLink to="/settings" className={({isActive}) => `flex items-center space-x-3 py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>
+              <Settings size={20} />
+              <span>Settings</span>
+            </NavLink>
           </nav>
         </div>
       )}

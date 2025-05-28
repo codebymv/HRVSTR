@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Save, RefreshCw, AlertTriangle, Moon, Sun } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Save, RefreshCw, AlertTriangle, Moon, Sun, Coins, Users, ArrowRight } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 
 interface ApiKey {
@@ -31,8 +32,29 @@ interface SettingsProps {
   onLoadingProgressChange?: (progress: number, stage: string) => void;
 }
 
+// Mock credits data interface
+interface CreditsData {
+  userCredits: {
+    used: number;
+    total: number;
+    left: number;
+    usageSince: string;
+  };
+  addOnCredits: {
+    used: number;
+    total: number;
+    left: number;
+    usageSince: string;
+  };
+  nextRefresh: {
+    date: string;
+    daysLeft: number;
+  };
+}
+
 const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
   const { theme, setTheme } = useTheme();
+  const navigate = useNavigate();
   const isLight = theme === 'light';
   
   // Theme-specific styling
@@ -45,6 +67,28 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
   const inputTextColor = isLight ? 'text-stone-800' : 'text-gray-200';
   const labelColor = isLight ? 'text-stone-900' : 'text-white';
   const descriptionColor = isLight ? 'text-stone-700' : 'text-gray-300';
+  const buttonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
+
+  // Mock credits data - this would come from your backend in a real app
+  const [creditsData] = useState<CreditsData>({
+    userCredits: {
+      used: 847,
+      total: 1000,
+      left: 153,
+      usageSince: 'Dec 13, 2024'
+    },
+    addOnCredits: {
+      used: 234,
+      total: 500,
+      left: 266,
+      usageSince: 'Dec 13, 2024'
+    },
+    nextRefresh: {
+      date: 'Jan 13, 2025',
+      daysLeft: 16
+    }
+  });
+
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([
     { 
       name: 'reddit_client_id', 
@@ -291,6 +335,117 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
           <p className={secondaryTextColor}>Configure application preferences and API keys</p>
         </div>
 
+        {/* Credits/Usage Summary */}
+        <div className={`${cardBgColor} rounded-lg p-6 mb-8 border ${borderColor}`}>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center">
+              <h2 className={`text-xl font-semibold ${textColor} flex items-center`}>
+                <Coins className="w-6 h-6 mr-2 text-yellow-500" />
+                Usage
+              </h2>
+              <button
+                onClick={() => navigate('/pricing')}
+                className="ml-3 text-sm text-blue-500 hover:text-blue-600 flex items-center"
+              >
+                See updates to pricing structure
+                <ArrowRight className="w-4 h-4 ml-1" />
+              </button>
+            </div>
+          </div>
+
+          <div className="mb-6">
+            <h3 className={`text-lg font-semibold ${textColor} mb-2`}>HRVSTR Usage Summary</h3>
+            <p className={`text-sm ${secondaryTextColor} mb-1`}>
+              Next plan refresh is in <span className="font-medium">{creditsData.nextRefresh.daysLeft} days</span> on {creditsData.nextRefresh.date}.
+            </p>
+          </div>
+
+          <div className="space-y-6">
+            {/* User Scrape Credits */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className={`font-medium ${textColor}`}>User Scrape credits</h4>
+                <span className={`text-2xl font-bold ${textColor}`}>
+                  {creditsData.userCredits.left.toLocaleString()} <span className="text-sm font-normal">left</span>
+                </span>
+              </div>
+              <div className="flex items-center text-sm mb-2">
+                <span className={secondaryTextColor}>
+                  {creditsData.userCredits.used.toLocaleString()} / {creditsData.userCredits.total.toLocaleString()} used
+                </span>
+                <span className={`ml-auto ${secondaryTextColor}`}>
+                  Usage since {creditsData.userCredits.usageSince}
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-1">
+                <div 
+                  className={`h-2 rounded-full ${
+                    creditsData.userCredits.left < 100 ? 'bg-red-500' : 
+                    creditsData.userCredits.left < 300 ? 'bg-yellow-500' : 'bg-green-500'
+                  }`}
+                  style={{ width: `${(creditsData.userCredits.used / creditsData.userCredits.total) * 100}%` }}
+                />
+              </div>
+              <p className={`text-xs ${secondaryTextColor}`}>
+                Using premium scraping options costs one scrape credit per use.
+              </p>
+            </div>
+
+            {/* Add-on Scrape Credits */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className={`font-medium ${textColor}`}>Add-on scrape credits</h4>
+                <span className={`text-2xl font-bold ${textColor}`}>
+                  {creditsData.addOnCredits.left.toLocaleString()} <span className="text-sm font-normal">left</span>
+                </span>
+              </div>
+              <div className="flex items-center text-sm mb-2">
+                <span className={secondaryTextColor}>
+                  {creditsData.addOnCredits.used.toLocaleString()} / {creditsData.addOnCredits.total.toLocaleString()} used
+                </span>
+                <span className={`ml-auto ${secondaryTextColor}`}>
+                  Usage since {creditsData.addOnCredits.usageSince}
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-1">
+                <div 
+                  className="bg-teal-500 h-2 rounded-full"
+                  style={{ width: `${(creditsData.addOnCredits.used / creditsData.addOnCredits.total) * 100}%` }}
+                />
+              </div>
+              <p className={`text-xs ${secondaryTextColor}`}>
+                Additional scrape credits.
+              </p>
+            </div>
+
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <p className={`text-sm ${secondaryTextColor}`}>
+                  Once the usage limit is reached, HRVSTR can continue to be used with the base functionality. To 
+                  continue using premium web scraping, purchase add-on scrape credits.
+                </p>
+                <button 
+                  onClick={() => navigate('/billing')}
+                  className={`ml-4 ${buttonBgColor} text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center whitespace-nowrap`}
+                >
+                  Purchase credits
+                </button>
+              </div>
+            </div>
+
+            <div className="pt-4">
+              <button
+                onClick={() => navigate('/referrals')}
+                className={`text-sm ${secondaryTextColor} hover:${textColor} flex items-center transition-colors`}
+              >
+                <Users className="w-4 h-4 mr-2" />
+                Refer a friend to get 250 free add-on scrape credits
+                <ArrowRight className="w-4 h-4 ml-1" />
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Settings Status Message */}
         {saveStatus.type !== 'none' && (
           <div className={`mb-6 p-4 rounded-lg ${saveStatus.type === 'success' ? 'bg-green-800/30 border border-green-700' : 'bg-red-800/30 border border-red-700'}`}>
@@ -514,7 +669,7 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
           <button
             onClick={saveSettings}
             disabled={isLoading}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg flex items-center disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className={`${buttonBgColor} text-white font-medium py-2 px-4 rounded-lg flex items-center disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
           >
             {isLoading ? (
               <>

@@ -18,6 +18,7 @@ import {
   Loader2
 } from 'lucide-react';
 import AddTickerModal from '../Watchlist/AddTickerModal';
+import { formatEventRelativeTime, getRelativeTimeBadgeStyle } from '../../utils/timeUtils';
 
 interface WatchlistItem {
   id: string;
@@ -457,9 +458,9 @@ const UserHome: React.FC = () => {
             </span>
           </h1>
           <p className={`${secondaryTextColor} mt-2`}>
-            Here's what's happening:
-          </p>
-        </div>
+            Membership: <span className="font-semibold text-yellow-400">Tier 1 HRVSTR!</span>
+            </p>
+          </div>
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
@@ -492,7 +493,7 @@ const UserHome: React.FC = () => {
           <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor}`}>
             <div className="flex items-center justify-between mb-4">
               <h2 className={`text-xl font-semibold ${textColor} flex items-center`}>
-                <Star className="w-5 h-5 mr-2 text-yellow-500" />
+                <Star className="w-5 h-5 mr-2 text-blue-500" />
                 Watchlist
               </h2>
               <div className="flex items-center space-x-2">
@@ -531,9 +532,15 @@ const UserHome: React.FC = () => {
                     </div>
                     {/* Placeholder for price info - currently shows N/A */}
                     <div className="text-right">
-                      <div className={`text-lg font-semibold ${textColor}`}>{item.last_price !== null ? item.last_price.toFixed(2) : 'N/A'}</div>
+                      <div className={`text-lg font-semibold ${textColor}`}>
+                        {item.last_price !== null && typeof item.last_price === 'number' && !isNaN(item.last_price) 
+                          ? item.last_price.toFixed(2) 
+                          : 'N/A'}
+                      </div>
                       <div className={`text-sm ${typeof item.price_change === 'number' && item.price_change >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                        {item.price_change !== null ? item.price_change.toFixed(2) : 'N/A'}
+                        {item.price_change !== null && typeof item.price_change === 'number' && !isNaN(item.price_change) 
+                          ? item.price_change.toFixed(2) 
+                          : 'N/A'}
                       </div>
                     </div>
                     <button
@@ -614,13 +621,28 @@ const UserHome: React.FC = () => {
                       </p>
                     </div>
                     <div className="mt-2 flex items-center">
-                      <span className={`text-xs px-2 py-1 rounded-full ${
-                        event.status === 'scheduled' 
-                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                          : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                      }`}>
-                        {event.status}
-                      </span>
+                      {(() => {
+                        const relativeTime = formatEventRelativeTime(event.scheduled_at);
+                        if (!relativeTime) {
+                          // Fallback to status if no relative time available
+                          return (
+                            <span className={`text-xs px-2 py-1 rounded-full ${
+                              event.status === 'scheduled' 
+                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                                : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                            }`}>
+                              {event.status}
+                            </span>
+                          );
+                        }
+                        
+                        const badgeStyle = getRelativeTimeBadgeStyle(relativeTime);
+                        return (
+                          <span className={`text-xs px-2 py-1 rounded-full ${badgeStyle.className}`}>
+                            {relativeTime}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
                 ))
