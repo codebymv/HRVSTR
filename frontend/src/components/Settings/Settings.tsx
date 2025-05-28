@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Save, RefreshCw, AlertTriangle, Moon, Sun, Coins, Users, ArrowRight } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Save, RefreshCw, AlertTriangle, Moon, Sun, Coins, Users, ArrowRight, HelpCircle } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 
 interface ApiKey {
   name: string;
   key: string;
   description: string;
+  helpPath?: string;
 }
 
 interface Theme {
@@ -21,6 +22,7 @@ interface DataSource {
   description: string;
   requiresApiKey: boolean;
   relatedApiKey?: string;
+  helpPath?: string;
 }
 
 interface KeyStatus {
@@ -93,17 +95,20 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
     { 
       name: 'reddit_client_id', 
       key: '', 
-      description: 'Your Reddit API Client ID. Get this from https://www.reddit.com/prefs/apps by creating a new application'
+      description: 'Your Reddit API Client ID. Get this from https://www.reddit.com/prefs/apps by creating a new application',
+      helpPath: '/help/Implementations/APIs/reddit-api'
     },
     { 
       name: 'reddit_client_secret', 
       key: '', 
-      description: 'Your Reddit API Client Secret from your Reddit application settings'
+      description: 'Your Reddit API Client Secret from your Reddit application settings',
+      helpPath: '/help/Implementations/APIs/reddit-api'
     },
     {
       name: 'alpha_vantage_key',
       key: '',
-      description: 'Your Alpha Vantage API key. Get a free key from https://www.alphavantage.co/support/#api-key'
+      description: 'Your Alpha Vantage API key. Get a free key from https://www.alphavantage.co/support/#api-key',
+      helpPath: '/help/Implementations/APIs/alpha-vantage-api'
     }
   ]);
 
@@ -144,32 +149,37 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
       name: 'Reddit Data', 
       description: 'Posts, comments, and sentiment from Reddit. Requires your own Reddit API credentials.', 
       requiresApiKey: true,
-      relatedApiKey: 'reddit_client_id'
+      relatedApiKey: 'reddit_client_id',
+      helpPath: '/help/Implementations/APIs/reddit-api'
     },
     { 
       id: 'finviz', 
       name: 'FinViz News & Analysis', 
       description: 'Financial news and sentiment analysis from FinViz', 
-      requiresApiKey: false 
+      requiresApiKey: false,
+      helpPath: '/help/Implementations/APIs/finviz-api'
     },
     { 
       id: 'sec_insider', 
       name: 'SEC Insider Trades', 
       description: 'Form 4 filings showing insider buying and selling activity', 
-      requiresApiKey: false 
+      requiresApiKey: false,
+      helpPath: '/help/Implementations/APIs/sec-edgar'
     },
     { 
       id: 'sec_institutional', 
       name: 'SEC Institutional Holdings', 
       description: '13F filings showing institutional investment positions', 
-      requiresApiKey: false 
+      requiresApiKey: false,
+      helpPath: '/help/Implementations/APIs/sec-edgar'
     },
     {
       id: 'alpha_vantage',
       name: 'Alpha Vantage Market Data',
       description: 'Real-time and historical market data from Alpha Vantage. Requires your own API key.',
       requiresApiKey: true,
-      relatedApiKey: 'alpha_vantage_key'
+      relatedApiKey: 'alpha_vantage_key',
+      helpPath: '/help/Implementations/APIs/alpha-vantage-api'
     }
   ];
 
@@ -327,6 +337,18 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
     }
   };
 
+  // Helper component for section titles with help links
+  const SectionTitle: React.FC<{ title: string; helpPath?: string }> = ({ title, helpPath }) => (
+    <div className="flex items-center mb-3">
+      <h2 className={`text-xl font-semibold ${labelColor}`}>{title}</h2>
+      {helpPath && (
+        <Link to={helpPath} target="_blank" rel="noopener noreferrer" className="ml-2 text-blue-500 hover:text-blue-700">
+          <HelpCircle size={18} />
+        </Link>
+      )}
+    </div>
+  );
+
   return (
     <div className={`${bgColor} ${textColor} min-h-screen`}>
       <div className="max-w-4xl mx-auto p-6">
@@ -343,11 +365,14 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
                 <Coins className="w-6 h-6 mr-2 text-yellow-500" />
                 Usage
               </h2>
+              <Link to="/help/getting-started" className="ml-2 text-blue-500 hover:text-blue-700">
+                <HelpCircle size={18} />
+              </Link>
               <button
-                onClick={() => navigate('/pricing')}
+                onClick={() => navigate('/help')}
                 className="ml-3 text-sm text-blue-500 hover:text-blue-600 flex items-center"
               >
-                See updates to pricing structure
+                See Pricing & Credits help
                 <ArrowRight className="w-4 h-4 ml-1" />
               </button>
             </div>
@@ -459,16 +484,35 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
         {/* API Keys Section */}
         <div className={`${cardBgColor} rounded-lg p-6 mb-8 border ${borderColor}`}>
           <div className={`p-4 border-b ${borderColor}`}>
-            <h2 className={`text-lg font-semibold ${textColor}`}>API Keys</h2>
-            <p className={`text-sm ${secondaryTextColor} mt-1`}>
-              Configure external API keys for enhanced data access
-            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className={`text-lg font-semibold ${textColor} flex items-center`}>
+                  API Keys
+                  <Link to="/help/API/authentication" className="ml-2 text-blue-500 hover:text-blue-700">
+                    <HelpCircle size={18} />
+                  </Link>
+                </h2>
+                <p className={`text-sm ${secondaryTextColor} mt-1`}>
+                  Configure external API keys for enhanced data access
+                </p>
+              </div>
+            </div>
           </div>
           <div className="p-4">
             {apiKeys.map((apiKey, index) => (
               <div key={apiKey.name} className="mb-4">
-                <label className={`block ${labelColor} text-sm font-medium mb-2`}>
+                <label className={`block ${labelColor} text-sm font-medium mb-2 flex items-center`}>
                   {apiKey.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  {apiKey.name.includes('reddit') && (
+                    <Link to="/help/Implementations/APIs/reddit-api" className="ml-2 text-blue-500 hover:text-blue-700">
+                      <HelpCircle size={16} />
+                    </Link>
+                  )}
+                  {apiKey.name.includes('alpha_vantage') && (
+                    <Link to="/help/Config/backend-config" className="ml-2 text-blue-500 hover:text-blue-700">
+                      <HelpCircle size={16} />
+                    </Link>
+                  )}
                 </label>
                 <input
                   type="password"
@@ -486,7 +530,12 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
         {/* Data Sources */}
         <div className={`${cardBgColor} rounded-lg p-6 mb-8 border ${borderColor}`}>
           <div className={`p-4 border-b ${borderColor}`}>
-            <h2 className={`text-lg font-semibold ${textColor}`}>Data Sources</h2>
+            <h2 className={`text-lg font-semibold ${textColor} flex items-center`}>
+              Data Sources
+              <Link to="/help/Implementations/APIs" className="ml-2 text-blue-500 hover:text-blue-700">
+                <HelpCircle size={18} />
+              </Link>
+            </h2>
             <p className={`text-sm ${secondaryTextColor} mt-1`}>
               Enable or disable specific data sources for your dashboard
             </p>
@@ -509,8 +558,28 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
                 <div key={source.id} className="mb-6">
                   <div className="flex items-center justify-between mb-2">
                     <div>
-                      <label className={`block ${labelColor} text-sm font-medium mb-1`}>
+                      <label className={`block ${labelColor} text-sm font-medium mb-1 flex items-center`}>
                         {source.name}
+                        {source.id === 'reddit' && (
+                          <Link to="/help/Implementations/APIs/reddit-api" className="ml-2 text-blue-500 hover:text-blue-700">
+                            <HelpCircle size={16} />
+                          </Link>
+                        )}
+                        {source.id === 'finviz' && (
+                          <Link to="/help/Implementations/APIs/finviz-api" className="ml-2 text-blue-500 hover:text-blue-700">
+                            <HelpCircle size={16} />
+                          </Link>
+                        )}
+                        {(source.id === 'sec_insider' || source.id === 'sec_institutional') && (
+                          <Link to="/help/Implementations/APIs/sec-edgar" className="ml-2 text-blue-500 hover:text-blue-700">
+                            <HelpCircle size={16} />
+                          </Link>
+                        )}
+                        {source.id === 'alpha_vantage' && (
+                          <Link to="/help/Config/backend-config" className="ml-2 text-blue-500 hover:text-blue-700">
+                            <HelpCircle size={16} />
+                          </Link>
+                        )}
                         {source.requiresApiKey && (
                           <span className="ml-2 text-xs text-yellow-500">
                             (Requires API Key or .env)
@@ -578,7 +647,12 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
         {/* Interface Settings */}
         <div className={`${cardBgColor} rounded-lg p-6 mb-8 border ${borderColor}`}>
           <div className={`p-4 border-b ${borderColor}`}>
-            <h2 className={`text-lg font-semibold ${textColor}`}>Interface Settings</h2>
+            <h2 className={`text-lg font-semibold ${textColor} flex items-center`}>
+              Interface Settings
+              <Link to="/help/Implementations/Settings/user-preferences" className="ml-2 text-blue-500 hover:text-blue-700">
+                <HelpCircle size={18} />
+              </Link>
+            </h2>
             <p className={`text-sm ${secondaryTextColor} mt-1`}>
               Customize the application appearance and behavior
             </p>

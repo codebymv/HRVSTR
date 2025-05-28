@@ -103,10 +103,12 @@ const UserHome: React.FC = () => {
   const isLight = theme === 'light';
   const bgColor = isLight ? 'bg-stone-200' : 'bg-gray-950';
   const textColor = isLight ? 'text-stone-800' : 'text-white';
+  const welcomeTextColor = isLight ? 'text-stone-600' : 'text-white';
   const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-900';
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
   const secondaryTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
   const buttonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
+  const membershipTextColor = isLight ? 'text-amber-600' : 'text-amber-400';
 
   // Add icon filter for theme switching
   const iconFilter = isLight ? 'invert(1) brightness(0)' : 'none';
@@ -451,14 +453,14 @@ const UserHome: React.FC = () => {
             </div>
           </div>
           
-          <h1 className={`text-2xl font-bold ${textColor} pr-16`}>
+          <h1 className={`text-2xl font-bold ${welcomeTextColor} pr-16`}>
             Welcome back, <br className="block sm:hidden" />
             <span className="block sm:inline bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent">
               {user?.name}!
             </span>
           </h1>
           <p className={`${secondaryTextColor} mt-2`}>
-            Membership: <span className="font-semibold text-yellow-400">Tier 1 HRVSTR!</span>
+            Membership: <span className={`font-semibold ${membershipTextColor}`}>Tier 1 HRVSTR!</span>
             </p>
           </div>
 

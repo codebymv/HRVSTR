@@ -1,136 +1,357 @@
-# Caching Strategy Overview
+# Data Management & Caching Strategy
 
-This document provides a high-level overview of the caching strategies implemented across the HRVSTR application.
+## Overview
 
-## Introduction
+HRVSTR employs a sophisticated caching strategy to optimize performance when dealing with financial data from multiple external sources. The system uses Redis as the primary cache layer to reduce API calls, improve response times, and handle rate limiting effectively.
 
-HRVSTR implements a sophisticated multi-tiered caching architecture designed to optimize performance, reduce API calls, and provide a seamless user experience even during network disruptions. The caching strategy varies by feature area, with each implementation tailored to the specific data characteristics and refresh requirements.
+## Data Sources
 
-## Caching Approaches by Feature
+### External APIs
+1. **SEC EDGAR**: Insider trading (Form 4) and institutional holdings (13F)
+2. **Reddit API**: Social sentiment from financial subreddits
+3. **FinViz**: Market news, analyst ratings, technical indicators
+4. **Yahoo Finance**: Stock prices and earnings data
 
-The application implements three distinct caching approaches across its main features:
+### Data Characteristics
+- **Volume**: High-frequency data updates for popular tickers
+- **Latency**: Real-time to daily update frequencies
+- **Reliability**: External dependencies with potential rate limits
+- **Cost**: API call limitations and potential quotas
 
-### 1. Sentiment Analysis
+## Redis Caching Architecture
 
-[Detailed documentation available in sentiment-caching.md](./sentiment-caching.md)
+### Cache Layers
 
-The Sentiment Analysis feature uses an **in-memory Map cache** with **variable TTL based on time range**:
+#### L1 Cache: Application Memory
+- **Purpose**: Frequently accessed, small datasets
+- **TTL**: 5-10 minutes
+- **Implementation**: Node.js in-memory cache
+- **Use Cases**: API responses for current user session
 
-- Short-term data (1 day): 2 minute TTL
-- Long-term data (3 months): 30 minute TTL
+#### L2 Cache: Redis
+- **Purpose**: Shared cache across multiple instances
+- **TTL**: Variable based on data type (15 minutes to 24 hours)
+- **Implementation**: Redis with configurable TTL
+- **Use Cases**: External API responses, processed data
 
-Key characteristics:
-- Fast in-memory access
-- Time-based automatic expiration
-- Sophisticated cache validation
-- Graceful fallback to cached data on errors
+### Cache Key Strategy
 
-### 2. SEC Filings
+```typescript
+// Cache key patterns
+const CACHE_KEYS = {
+  SEC_INSIDER: (ticker: string) => `sec:insider:${ticker.toUpperCase()}`,
+  SEC_HOLDINGS: (ticker: string) => `sec:holdings:${ticker.toUpperCase()}`,
+  REDDIT_SENTIMENT: (ticker: string) => `reddit:sentiment:${ticker.toUpperCase()}`,
+  FINVIZ_NEWS: (ticker: string) => `finviz:news:${ticker.toUpperCase()}`,
+  EARNINGS_DATA: (ticker: string) => `earnings:${ticker.toUpperCase()}`,
+  MARKET_SENTIMENT: () => `market:sentiment:${getCurrentDate()}`,
+  TRENDING_TICKERS: () => `trending:tickers:${getCurrentHour()}`
+};
 
-[Detailed documentation available in sec-filings-caching.md](./sec-filings-caching.md)
+// Helper functions
+const getCurrentDate = () => new Date().toISOString().split('T')[0];
+const getCurrentHour = () => new Date().toISOString().slice(0, 13);
+```
 
-The SEC Filings feature implements **localStorage persistence** with **explicit cache management**:
+## Cache TTL Strategy
 
-- 30-minute staleness threshold
-- User-triggered cache clearing
-- Tab state persistence across sessions
-- Server-side cache coordination
+### Time-Based TTL
+```typescript
+export const CACHE_TTL = {
+  // Real-time data (frequent updates)
+  REDDIT_POSTS: 15 * 60,        // 15 minutes
+  FINVIZ_NEWS: 15 * 60,         // 15 minutes
+  MARKET_SENTIMENT: 30 * 60,    // 30 minutes
+  
+  // Semi-static data (daily updates)
+  SEC_INSIDER: 60 * 60,         // 1 hour
+  SEC_HOLDINGS: 4 * 60 * 60,    // 4 hours
+  EARNINGS_DATA: 2 * 60 * 60,   // 2 hours
+  
+  // Static data (infrequent updates)
+  TICKER_INFO: 24 * 60 * 60,    // 24 hours
+  COMPANY_PROFILE: 24 * 60 * 60, // 24 hours
+  
+  // Processed/computed data
+  SENTIMENT_ANALYSIS: 30 * 60,   // 30 minutes
+  TREND_ANALYSIS: 60 * 60       // 1 hour
+};
+```
 
-Key characteristics:
-- Persistence across page reloads
-- User-exposed cache controls
-- Combined client/server caching
-- Detailed loading states
+### Dynamic TTL Based on Market Hours
+```typescript
+export const getDynamicTTL = (dataType: string): number => {
+  const now = new Date();
+  const isMarketHours = isMarketOpen(now);
+  const isWeekend = now.getDay() === 0 || now.getDay() === 6;
+  
+  if (isWeekend) {
+    // Longer TTL on weekends
+    return CACHE_TTL[dataType] * 4;
+  }
+  
+  if (isMarketHours) {
+    // Shorter TTL during market hours
+    return CACHE_TTL[dataType] * 0.5;
+  }
+  
+  // Standard TTL after hours
+  return CACHE_TTL[dataType];
+};
+```
 
-### 3. Earnings Monitor
+## Cache Implementation
 
-[Detailed documentation available in earnings-caching.md](./earnings-caching.md)
+### CacheManager Class
+```typescript
+export class CacheManager {
+  private static redis = redisClient;
+  
+  // Get with fallback
+  static async getWithFallback<T>(
+    key: string, 
+    fallbackFn: () => Promise<T>, 
+    ttl: number = 3600
+  ): Promise<T> {
+    try {
+      // Try to get from cache first
+      const cached = await this.get(key);
+      if (cached !== null) {
+        return cached as T;
+      }
+      
+      // Execute fallback function
+      const data = await fallbackFn();
+      
+      // Store in cache for future requests
+      await this.set(key, data, ttl);
+      
+      return data;
+    } catch (error) {
+      console.error(`Cache fallback error for key ${key}:`, error);
+      // If cache fails, execute fallback directly
+      return await fallbackFn();
+    }
+  }
+  
+  // Batch operations
+  static async mget(keys: string[]): Promise<any[]> {
+    try {
+      const values = await this.redis.mGet(keys);
+      return values.map(value => value ? JSON.parse(value) : null);
+    } catch (error) {
+      console.error('Cache mget error:', error);
+      return new Array(keys.length).fill(null);
+    }
+  }
+  
+  static async mset(keyValuePairs: [string, any, number][]): Promise<void> {
+    try {
+      const pipeline = this.redis.multi();
+      
+      keyValuePairs.forEach(([key, value, ttl]) => {
+        pipeline.setEx(key, ttl, JSON.stringify(value));
+      });
+      
+      await pipeline.exec();
+    } catch (error) {
+      console.error('Cache mset error:', error);
+    }
+  }
+  
+  // Cache invalidation
+  static async invalidatePattern(pattern: string): Promise<void> {
+    try {
+      const keys = await this.redis.keys(pattern);
+      if (keys.length > 0) {
+        await this.redis.del(keys);
+        console.log(`Invalidated ${keys.length} cache keys matching ${pattern}`);
+      }
+    } catch (error) {
+      console.error('Cache invalidation error:', error);
+    }
+  }
+}
+```
 
-The Earnings Monitor uses **component state-based caching** with **on-demand analysis loading**:
+## Smart Caching Strategies
 
-- Component lifecycle-bound cache
-- Computational fallbacks
-- Manual refresh capability
-- Time range-based fetching
+### 1. Predictive Caching
+```typescript
+// Pre-cache popular tickers
+export const preCachePopularTickers = async () => {
+  const popularTickers = ['AAPL', 'TSLA', 'MSFT', 'GOOGL', 'AMZN'];
+  
+  const cachePromises = popularTickers.map(async (ticker) => {
+    const key = CACHE_KEYS.SEC_INSIDER(ticker);
+    const exists = await CacheManager.exists(key);
+    
+    if (!exists) {
+      // Pre-cache if not exists
+      await CacheManager.getWithFallback(
+        key,
+        () => fetchSECInsiderData(ticker),
+        CACHE_TTL.SEC_INSIDER
+      );
+    }
+  });
+  
+  await Promise.all(cachePromises);
+};
+```
 
-Key characteristics:
-- Emphasis on data freshness
-- Lightweight component state storage
-- Local computation fallbacks
-- Progressive loading indicators
+### 2. Cache Warming
+```typescript
+// Warm cache during off-peak hours
+export const warmCache = async () => {
+  console.log('Starting cache warming...');
+  
+  // Get trending tickers from Reddit
+  const trendingTickers = await getTrendingTickers();
+  
+  // Pre-load data for trending tickers
+  for (const ticker of trendingTickers.slice(0, 10)) {
+    await Promise.all([
+      preCacheSECData(ticker),
+      preCacheRedditSentiment(ticker),
+      preCacheFinVizNews(ticker)
+    ]);
+    
+    // Prevent overwhelming external APIs
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  
+  console.log('Cache warming completed');
+};
+```
 
-## Common Caching Patterns
+### 3. Intelligent Cache Refresh
+```typescript
+// Refresh cache based on data freshness
+export const refreshCacheIfStale = async (key: string, maxAge: number) => {
+  const cacheInfo = await CacheManager.getWithTTL(key);
+  
+  if (cacheInfo.ttl < maxAge * 0.2) { // Refresh when 20% TTL remaining
+    // Trigger background refresh
+    setImmediate(async () => {
+      try {
+        await refreshCacheData(key);
+      } catch (error) {
+        console.error(`Background cache refresh failed for ${key}:`, error);
+      }
+    });
+  }
+};
+```
 
-Despite the differences in implementation, several patterns are consistent across all features:
+## Cache Monitoring & Analytics
 
-1. **Multi-Layered Approach**
-   - Client-side caching (browser)
-   - Server-side proxy caching
-   - Graceful degradation between layers
+### Cache Hit Rate Tracking
+```typescript
+export class CacheMetrics {
+  private static hits = 0;
+  private static misses = 0;
+  
+  static recordHit() {
+    this.hits++;
+  }
+  
+  static recordMiss() {
+    this.misses++;
+  }
+  
+  static getHitRate(): number {
+    const total = this.hits + this.misses;
+    return total === 0 ? 0 : this.hits / total;
+  }
+  
+  static logMetrics() {
+    console.log(`Cache hit rate: ${(this.getHitRate() * 100).toFixed(2)}%`);
+    console.log(`Total hits: ${this.hits}, Total misses: ${this.misses}`);
+  }
+}
+```
 
-2. **Time Range Sensitivity**
-   - Caching strategies adapt based on time range
-   - Different expiration for different data volatility levels
-   - Time-aware cache segmentation
+### Cache Size Monitoring
+```typescript
+export const monitorCacheSize = async () => {
+  try {
+    const info = await redisClient.info('memory');
+    const usedMemory = info.split('\r\n')
+      .find(line => line.startsWith('used_memory_human:'))
+      ?.split(':')[1];
+    
+    console.log(`Redis memory usage: ${usedMemory}`);
+    
+    // Alert if memory usage is high
+    const usedMemoryBytes = parseInt(
+      info.split('\r\n')
+        .find(line => line.startsWith('used_memory:'))
+        ?.split(':')[1] || '0'
+    );
+    
+    if (usedMemoryBytes > 100 * 1024 * 1024) { // 100MB threshold
+      console.warn('High Redis memory usage detected');
+    }
+  } catch (error) {
+    console.error('Cache monitoring error:', error);
+  }
+};
+```
 
-3. **User Experience Focus**
-   - Progressive loading indicators
-   - Transparent cache status
-   - Fallback to cached data during errors
-   - Minimal UI disruption
+## Data Pipeline Optimization
 
-4. **Proxy Server Integration**
-   - All external API calls route through proxy
-   - Consistent URL structure
-   - Error handling standardization
-   - Rate limiting protection
+### Batch Processing
+```typescript
+export const processBatchData = async (tickers: string[]) => {
+  const batchSize = 5;
+  const results = [];
+  
+  for (let i = 0; i < tickers.length; i += batchSize) {
+    const batch = tickers.slice(i, i + batchSize);
+    
+    const batchPromises = batch.map(async (ticker) => {
+      const cacheKey = CACHE_KEYS.SEC_INSIDER(ticker);
+      return CacheManager.getWithFallback(
+        cacheKey,
+        () => fetchSECInsiderData(ticker),
+        CACHE_TTL.SEC_INSIDER
+      );
+    });
+    
+    const batchResults = await Promise.allSettled(batchPromises);
+    results.push(...batchResults);
+    
+    // Rate limiting between batches
+    if (i + batchSize < tickers.length) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+  
+  return results;
+};
+```
 
-## Caching Tiers
+## Best Practices
 
-The application implements caching at multiple tiers:
+### 1. Cache Key Naming
+- Use consistent, hierarchical naming: `source:datatype:identifier`
+- Include version numbers for schema changes: `v1:sec:insider:AAPL`
+- Use uppercase for ticker symbols to avoid case sensitivity issues
 
-### Tier 1: In-Memory/Component State
-- Fastest access speed
-- Limited by session duration
-- Used by Sentiment and Earnings features
+### 2. Error Handling
+- Always provide fallbacks when cache fails
+- Log cache errors for monitoring
+- Graceful degradation when Redis is unavailable
 
-### Tier 2: Browser Storage
-- Persistent across sessions
-- Larger storage capacity
-- Used primarily by SEC Filings feature
+### 3. Memory Management
+- Set appropriate TTLs to prevent memory bloat
+- Use Redis EXPIRE to automatically clean up old data
+- Monitor Redis memory usage and set memory limits
 
-### Tier 3: Proxy Server
-- Shared across all users
-- Reduces external API load
-- Centralized rate limiting
+### 4. Performance Optimization
+- Use pipeline operations for bulk cache operations
+- Implement connection pooling for Redis
+- Use compression for large cached objects
 
-### Tier 4: External APIs
-- Original data sources
-- Highest latency
-- Subject to rate limits
-
-## Recommended Future Enhancements
-
-Based on the analysis of current implementations, potential improvements include:
-
-1. **Unified Caching Service**
-   - Create a central caching library used by all components
-   - Standardize caching patterns and interfaces
-   - Implement consistent cache invalidation
-
-2. **Progressive Web App Features**
-   - Add ServiceWorker caching
-   - Enable offline functionality
-   - Implement background sync
-
-3. **Advanced Browser Storage**
-   - Migrate from localStorage to IndexedDB
-   - Implement structured data storage
-   - Add query capabilities for cached data
-
-4. **Smarter Refresh Strategies**
-   - Implement staggered/progressive refresh
-   - Add adaptive TTL based on data stability
-   - Implement predictive prefetching
-
-For detailed information about each feature's specific caching implementation, please refer to the dedicated documentation files.
+This caching strategy ensures HRVSTR can handle high-frequency financial data requests efficiently while maintaining data freshness and system reliability. 

@@ -1,6 +1,6 @@
 import React from 'react';
 // Import all icons but comment out unused ones for future use
-import { Menu, Home, BarChart2, ListChecks, TrendingUp, Settings } from 'lucide-react';
+import { Menu, Home, BarChart2, ListChecks, TrendingUp, Settings, HelpCircle } from 'lucide-react';
 // import { Bell, Search, User, Sun, Moon } from 'lucide-react'; // Commented out for now
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
@@ -69,6 +69,8 @@ const Navbar: React.FC = () => {
           
           {/* User Controls */}
           <div className="flex items-center gap-3 ml-4">             
+
+            
             {/* Auth Button for login/logout */}
             <div className="flex items-center">
               <AuthButton />
@@ -129,6 +131,10 @@ const Navbar: React.FC = () => {
             <NavLink to="/settings" className={({isActive}) => `flex items-center space-x-3 py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>
               <Settings size={20} />
               <span>Settings</span>
+            </NavLink>
+            <NavLink to="/help" className={({isActive}) => `flex items-center space-x-3 py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>
+              <HelpCircle size={20} />
+              <span>Help</span>
             </NavLink>
           </nav>
         </div>

@@ -3,6 +3,7 @@ import Navbar from './Navbar';
 import Sidebar from './Sidebar';
 import Footer from './Footer';
 import SentimentDashboard from './SentimentScraper/SentimentDashboard';
+import HelpPage from './Help/HelpPage';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { 
   SECFilingsPage,
@@ -41,6 +42,10 @@ const AppContent = () => {
             {/* Public routes - only accessible to unauthenticated users */}
             <Route path="/" element={isAuthenticated ? <Navigate to="/user-home" replace /> : <Home />} />
             <Route path="/home" element={isAuthenticated ? <Navigate to="/user-home" replace /> : <Home />} />
+            
+            {/* Help routes - accessible to all users */}
+            <Route path="/help" element={<HelpPage />} />
+            <Route path="/help/*" element={<HelpPage />} />
             
             {/* Protected routes - only accessible to authenticated users */}
             <Route path="/user-home" element={

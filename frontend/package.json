@@ -22,14 +22,18 @@
     "react": "^18.3.1",
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^6.23.0",
     "react-virtualized-auto-sizer": "^1.0.26",
     "react-window": "^1.8.11",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1",
     "sentiment": "^5.0.2",
     "serve": "^14.2.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",
+    "@tailwindcss/typography": "^0.5.16",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "@types/jest": "^29.5.14",
