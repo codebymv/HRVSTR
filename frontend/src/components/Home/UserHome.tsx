@@ -134,7 +134,8 @@ const UserHome: React.FC = () => {
     setLoadingWatchlist(true);
 
     try {
-      const response = await axios.get('http://localhost:3001/api/watchlist', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const response = await axios.get(`${apiUrl}/api/watchlist`, {
         headers: {
           Authorization: `Bearer ${user.token}`
         }
@@ -193,7 +194,8 @@ const UserHome: React.FC = () => {
     setLoadingActivity(true);
 
     try {
-      const response = await axios.get('http://localhost:3001/api/activity', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const response = await axios.get(`${apiUrl}/api/activity`, {
         headers: {
           Authorization: `Bearer ${user.token}`
         }
@@ -250,7 +252,8 @@ const UserHome: React.FC = () => {
     setLoadingEvents(true);
 
     try {
-      const response = await axios.get('http://localhost:3001/api/events', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const response = await axios.get(`${apiUrl}/api/events`, {
         headers: {
           Authorization: `Bearer ${user.token}`
         }
@@ -336,8 +339,9 @@ const UserHome: React.FC = () => {
 
   const handleAddTicker = async (symbol: string) => {
     try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       // Add ticker to watchlist
-      await axios.post('/api/stocks/watchlist', { symbol }, {
+      await axios.post(`${apiUrl}/api/stocks/watchlist`, { symbol }, {
         headers: {
           Authorization: `Bearer ${user?.token}`
         }
@@ -345,7 +349,7 @@ const UserHome: React.FC = () => {
       
       // After adding, trigger a data refresh for the entire watchlist
       // This will fetch events and price data for the new ticker
-      await axios.post('/api/stocks/refresh-watchlist-data', {}, {
+      await axios.post(`${apiUrl}/api/stocks/refresh-watchlist-data`, {}, {
         headers: {
           Authorization: `Bearer ${user?.token}`
         }
@@ -364,7 +368,8 @@ const UserHome: React.FC = () => {
 
   const handleRemoveTicker = async (symbol: string) => {
     try {
-      await axios.delete('/api/stocks/watchlist', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      await axios.delete(`${apiUrl}/api/stocks/watchlist`, {
         headers: {
           Authorization: `Bearer ${user?.token}`,
           'Content-Type': 'application/json'
@@ -384,8 +389,9 @@ const UserHome: React.FC = () => {
   const handleRefreshData = async () => {
     setRefreshingData(true);
     try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       // Call backend endpoint to trigger data refresh
-      await axios.post('/api/stocks/refresh-watchlist-data', {}, {
+      await axios.post(`${apiUrl}/api/stocks/refresh-watchlist-data`, {}, {
         headers: {
           Authorization: `Bearer ${user?.token}`
         }

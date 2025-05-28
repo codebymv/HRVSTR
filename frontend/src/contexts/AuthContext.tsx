@@ -51,7 +51,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const googleUser = await userInfoResponse.json();
         
         // Send the Google user info to your backend
-        const response = await axios.post('/api/auth/google-login', {
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+        const response = await axios.post(`${apiUrl}/api/auth/google-login`, {
           googleId: googleUser.id,
           email: googleUser.email,
           name: googleUser.name,
@@ -60,9 +61,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const { token: backendToken, user: userData } = response.data;
         
+        console.log('Backend response:', response.data);
+        console.log('User data received:', userData);
+        
         // Store the backend token and user info
         login(backendToken);
         const userWithToken = { ...userData, token: backendToken };
+        console.log('User with token:', userWithToken);
         setUser(userWithToken);
         try {
           localStorage.setItem('user', JSON.stringify(userData));
@@ -150,7 +155,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           try {
             // Attempt to refresh the token
-            const response = await axios.post('/api/auth/refresh', {
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+            const response = await axios.post(`${apiUrl}/api/auth/refresh`, {
               token: token
             });
             
@@ -200,7 +206,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const refreshToken = async () => {
       try {
-        const response = await axios.post('/api/auth/refresh', {
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+        const response = await axios.post(`${apiUrl}/api/auth/refresh`, {
           token: token
         });
         
@@ -281,7 +288,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const decoded = JSON.parse(jsonPayload);
       
       // Send the Google user info to your backend
-      const response = await axios.post('/api/auth/google-login', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const response = await axios.post(`${apiUrl}/api/auth/google-login`, {
         googleId: decoded.sub,
         email: decoded.email,
         name: decoded.name,
@@ -290,9 +298,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const { token: backendToken, user: userData } = response.data;
       
+      console.log('Backend response (credential):', response.data);
+      console.log('User data received (credential):', userData);
+      
       // Store the backend token and user info
       login(backendToken);
       const userWithToken = { ...userData, token: backendToken };
+      console.log('User with token (credential):', userWithToken);
       setUser(userWithToken);
       try {
         localStorage.setItem('user', JSON.stringify(userData));
@@ -348,7 +360,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     // Optional: Call backend logout endpoint
     try {
-      axios.post('/api/auth/logout');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      axios.post(`${apiUrl}/api/auth/logout`);
     } catch (error) {
       console.error('Backend logout failed:', error);
     }
