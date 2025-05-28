@@ -1,5 +1,4 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { BarChart2, ListChecks, TrendingUp, ArrowRight, Eye, Star } from 'lucide-react';
@@ -12,7 +11,6 @@ import {
 } from './PreviewComponents';
 
 const Home: React.FC = () => {
-  const navigate = useNavigate();
   const { theme } = useTheme();
   const { isAuthenticated, signIn } = useAuth();
   
@@ -24,6 +22,9 @@ const Home: React.FC = () => {
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
   const secondaryTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
   const buttonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
+  
+  // Add logo filter for theme switching (same as in Navbar)
+  const logoFilter = isLight ? 'invert(1) brightness(0)' : 'none';
   
   const features = [
     {
@@ -60,12 +61,14 @@ const Home: React.FC = () => {
               src="/hrvstr_logo.png" 
               alt="HRVSTR Logo"
               className="hidden sm:block h-16 md:h-24 w-auto object-contain"
+              style={{ filter: logoFilter }}
             />
             {/* Show icon on screens smaller than sm */}
             <img 
               src="/hrvstr_icon.png" 
               alt="HRVSTR Icon"
               className="block sm:hidden h-16 w-auto object-contain"
+              style={{ filter: logoFilter }}
             />
           </div>
           
