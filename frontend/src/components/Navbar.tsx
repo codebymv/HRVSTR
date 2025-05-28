@@ -24,6 +24,9 @@ const Navbar: React.FC = () => {
   const activeTextColor = isLight ? 'text-stone-900' : 'text-white';
   const activeBgColor = isLight ? 'bg-stone-400' : 'bg-gray-800';
 
+  // Add logo filter for theme switching
+  const logoFilter = isLight ? 'invert(1) brightness(0)' : 'none';
+
   return (
     <header className={`${bgColor} border-b ${borderColor} sticky top-0 z-50`}>
       <div className="container mx-auto px-4">
@@ -39,11 +42,14 @@ const Navbar: React.FC = () => {
             
             {/* Centered HRVSTR Logo with improved sizing */}
             <div className="h-10 flex items-center justify-center">
+              <a href="/">
             <img 
               src="/hrvstr_logo.png" 
               alt="HRVSTR" 
               className="h-full w-auto max-h-10" 
+              style={{ filter: logoFilter }}
             />
+            </a>
             </div>
           </div>
           
@@ -100,12 +106,14 @@ const Navbar: React.FC = () => {
           </div>
           */}
           <nav className="grid gap-2">
-            <NavLink to="/" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Sentiment Dashboard</NavLink>
-            <NavLink to="/watchlists" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Watchlists</NavLink>
-            <NavLink to="/sentiment" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Sentiment Analysis</NavLink>
-            <NavLink to="/historical" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Historical Data</NavLink>
-            <NavLink to="/alerts" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Alerts</NavLink>
-            <NavLink to="/settings" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Settings</NavLink>
+            <NavLink to="/" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Home</NavLink>
+            {/* <NavLink to="/watchlists" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Watchlists</NavLink> */}
+            <NavLink to="/sentiment" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Sentiment</NavLink>
+            {/* <NavLink to="/historical" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Historical Data</NavLink> */}
+            {/* <NavLink to="/alerts" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Alerts</NavLink> */}
+            {/* <NavLink to="/settings" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Settings</NavLink> */}
+            <NavLink to="/sec-filings" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>SEC Filings</NavLink>
+            <NavLink to="/earnings" className={({isActive}) => `py-2 px-3 ${isActive ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}>Earnings</NavLink>
           </nav>
         </div>
       )}

@@ -29,6 +29,12 @@ const secRoutes = require('./routes/proxy/sec');
 const earningsRoutes = require('./routes/proxy/earnings');
 const sentimentRoutes = require('./routes/proxy/sentiment');
 const yahooRoutes = require('./routes/proxy/yahoo');
+const watchlistRoutes = require('./routes/watchlist');
+const authRoutes = require('./routes/auth');
+const activityRoutes = require('./routes/activity');
+const eventsRoutes = require('./routes/events');
+const stocksRouter = require('./routes/stocks');
+const settingsRoutes = require('./routes/settings');
 
 // Create Express app
 const app = express();
@@ -126,7 +132,9 @@ app.get('/', (req, res) => {
       '/api/sentiment/reddit/market',
       '/api/sentiment/finviz/tickers',
       '/api/sentiment/aggregate',
+      '/api/settings/key-status',
       '/api/settings/update-keys',
+      '/api/settings/keys',
       '/health'
     ]
   });
@@ -139,6 +147,12 @@ app.use('/api/sec', secRoutes);
 app.use('/api/earnings', earningsRoutes);
 app.use('/api/sentiment', sentimentRoutes);
 app.use('/api/yahoo', yahooRoutes);
+app.use('/api/watchlist', watchlistRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/activity', activityRoutes);
+app.use('/api/events', eventsRoutes);
+app.use('/api/stocks', stocksRouter);
+app.use('/api/settings', settingsRoutes);
 
 // Serve static files from the frontend build directory in production
 if (process.env.NODE_ENV === 'production') {

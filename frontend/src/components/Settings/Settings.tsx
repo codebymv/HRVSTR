@@ -49,12 +49,17 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
     { 
       name: 'reddit_client_id', 
       key: '', 
-      description: 'Reddit API Client ID for accessing Reddit data'
+      description: 'Your Reddit API Client ID. Get this from https://www.reddit.com/prefs/apps by creating a new application'
     },
     { 
       name: 'reddit_client_secret', 
       key: '', 
-      description: 'Reddit API Client Secret'
+      description: 'Your Reddit API Client Secret from your Reddit application settings'
+    },
+    {
+      name: 'alpha_vantage_key',
+      key: '',
+      description: 'Your Alpha Vantage API key. Get a free key from https://www.alphavantage.co/support/#api-key'
     }
   ]);
 
@@ -93,7 +98,7 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
     { 
       id: 'reddit', 
       name: 'Reddit Data', 
-      description: 'Posts, comments, and sentiment from Reddit', 
+      description: 'Posts, comments, and sentiment from Reddit. Requires your own Reddit API credentials.', 
       requiresApiKey: true,
       relatedApiKey: 'reddit_client_id'
     },
@@ -114,6 +119,13 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
       name: 'SEC Institutional Holdings', 
       description: '13F filings showing institutional investment positions', 
       requiresApiKey: false 
+    },
+    {
+      id: 'alpha_vantage',
+      name: 'Alpha Vantage Market Data',
+      description: 'Real-time and historical market data from Alpha Vantage. Requires your own API key.',
+      requiresApiKey: true,
+      relatedApiKey: 'alpha_vantage_key'
     }
   ];
 

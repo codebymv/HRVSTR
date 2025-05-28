@@ -29,9 +29,25 @@ function isDataSourceEnabled(source) {
   return dataSourceConfig[source] === true;
 }
 
+const { Pool } = require('pg');
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: false // Disable SSL
+});
+
+pool.on('connect', () => {
+  console.log('Database connected successfully!');
+});
+
+pool.on('error', (err) => {
+  console.error('Database connection error:', err.stack);
+});
+
 module.exports = {
   updateDataSources,
   isDataSourceEnabled,
   // Export the current configuration
-  getConfig: () => ({ ...dataSourceConfig })
+  getConfig: () => ({ ...dataSourceConfig }),
+  pool
 };

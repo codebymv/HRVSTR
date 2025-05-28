@@ -16,7 +16,7 @@ export function useAuth() {
 
   return {
     user,
-    isLoading: loading,
+    loading,
     isAuthenticated,
     signIn,
     signOut,

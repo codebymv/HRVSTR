@@ -4,7 +4,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Sun, Moon, User } from 'lucide-react';
 
 export const AuthButton = () => {
-  const { loading, user, signIn, signOut } = useAuth();
+  const { isAuthenticated, loading, user, signIn, signOut } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -37,7 +37,7 @@ export const AuthButton = () => {
   }
 
   // Authenticated user with avatar dropdown
-  if (user) {
+  if (isAuthenticated && user) {
     const isLight = theme === 'light';
     const dropdownBgColor = isLight ? 'bg-stone-300' : 'bg-gray-900';
     const dropdownBorderColor = isLight ? 'border-stone-400' : 'border-gray-800';

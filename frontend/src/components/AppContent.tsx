@@ -1,6 +1,7 @@
 import { useTheme } from '../contexts/ThemeContext';
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
+import Footer from './Footer';
 import SentimentDashboard from './SentimentScraper/SentimentDashboard';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { 
@@ -37,12 +38,21 @@ const AppContent = () => {
         {isAuthenticated && <Sidebar />}
         <main className={`flex-1 overflow-y-auto ${!isAuthenticated ? 'w-full' : ''}`}>
           <Routes>
-            {/* Public routes */}
-            <Route path="/" element={isAuthenticated ? <UserHome /> : <Home />} />
-            <Route path="/home" element={isAuthenticated ? <UserHome /> : <Home />} />
-            <Route path="/sentiment" element={<SentimentDashboard />} />
+            {/* Public routes - only accessible to unauthenticated users */}
+            <Route path="/" element={isAuthenticated ? <Navigate to="/user-home" replace /> : <Home />} />
+            <Route path="/home" element={isAuthenticated ? <Navigate to="/user-home" replace /> : <Home />} />
             
-            {/* Protected routes */}
+            {/* Protected routes - only accessible to authenticated users */}
+            <Route path="/user-home" element={
+              <ProtectedRoute>
+                <UserHome />
+              </ProtectedRoute>
+            } />
+            <Route path="/sentiment" element={
+              <ProtectedRoute>
+                <SentimentDashboard />
+              </ProtectedRoute>
+            } />
             <Route path="/sec-filings" element={
               <ProtectedRoute>
                 <SECFilingsPage />
@@ -67,6 +77,7 @@ const AppContent = () => {
           </Routes>
         </main>
       </div>
+      <Footer />
     </div>
   );
 };

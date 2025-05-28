@@ -2,12 +2,19 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { BarChart2, ListChecks, TrendingUp, ArrowRight } from 'lucide-react';
+import { BarChart2, ListChecks, TrendingUp, ArrowRight, Eye, Star } from 'lucide-react';
+import { 
+  SentimentPreview, 
+  EarningsPreview, 
+  SECFilingsPreview, 
+  WatchlistPreview, 
+  ActivityPreview 
+} from './PreviewComponents';
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
   const { theme } = useTheme();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, signIn } = useAuth();
   
   // Theme-specific styling
   const isLight = theme === 'light';
@@ -33,6 +40,11 @@ const Home: React.FC = () => {
       icon: <TrendingUp className="w-6 h-6" />,
       title: 'Earnings Monitor',
       description: 'Stay updated with upcoming earnings and market reactions'
+    },
+    {
+      icon: <Star className="w-6 h-6" />,
+      title: 'Watchlist',
+      description: 'Track your favorite stocks with real-time prices and sentiment indicators'
     }
   ];
 
@@ -51,14 +63,18 @@ const Home: React.FC = () => {
           </div>
           
           <h1 className={`text-4xl md:text-6xl font-bold mb-6 ${textColor}`}>
-            Strategic Web Scraping, Simplified
-          </h1>
+            Strategic Web Scraping,{" "}
+            <span className="bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent">
+                Simplified.
+            </span>
+            </h1>
+
           <p className={`text-xl md:text-2xl mb-8 ${secondaryTextColor} max-w-3xl mx-auto`}>
-            Your comprehensive platform for market sentiment analysis and financial monitoring
+            Your comprehensive platform for market sentiment analysis and financial monitoring.
           </p>
           {!isAuthenticated && (
             <button
-              onClick={() => navigate('/sentiment')}
+              onClick={signIn}
               className={`${buttonBgColor} text-white px-8 py-3 rounded-lg text-lg font-medium transition-colors flex items-center mx-auto`}
             >
               Get Started
@@ -68,7 +84,7 @@ const Home: React.FC = () => {
         </div>
 
         {/* Features Grid */}
-        <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto mb-20">
           {features.map((feature, index) => (
             <div
               key={index}
@@ -85,6 +101,55 @@ const Home: React.FC = () => {
               </p>
             </div>
           ))}
+        </div>
+
+        {/* Live Preview Section */}
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-12">
+            <div className="flex items-center justify-center mb-4">
+              <Eye className="w-6 h-6 text-blue-500 mr-2" />
+              <h2 className={`text-3xl md:text-4xl font-bold ${textColor}`}>
+                Seeing is believing.
+              </h2>
+            </div>
+            <p className={`text-lg ${secondaryTextColor} max-w-2xl mx-auto`}>
+              Powerful analytics dashboards driven by real-time market data and insights.
+            </p>
+          </div>
+
+          {/* Preview Components Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-12">
+            <SentimentPreview />
+            <EarningsPreview />
+            <SECFilingsPreview />
+            <WatchlistPreview />
+            <ActivityPreview />
+            
+            {/* Call to Action Card */}
+            <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} h-64 flex flex-col items-center justify-center text-center`}>
+              <div className="mb-4">
+                <div className="w-16 h-16 bg-gradient-to-r from-teal-400 to-blue-500 rounded-full flex items-center justify-center mb-4 mx-auto">
+                  <ArrowRight className="w-8 h-8 text-white" />
+                </div>
+                <h3 className={`text-xl font-semibold mb-2 ${textColor}`}>
+                  Ready to Get Started?
+                </h3>
+                <p className={`${secondaryTextColor} mb-4 text-sm`}>
+                  Access the full dashboard with live data and advanced analytics.
+                </p>
+              </div>
+              {!isAuthenticated && (
+                <button
+                  onClick={signIn}
+                  className={`${buttonBgColor} text-white px-6 py-2 rounded-lg font-medium transition-colors`}
+                >
+                  Sign In Now
+                </button>
+              )}
+            </div>
+          </div>
+
+
         </div>
       </div>
     </div>
