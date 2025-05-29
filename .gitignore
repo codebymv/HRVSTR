@@ -19,6 +19,11 @@ dist-ssr
 .env.production
 .env.test
 
+# Sensitive configuration files
+api-keys.json
+**/config/api-keys.json
+credentials.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
