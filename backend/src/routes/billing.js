@@ -555,6 +555,101 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   }
 });
 
+/**
+ * POST /api/billing/create-checkout-session
+ * Create a Stripe Checkout Session for subscription
+ */
+router.post('/create-checkout-session', authenticateToken, async (req, res) => {
+  try {
+    const { priceId, mode = 'subscription', successUrl, cancelUrl } = req.body;
+    const userId = req.user.id;
+
+    if (!priceId) {
+      return res.status(400).json({ error: 'Price ID is required' });
+    }
+
+    // Get user info
+    const userResult = await pool.query(
+      'SELECT * FROM users WHERE id = $1',
+      [userId]
+    );
+    
+    if (!userResult.rows[0]) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const user = userResult.rows[0];
+
+    // Get or create Stripe customer
+    let customer;
+    try {
+      const customers = await stripe.customers.list({
+        email: user.email,
+        limit: 1
+      });
+
+      if (customers.data.length > 0) {
+        customer = customers.data[0];
+      } else {
+        customer = await stripe.customers.create({
+          email: user.email,
+          name: user.name,
+          metadata: {
+            userId: userId.toString()
+          }
+        });
+        
+        // Update user record with customer ID
+        await pool.query(
+          'UPDATE users SET stripe_customer_id = $1 WHERE id = $2',
+          [customer.id, userId]
+        );
+      }
+    } catch (error) {
+      console.error('Error creating/finding customer:', error);
+      return res.status(500).json({ error: 'Failed to create customer' });
+    }
+
+    // Create checkout session
+    const session = await stripe.checkout.sessions.create({
+      customer: customer.id,
+      payment_method_types: ['card'],
+      mode: mode,
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        }
+      ],
+      success_url: successUrl || `${process.env.FRONTEND_URL}/settings/billing?success=true`,
+      cancel_url: cancelUrl || `${process.env.FRONTEND_URL}/settings/tiers?cancelled=true`,
+      metadata: {
+        userId: userId.toString(),
+        priceId: priceId
+      },
+      subscription_data: mode === 'subscription' ? {
+        metadata: {
+          userId: userId.toString()
+        }
+      } : undefined,
+      billing_address_collection: 'required',
+      allow_promotion_codes: true,
+    });
+
+    res.json({ 
+      url: session.url,
+      sessionId: session.id 
+    });
+
+  } catch (error) {
+    console.error('Create checkout session error:', error);
+    res.status(500).json({ 
+      error: 'Failed to create checkout session',
+      details: error.message
+    });
+  }
+});
+
 // Helper functions for real Stripe integration
 
 /**
