@@ -39,7 +39,6 @@ const PricingSection: React.FC<PricingSectionProps> = ({
         '50 scrape credits/month',
         'Basic sentiment (FinViz)',
         'SEC insider trades',
-        'SEC institutional holdings',
         'Basic earnings calendar',
         '1-day historical data',
         'Basic stock search'
@@ -48,6 +47,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
         'No Reddit sentiment access',
         'Limited historical data',
         'Limited watchlist capacity',
+        'No SEC institutional holdings',
         'Basic search functionality',
         'No advanced analytics'
       ]
@@ -70,7 +70,6 @@ const PricingSection: React.FC<PricingSectionProps> = ({
         'Complete earnings analysis',
         'Up to 1-month historical data',
         'Advanced stock search',
-        'Theme customization',
         'Real-time data refresh'
       ]
     },
@@ -107,7 +106,6 @@ const PricingSection: React.FC<PricingSectionProps> = ({
         'All premium data sources',
         'Bulk data operations',
         'Extended historical data',
-        'Multiple API key management',
         'Advanced usage monitoring',
         'Priority data processing',
         'Extended data retention',

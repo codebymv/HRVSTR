@@ -4,6 +4,7 @@ import Sidebar from './Sidebar';
 import Footer from './Footer';
 import SentimentDashboard from './SentimentScraper/SentimentDashboard';
 import HelpPage from './Help/HelpPage';
+import StatusPage from './Status/StatusPage';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { 
   SECFilingsPage,
@@ -53,6 +54,9 @@ const AppContent = () => {
             {/* Help routes - accessible to all users */}
             <Route path="/help" element={<HelpPage />} />
             <Route path="/help/*" element={<HelpPage />} />
+            
+            {/* Status route - accessible to all users */}
+            <Route path="/status" element={<StatusPage />} />
             
             {/* Protected routes - only accessible to authenticated users */}
             <Route path="/user-home" element={

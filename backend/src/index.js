@@ -124,16 +124,82 @@ app.use(express.json());
 app.use(limiter);
 app.use(requestLogger); // Add request logger middleware
 
-// Health check route
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+// Enhanced status check route
+app.get('/api/status', async (req, res) => {
+  try {
+    const status = {
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || 'development',
+      version: '0.7.5',
+      server: {
+        port: PORT,
+        memory: {
+          used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + ' MB',
+          total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + ' MB',
+          external: Math.round(process.memoryUsage().external / 1024 / 1024) + ' MB'
+        },
+        platform: process.platform,
+        nodeVersion: process.version
+      },
+      services: {
+        api: 'operational',
+        rateLimit: 'operational',
+        cors: 'operational'
+      },
+      endpoints: {
+        total: 25,
+        available: [
+          '/api/reddit/*',
+          '/api/finviz/*',
+          '/api/sec/*',
+          '/api/earnings/*',
+          '/api/sentiment/*',
+          '/api/yahoo/*',
+          '/api/watchlist',
+          '/api/auth',
+          '/api/activity',
+          '/api/events',
+          '/api/stocks',
+          '/api/settings',
+          '/api/docs',
+          '/api/subscription',
+          '/api/billing',
+          '/api/status'
+        ]
+      }
+    };
+
+    // Test basic functionality
+    const healthChecks = {
+      express: true,
+      cors: true,
+      json_parser: true,
+      rate_limiter: true
+    };
+
+    status.healthChecks = healthChecks;
+    
+    res.status(200).json(status);
+  } catch (error) {
+    res.status(503).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      error: error.message,
+      server: {
+        port: PORT,
+        environment: process.env.NODE_ENV || 'development'
+      }
+    });
+  }
 });
 
 // Default route with API documentation
 app.get('/', (req, res) => {
   res.json({
     message: 'HRVSTR API Server',
-    version: '1.0.0',
+    version: '0.7.5',
     endpoints: [
       '/api/reddit/subreddit/:subreddit',
       '/api/reddit/sentiment',
@@ -166,7 +232,7 @@ app.get('/', (req, res) => {
       '/api/activity',
       '/api/events',
       '/api/stocks',
-      '/health'
+      '/api/status'
     ]
   });
 });

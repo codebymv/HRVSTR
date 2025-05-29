@@ -40,16 +40,16 @@ const Footer: React.FC = () => {
       title: 'Resources',
       links: [
         { name: 'Help/Getting Started', href: '/help' },,
-        { name: 'Status', href: '/health' }
+        { name: 'Status', href: '/status' }
       ]
     }
   ];
 
   const socialLinks = [
-    { name: 'GitHub', icon: Github, href: 'https://github.com' },
-    { name: 'Twitter', icon: Twitter, href: 'https://twitter.com' },
-    { name: 'LinkedIn', icon: Linkedin, href: 'https://linkedin.com' },
-    { name: 'Email', icon: Mail, href: 'mailto:contact@hrvstr.com' }
+    { name: 'GitHub', icon: Github, href: 'https://github.com/codebymv' },
+    { name: 'Twitter', icon: Twitter, href: 'https://twitter.com/codebymv' },
+    { name: 'LinkedIn', icon: Linkedin, href: 'https://www.linkedin.com/in/codebymv/' },
+    { name: 'Email', icon: Mail, href: 'mailto:codebymv@gmail.com' }
   ];
 
   return (
