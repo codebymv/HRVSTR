@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTier } from '../../contexts/TierContext';
 import { useTierLimits } from '../../hooks/useTierLimits';
 import { TimeRange } from '../../types';
-import { RefreshCw, Loader2, Crown, Lock } from 'lucide-react';
+import { RefreshCw, Loader2, Crown, Lock, Settings, Key } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 // Custom hooks
 import { useSentimentData } from '../../hooks/useSentimentData';
@@ -19,6 +20,7 @@ const SentimentDashboard: React.FC = () => {
   const { theme } = useTheme();
   const { tierInfo } = useTier();
   const { showTierLimitDialog, tierLimitDialog, closeTierLimitDialog } = useTierLimits();
+  const navigate = useNavigate();
   const isLight = theme === 'light';
   
   // Theme-specific styling
@@ -31,6 +33,10 @@ const SentimentDashboard: React.FC = () => {
   // State to track if tier limit dialog has been shown for this session
   const [tierLimitDialogShown, setTierLimitDialogShown] = useState(false);
   
+  // State for API key status
+  const [redditApiKeysConfigured, setRedditApiKeysConfigured] = useState<boolean>(false);
+  const [checkingApiKeys, setCheckingApiKeys] = useState<boolean>(true);
+  
   // Reddit posts tier limits (posts per page = 10)
   const REDDIT_TIER_LIMITS = {
     free: 0,         // No access to Reddit posts
@@ -41,8 +47,74 @@ const SentimentDashboard: React.FC = () => {
   
   const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
   const redditPostLimit = REDDIT_TIER_LIMITS[currentTier as keyof typeof REDDIT_TIER_LIMITS] || REDDIT_TIER_LIMITS.free;
-  const hasRedditAccess = currentTier !== 'free';
+  const hasRedditTierAccess = currentTier !== 'free';
   
+  // Combined access: needs both tier access AND API keys configured
+  const hasFullRedditAccess = hasRedditTierAccess && redditApiKeysConfigured;
+  
+  // Check API key status on component mount
+  useEffect(() => {
+    const checkApiKeyStatus = async () => {
+      try {
+        const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
+        const response = await fetch(`${proxyUrl}/api/settings/key-status`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.dataSources) {
+            setRedditApiKeysConfigured(data.dataSources.reddit || false);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking API key status:', error);
+        setRedditApiKeysConfigured(false);
+      } finally {
+        setCheckingApiKeys(false);
+      }
+    };
+
+    checkApiKeyStatus();
+  }, []);
+
+  // Refresh API key status when the user returns to this tab/window
+  useEffect(() => {
+    const refreshApiKeyStatus = async () => {
+      try {
+        const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
+        const response = await fetch(`${proxyUrl}/api/settings/key-status`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.dataSources) {
+            setRedditApiKeysConfigured(data.dataSources.reddit || false);
+          }
+        }
+      } catch (error) {
+        console.error('Error refreshing API key status:', error);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshApiKeyStatus();
+      }
+    };
+
+    const handleFocus = () => {
+      refreshApiKeyStatus();
+    };
+
+    // Add event listeners for when user returns to the tab
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    // Cleanup event listeners
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
+
   // Use sentiment data hook for all data management
   const {
     // Data states
@@ -70,7 +142,7 @@ const SentimentDashboard: React.FC = () => {
     // Actions
     refreshData,
     handleLoadMorePosts: originalHandleLoadMorePosts,
-  } = useSentimentData(timeRange, hasRedditAccess);
+  } = useSentimentData(timeRange, hasFullRedditAccess);
   
   // Use time range debounce hook for smooth transitions
   const {
@@ -169,6 +241,62 @@ const SentimentDashboard: React.FC = () => {
     );
   };
 
+  // Reddit Setup Card Component for Pro users without API keys
+  const RedditSetupCard: React.FC = () => {
+    const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-800';
+    const borderColor = isLight ? 'border-stone-400' : 'border-gray-700';
+    const gradientFrom = isLight ? 'from-orange-500' : 'from-orange-600';
+    const gradientTo = isLight ? 'to-red-600' : 'to-red-700';
+    const buttonBg = isLight ? 'bg-orange-500 hover:bg-orange-600' : 'bg-orange-600 hover:bg-orange-700';
+    const secondaryButtonBg = isLight ? 'bg-gray-500 hover:bg-gray-600' : 'bg-gray-600 hover:bg-gray-700';
+    
+    return (
+      <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} text-center`}>
+        <div className={`w-16 h-16 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-full flex items-center justify-center mx-auto mb-4`}>
+          <Key className="w-8 h-8 text-white" />
+        </div>
+        
+        <h3 className={`text-xl font-bold ${textColor} mb-2`}>
+          Setup Reddit API Keys
+        </h3>
+        
+        <p className={`${mutedTextColor} mb-4 max-w-md mx-auto`}>
+          Your Pro subscription includes Reddit sentiment analysis! Configure your Reddit API credentials to unlock real-time social media insights.
+        </p>
+        
+        <div className={`${isLight ? 'bg-orange-50' : 'bg-orange-900/20'} rounded-lg p-4 mb-6 border ${isLight ? 'border-orange-200' : 'border-orange-800'}`}>
+          <h4 className={`font-semibold ${textColor} mb-2`}>Quick Setup Steps:</h4>
+          <ol className={`text-sm ${mutedTextColor} space-y-1 text-left max-w-xs mx-auto`}>
+            <li>1. Visit Reddit's App Preferences</li>
+            <li>2. Create a new application</li>
+            <li>3. Copy your Client ID & Secret</li>
+            <li>4. Add them in Settings → API Keys</li>
+            <li>5. Enjoy Reddit sentiment data!</li>
+          </ol>
+        </div>
+        
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <button
+            onClick={() => navigate('/settings/api-keys')}
+            className={`${buttonBg} text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center`}
+          >
+            <Settings className="w-4 h-4 mr-2" />
+            Configure API Keys
+          </button>
+          <a
+            href="https://www.reddit.com/prefs/apps"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`${secondaryButtonBg} text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center`}
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Get Reddit Keys
+          </a>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className={`flex-1 ${isLight ? 'bg-stone-200' : 'bg-gray-950'} pb-8`}>
       <div className="container mx-auto p-4 lg:p-6 max-w-7xl">
@@ -213,11 +341,42 @@ const SentimentDashboard: React.FC = () => {
                 rateLimited: errors.rateLimited
               }}
               onRefresh={refreshData}
-              hasRedditAccess={hasRedditAccess}
+              hasRedditAccess={hasFullRedditAccess}
             />
             
-            {/* Reddit Posts Section */}
-            {hasRedditAccess ? (
+            {/* Sentiment Scores Section - Show on mobile between chart and reddit */}
+            <div className="xl:hidden">
+              <SentimentScoresSection 
+                redditSentiments={topSentiments}
+                finvizSentiments={finvizSentiments}
+                yahooSentiments={yahooSentiments}
+                combinedSentiments={combinedSentiments}
+                isLoading={loading.sentiment}
+                loadingProgress={loadingProgress}
+                loadingStage={loadingStage}
+                error={errors.sentiment}
+                isRateLimited={errors.rateLimited}
+                hasRedditAccess={hasFullRedditAccess}
+                hasRedditTierAccess={hasRedditTierAccess}
+                redditApiKeysConfigured={redditApiKeysConfigured}
+              />
+            </div>
+            
+            {/* Reddit Posts Section - Now appears last on mobile */}
+            {checkingApiKeys ? (
+              // Loading state while checking API keys
+              <div className={`${isLight ? 'bg-stone-300' : 'bg-gray-800'} rounded-lg p-6 border ${isLight ? 'border-stone-400' : 'border-gray-700'} text-center`}>
+                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-500" />
+                <p className={`${mutedTextColor}`}>Checking Reddit configuration...</p>
+              </div>
+            ) : !hasRedditTierAccess ? (
+              // Free users - show upgrade card
+              <RedditUpgradeCard />
+            ) : !redditApiKeysConfigured ? (
+              // Pro users without API keys - show setup card
+              <RedditSetupCard />
+            ) : (
+              // Pro users with API keys - show normal Reddit posts
               <RedditPostsSection
                 posts={redditPosts}
                 isLoading={loading.posts}
@@ -227,13 +386,11 @@ const SentimentDashboard: React.FC = () => {
                 hasMore={redditPostLimit === -1 ? hasMorePosts : (hasMorePosts && (!tierLimitDialogShown || redditPosts.length < redditPostLimit))}
                 onLoadMore={handleLoadMorePosts}
               />
-            ) : (
-              <RedditUpgradeCard />
             )}
           </div>
           
-          {/* Sidebar */}
-          <div className="xl:w-1/3 space-y-6">
+          {/* Sidebar - Hidden on mobile, shown on xl+ */}
+          <div className="hidden xl:block xl:w-1/3 space-y-6">
             {/* Sentiment Scores Section */}
             <SentimentScoresSection 
               redditSentiments={topSentiments}
@@ -245,7 +402,9 @@ const SentimentDashboard: React.FC = () => {
               loadingStage={loadingStage}
               error={errors.sentiment}
               isRateLimited={errors.rateLimited}
-              hasRedditAccess={hasRedditAccess}
+              hasRedditAccess={hasFullRedditAccess}
+              hasRedditTierAccess={hasRedditTierAccess}
+              redditApiKeysConfigured={redditApiKeysConfigured}
             />
           </div>
         </div>

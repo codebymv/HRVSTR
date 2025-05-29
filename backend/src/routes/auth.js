@@ -21,6 +21,68 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+// Helper function to generate tokens with longer expiry
+const generateTokens = (userId) => {
+  // Access token expires in 7 days (much longer than 1 hour)
+  const accessToken = jwt.sign({ userId: userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
+  
+  // Refresh token expires in 30 days
+  const refreshToken = jwt.sign({ userId: userId, type: 'refresh' }, process.env.JWT_SECRET, { expiresIn: '30d' });
+  
+  return { accessToken, refreshToken };
+};
+
+// POST endpoint for token refresh
+router.post('/refresh', async (req, res) => {
+  const { token } = req.body;
+  
+  if (!token) {
+    return res.status(401).json({ message: 'Refresh token required' });
+  }
+
+  try {
+    // Verify the existing token (allow expired access tokens)
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { ignoreExpiration: true });
+    
+    if (!decoded.userId) {
+      return res.status(403).json({ message: 'Invalid token format' });
+    }
+
+    // Check if user still exists in database
+    const userResult = await pool.query('SELECT id, email, name FROM users WHERE id = $1', [decoded.userId]);
+    
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Generate new tokens
+    const { accessToken, refreshToken } = generateTokens(decoded.userId);
+    const userData = userResult.rows[0];
+
+    res.json({
+      token: accessToken,
+      refreshToken: refreshToken,
+      expiresIn: 7 * 24 * 60 * 60, // 7 days in seconds
+      user: {
+        id: userData.id,
+        name: userData.name,
+        email: userData.email
+      }
+    });
+
+  } catch (err) {
+    console.error('Error refreshing token:', err);
+    
+    // If token is completely invalid or malformed
+    if (err.name === 'JsonWebTokenError') {
+      return res.status(403).json({ message: 'Invalid token' });
+    }
+    
+    // For other errors, require re-authentication
+    return res.status(401).json({ message: 'Token refresh failed, please login again' });
+  }
+});
+
 // GET endpoint for user profile
 router.get('/profile', authenticateToken, async (req, res) => {
   try {
@@ -85,13 +147,15 @@ router.post('/google-login', async (req, res) => {
       userId = newUserResult.rows[0].id;
     }
 
-    // Create a backend JWT
-    const token = jwt.sign({ userId: userId }, process.env.JWT_SECRET, { expiresIn: '1h' }); // Token expires in 1 hour
+    // Generate tokens with longer expiry
+    const { accessToken, refreshToken } = generateTokens(userId);
 
     // Return the backend token and user info to the frontend
     res.json({
-      token: token,
-      user: { // Return basic user info, you can add more if needed
+      token: accessToken,
+      refreshToken: refreshToken,
+      expiresIn: 7 * 24 * 60 * 60, // 7 days in seconds
+      user: {
         id: userId,
         name: name,
         email: email,
@@ -102,6 +166,18 @@ router.post('/google-login', async (req, res) => {
   } catch (err) {
     console.error('Error processing Google login:', err);
     res.status(500).json({ message: 'Internal server error during login', error: err.message });
+  }
+});
+
+// POST endpoint for logout (optional - for cleanup)
+router.post('/logout', authenticateToken, async (req, res) => {
+  try {
+    // Here you could add logic to blacklist the token if you implement token blacklisting
+    // For now, just return success since the frontend will remove the token
+    res.json({ message: 'Logged out successfully' });
+  } catch (err) {
+    console.error('Error during logout:', err);
+    res.status(500).json({ message: 'Internal server error during logout' });
   }
 });
 

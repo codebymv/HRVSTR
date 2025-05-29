@@ -7,11 +7,24 @@ class FinancialCalendarService {
     this.baseUrl = 'https://www.alphavantage.co/query';
     
     if (!this.apiKey) {
-      throw new Error('Alpha Vantage API key not found in environment variables');
+      console.warn('⚠️ Alpha Vantage API key not found - financial calendar features will be limited');
+      this.isConfigured = false;
+    } else {
+      this.isConfigured = true;
     }
   }
 
+  // Check if the service is properly configured
+  isAvailable() {
+    return this.isConfigured;
+  }
+
   async fetchEarningsCalendar(symbol) {
+    if (!this.isAvailable()) {
+      console.log('Alpha Vantage not configured - skipping earnings calendar fetch');
+      return [];
+    }
+
     try {
       const response = await axios.get(this.baseUrl, {
         params: {
@@ -42,6 +55,11 @@ class FinancialCalendarService {
   }
 
   async fetchDividendCalendar(symbol) {
+    if (!this.isAvailable()) {
+      console.log('Alpha Vantage not configured - skipping dividend calendar fetch');
+      return [];
+    }
+
     try {
       const response = await axios.get(this.baseUrl, {
         params: {
@@ -61,6 +79,11 @@ class FinancialCalendarService {
   }
 
   async fetchNewsAndSentiment(symbol) {
+    if (!this.isAvailable()) {
+      console.log('Alpha Vantage not configured - skipping news and sentiment fetch');
+      return;
+    }
+
     try {
       const response = await axios.get(this.baseUrl, {
         params: {
@@ -79,6 +102,11 @@ class FinancialCalendarService {
   }
 
   async fetchCompanyOverview(symbol) {
+    if (!this.isAvailable()) {
+      console.log('Alpha Vantage not configured - skipping company overview fetch');
+      return;
+    }
+
     try {
       const response = await axios.get(this.baseUrl, {
         params: {

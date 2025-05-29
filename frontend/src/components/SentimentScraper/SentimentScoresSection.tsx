@@ -18,6 +18,8 @@ interface SentimentScoresSectionProps {
   error: string | null;
   isRateLimited: boolean;
   hasRedditAccess?: boolean;
+  hasRedditTierAccess?: boolean;
+  redditApiKeysConfigured?: boolean;
   className?: string;
 }
 
@@ -32,6 +34,8 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
   error,
   isRateLimited,
   hasRedditAccess = true,
+  hasRedditTierAccess,
+  redditApiKeysConfigured,
   className = ''
 }) => {
   const [dataSource, setDataSource] = useState<DataSource>('combined');
@@ -137,21 +141,33 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
         <div className="flex items-center space-x-2">
         <div className={`flex space-x-1 ${cardBgColor} rounded-full p-1`}>
             <button
-              className={`p-1.5 rounded-full transition-all ${
+              className={`p-1.5 rounded-full transition-all relative ${
                 dataSource === 'reddit' 
                   ? hasRedditAccess 
                     ? 'bg-orange-100 text-orange-500' 
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   : hasRedditAccess
                     ? 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
-                    : 'text-gray-400 cursor-not-allowed'
+                    : hasRedditTierAccess
+                      ? 'text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20'
+                      : 'text-gray-400 cursor-not-allowed'
               }`}
               onClick={() => handleDataSourceChange('reddit')}
               disabled={!hasRedditAccess}
-              title={hasRedditAccess ? "Reddit" : "Reddit (Pro feature)"}
+              title={
+                hasRedditAccess 
+                  ? "Reddit" 
+                  : hasRedditTierAccess
+                    ? "Reddit (API keys required)"
+                    : "Reddit (Pro feature)"
+              }
             >
               <MessageSquare size={18} />
-              {!hasRedditAccess && <span className="text-xs absolute -top-1 -right-1">🔒</span>}
+              {!hasRedditTierAccess ? (
+                <span className="text-xs absolute -top-1 -right-1">🔒</span>
+              ) : !redditApiKeysConfigured ? (
+                <span className="text-xs absolute -top-1 -right-1">⚙️</span>
+              ) : null}
             </button>
             <button
               className={`p-1.5 rounded-full transition-all ${dataSource === 'finviz' ? 'bg-amber-100 text-amber-600' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
@@ -186,11 +202,23 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
               <span className={`flex items-center space-x-1 rounded-full px-2 py-0.5 ${
                 hasRedditAccess 
                   ? 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                  : 'bg-gray-200 dark:bg-gray-800 text-gray-400 opacity-60'
+                  : hasRedditTierAccess
+                    ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800'
+                    : 'bg-gray-200 dark:bg-gray-800 text-gray-400 opacity-60'
               }`}>
-                <MessageSquare size={12} className={hasRedditAccess ? "text-orange-500" : "text-gray-400"} />
+                <MessageSquare size={12} className={
+                  hasRedditAccess 
+                    ? "text-orange-500" 
+                    : hasRedditTierAccess 
+                      ? "text-yellow-600" 
+                      : "text-gray-400"
+                } />
                 <span>{dataSource === 'reddit' ? '100%' : `${Math.round(distribution.reddit)}%`}</span>
-                {!hasRedditAccess && <span className="text-xs">🔒</span>}
+                {!hasRedditTierAccess ? (
+                  <span className="text-xs">🔒</span>
+                ) : !redditApiKeysConfigured ? (
+                  <span className="text-xs">⚙️</span>
+                ) : null}
               </span>
             ) : null}
             {dataSource === 'finviz' || dataSource === 'combined' ? (

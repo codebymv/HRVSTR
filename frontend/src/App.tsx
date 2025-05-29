@@ -3,7 +3,9 @@ import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { TierProvider } from './contexts/TierContext';
+import { ToastProvider } from './contexts/ToastContext';
 import AppContent from './components/AppContent';
+import { ToastContainer } from './components/UI/Toast';
 import { Elements } from '@stripe/react-stripe-js';
 import stripePromise from './lib/stripe';
 
@@ -13,9 +15,12 @@ function App() {
       <ThemeProvider>
         <AuthProvider>
           <TierProvider>
-            <Elements stripe={stripePromise}>
-              <AppContent />
-            </Elements>
+            <ToastProvider>
+              <Elements stripe={stripePromise}>
+                <AppContent />
+                <ToastContainer />
+              </Elements>
+            </ToastProvider>
           </TierProvider>
         </AuthProvider>
       </ThemeProvider>

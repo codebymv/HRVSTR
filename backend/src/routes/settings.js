@@ -1,50 +1,94 @@
 const express = require('express');
 const router = express.Router();
-const fs = require('fs').promises;
-const path = require('path');
+const { pool } = require('../config/data-sources');
+const authenticateToken = require('../middleware/authMiddleware');
 
-// Path to store API keys (in production, use a proper database or secure storage)
-const API_KEYS_FILE = path.join(__dirname, '../config/api-keys.json');
-
-// Ensure config directory exists
-const ensureConfigDir = async () => {
-  const configDir = path.dirname(API_KEYS_FILE);
-  try {
-    await fs.access(configDir);
-  } catch (error) {
-    await fs.mkdir(configDir, { recursive: true });
-  }
+// Helper function to mask API keys for display (show first 4 and last 4 chars)
+const maskApiKey = (key) => {
+  if (!key || key.length < 8) return '●●●●●●●●';
+  return key.substring(0, 4) + '●'.repeat(Math.max(4, key.length - 8)) + key.substring(key.length - 4);
 };
 
-// Load API keys from file
-const loadApiKeys = async () => {
+// Load API keys for a specific user from database
+const loadUserApiKeys = async (userId) => {
   try {
-    await ensureConfigDir();
-    const data = await fs.readFile(API_KEYS_FILE, 'utf8');
-    return JSON.parse(data);
+    const result = await pool.query(
+      'SELECT provider, key_name, key_value FROM user_api_keys WHERE user_id = $1',
+      [userId]
+    );
+    
+    const keys = {};
+    result.rows.forEach(row => {
+      const keyIdentifier = `${row.provider === 'reddit' && row.key_name === 'client_id' ? 'reddit_client_id' :
+                             row.provider === 'reddit' && row.key_name === 'client_secret' ? 'reddit_client_secret' :
+                             row.provider === 'alpha_vantage' ? 'alpha_vantage_key' :
+                             `${row.provider}_${row.key_name}`}`;
+      keys[keyIdentifier] = row.key_value;
+    });
+    
+    return keys;
   } catch (error) {
-    // If file doesn't exist or is invalid, return empty object
+    console.error('Error loading user API keys:', error);
     return {};
   }
 };
 
-// Save API keys to file
-const saveApiKeys = async (keys) => {
+// Save API keys for a specific user to database
+const saveUserApiKeys = async (userId, apiKeys) => {
+  const client = await pool.connect();
   try {
-    await ensureConfigDir();
-    await fs.writeFile(API_KEYS_FILE, JSON.stringify(keys, null, 2));
+    await client.query('BEGIN');
+    
+    for (const [keyIdentifier, keyValue] of Object.entries(apiKeys)) {
+      if (!keyValue || !keyValue.trim()) continue; // Skip empty keys
+      
+      // Parse key identifier to provider and key_name
+      let provider, keyName;
+      if (keyIdentifier === 'reddit_client_id') {
+        provider = 'reddit';
+        keyName = 'client_id';
+      } else if (keyIdentifier === 'reddit_client_secret') {
+        provider = 'reddit';
+        keyName = 'client_secret';
+      } else if (keyIdentifier === 'alpha_vantage_key') {
+        provider = 'alpha_vantage';
+        keyName = 'api_key';
+      } else if (keyIdentifier === 'finviz_key') {
+        provider = 'finviz';
+        keyName = 'api_key';
+      } else if (keyIdentifier === 'sec_key') {
+        provider = 'sec';
+        keyName = 'api_key';
+      } else {
+        continue; // Skip unknown keys
+      }
+      
+      // Upsert the key
+      await client.query(
+        `INSERT INTO user_api_keys (user_id, provider, key_name, key_value, updated_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (user_id, provider, key_name)
+         DO UPDATE SET key_value = $4, updated_at = NOW()`,
+        [userId, provider, keyName, keyValue.trim()]
+      );
+    }
+    
+    await client.query('COMMIT');
     return true;
   } catch (error) {
-    console.error('Error saving API keys:', error);
+    await client.query('ROLLBACK');
+    console.error('Error saving user API keys:', error);
     return false;
+  } finally {
+    client.release();
   }
 };
 
 // GET /api/settings/key-status
-// Returns the status of configured API keys
-router.get('/key-status', async (req, res) => {
+// Returns the status of configured API keys for the authenticated user
+router.get('/key-status', authenticateToken, async (req, res) => {
   try {
-    const apiKeys = await loadApiKeys();
+    const userApiKeys = await loadUserApiKeys(req.user.id);
     
     // Check which keys are configured (have non-empty values)
     const keyStatus = {};
@@ -58,13 +102,26 @@ router.get('/key-status', async (req, res) => {
       'finviz_key': 'finviz',
       'sec_key': 'sec'
     };
-    
-    // Check status of each expected key
+
+    // Check status of each expected key - check both user keys AND environment variables
     Object.keys(expectedKeys).forEach(keyName => {
-      keyStatus[keyName] = !!(apiKeys[keyName] && apiKeys[keyName].trim());
-      const dataSource = expectedKeys[keyName];
-      dataSourceStatus[dataSource] = keyStatus[keyName];
+      // Check if key is available from user config OR environment variables
+      const userKey = userApiKeys[keyName] && userApiKeys[keyName].trim();
+      const envKey = keyName === 'reddit_client_id' ? process.env.REDDIT_CLIENT_ID :
+                    keyName === 'reddit_client_secret' ? process.env.REDDIT_CLIENT_SECRET :
+                    keyName === 'alpha_vantage_key' ? process.env.ALPHA_VANTAGE_KEY :
+                    keyName === 'finviz_key' ? process.env.FINVIZ_KEY :
+                    keyName === 'sec_key' ? process.env.SEC_KEY : null;
+      
+      // Key is available if either user-provided OR environment variable exists
+      keyStatus[keyName] = !!(userKey || (envKey && envKey.trim()));
     });
+
+    // For data sources that require multiple keys (like Reddit), check that ALL required keys are available
+    dataSourceStatus.reddit = keyStatus.reddit_client_id && keyStatus.reddit_client_secret;
+    dataSourceStatus.alpha_vantage = keyStatus.alpha_vantage_key;
+    dataSourceStatus.finviz = keyStatus.finviz_key;
+    dataSourceStatus.sec = keyStatus.sec_key;
     
     res.json({
       success: true,
@@ -81,8 +138,8 @@ router.get('/key-status', async (req, res) => {
 });
 
 // POST /api/settings/update-keys
-// Updates API keys on the server
-router.post('/update-keys', async (req, res) => {
+// Updates API keys for the authenticated user
+router.post('/update-keys', authenticateToken, async (req, res) => {
   try {
     const { apiKeys } = req.body;
     
@@ -93,14 +150,8 @@ router.post('/update-keys', async (req, res) => {
       });
     }
     
-    // Load existing keys
-    const existingKeys = await loadApiKeys();
-    
-    // Update with new keys (only update provided keys, keep existing ones)
-    const updatedKeys = { ...existingKeys, ...apiKeys };
-    
-    // Save updated keys
-    const saved = await saveApiKeys(updatedKeys);
+    // Save the new keys (this will merge with existing keys)
+    const saved = await saveUserApiKeys(req.user.id, apiKeys);
     
     if (saved) {
       res.json({
@@ -123,16 +174,43 @@ router.post('/update-keys', async (req, res) => {
 });
 
 // GET /api/settings/keys
-// Returns the actual API keys (for internal use only - should be protected in production)
-router.get('/keys', async (req, res) => {
+// Returns masked API keys for display (for authenticated user)
+router.get('/keys', authenticateToken, async (req, res) => {
   try {
-    const apiKeys = await loadApiKeys();
+    const apiKeys = await loadUserApiKeys(req.user.id);
+    
+    // Mask the keys for security before sending to frontend
+    const maskedKeys = {};
+    Object.keys(apiKeys).forEach(keyName => {
+      maskedKeys[keyName] = apiKeys[keyName] ? maskApiKey(apiKeys[keyName]) : '';
+    });
+    
+    res.json({
+      success: true,
+      keys: maskedKeys
+    });
+  } catch (error) {
+    console.error('Error fetching API keys:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch API keys'
+    });
+  }
+});
+
+// GET /api/settings/keys-unmasked
+// Returns actual unmasked API keys for viewing (for authenticated user)
+router.get('/keys-unmasked', authenticateToken, async (req, res) => {
+  try {
+    const apiKeys = await loadUserApiKeys(req.user.id);
+    
+    // Return the actual keys without masking
     res.json({
       success: true,
       keys: apiKeys
     });
   } catch (error) {
-    console.error('Error fetching API keys:', error);
+    console.error('Error fetching unmasked API keys:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch API keys'

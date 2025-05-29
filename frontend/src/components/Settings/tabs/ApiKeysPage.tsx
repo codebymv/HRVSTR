@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Save, RefreshCw, AlertTriangle, HelpCircle } from 'lucide-react';
+import { Save, RefreshCw, AlertTriangle, HelpCircle, Eye, EyeOff } from 'lucide-react';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { useAuth } from '../../../contexts/AuthContext';
+import { useToast } from '../../../contexts/ToastContext';
 
 interface ApiKey {
   name: string;
@@ -17,6 +19,8 @@ interface KeyStatus {
 
 const ApiKeysPage: React.FC = () => {
   const { theme } = useTheme();
+  const { token } = useAuth();
+  const { success, error } = useToast();
   const isLight = theme === 'light';
   
   // Theme-specific styling
@@ -51,18 +55,25 @@ const ApiKeysPage: React.FC = () => {
     }
   ]);
 
-  const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error' | 'none', message: string }>({ 
-    type: 'none', 
-    message: '' 
-  });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [serverKeyStatus, setServerKeyStatus] = useState<KeyStatus | null>(null);
+  const [showUnmasked, setShowUnmasked] = useState<Record<string, boolean>>({});
+  const [unmaskedKeys, setUnmaskedKeys] = useState<Record<string, string>>({});
 
   // Fetch API key status from server
   const fetchServerKeyStatus = async () => {
+    if (!token) {
+      console.warn('No authentication token available');
+      return;
+    }
+
     try {
       const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
-      const response = await fetch(`${proxyUrl}/api/settings/key-status`);
+      const response = await fetch(`${proxyUrl}/api/settings/key-status`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
       
       if (!response.ok) {
         console.error('Failed to fetch API key status');
@@ -78,28 +89,80 @@ const ApiKeysPage: React.FC = () => {
     }
   };
 
+  // Fetch API keys from server (masked for display)
+  const fetchServerKeys = async () => {
+    if (!token) {
+      console.warn('No authentication token available');
+      return;
+    }
+
+    try {
+      const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
+      const response = await fetch(`${proxyUrl}/api/settings/keys`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      if (!response.ok) {
+        console.error('Failed to fetch API keys');
+        return;
+      }
+      
+      const data = await response.json();
+      if (data.success && data.keys) {
+        // Update the form fields with the masked keys from the server
+        setApiKeys(prevKeys => prevKeys.map(key => ({
+          ...key,
+          key: data.keys[key.name] || ''
+        })));
+      }
+    } catch (error) {
+      console.error('Error fetching API keys:', error);
+    }
+  };
+
+  // Fetch unmasked API keys from server
+  const fetchUnmaskedKeys = async () => {
+    if (!token) {
+      console.warn('No authentication token available');
+      return;
+    }
+
+    try {
+      const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
+      const response = await fetch(`${proxyUrl}/api/settings/keys-unmasked`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      if (!response.ok) {
+        console.error('Failed to fetch unmasked API keys');
+        return;
+      }
+      
+      const data = await response.json();
+      if (data.success && data.keys) {
+        setUnmaskedKeys(data.keys);
+      }
+    } catch (error) {
+      console.error('Error fetching unmasked API keys:', error);
+    }
+  };
+
   // Load settings from localStorage on component mount
   useEffect(() => {
     const loadSettings = async () => {
       await fetchServerKeyStatus();
+      await fetchServerKeys(); // Fetch actual keys to display
       
-      const savedSettings = localStorage.getItem('sentinel_settings');
-      
-      if (savedSettings) {
-        try {
-          const parsedKeys = JSON.parse(savedSettings);
-          setApiKeys(prevKeys => prevKeys.map(key => {
-            const savedKey = parsedKeys.find((k: ApiKey) => k.name === key.name);
-            return savedKey ? { ...key, key: savedKey.key } : key;
-          }));
-        } catch (error) {
-          console.error('Failed to parse saved API keys:', error);
-        }
-      }
+      // Note: We now prioritize server keys over localStorage
+      // localStorage is kept for backup/local editing only
     };
 
     loadSettings();
-  }, []);
+  }, [token]);
 
   // Handle API key changes
   const handleApiKeyChange = (index: number, value: string) => {
@@ -108,8 +171,41 @@ const ApiKeysPage: React.FC = () => {
     setApiKeys(updatedKeys);
   };
 
+  // Toggle showing unmasked values for a specific key
+  const toggleKeyVisibility = async (keyName: string) => {
+    const isCurrentlyVisible = showUnmasked[keyName];
+    
+    if (!isCurrentlyVisible) {
+      // If we want to show the key but don't have unmasked data yet, fetch it
+      if (Object.keys(unmaskedKeys).length === 0) {
+        await fetchUnmaskedKeys();
+      }
+      
+      // Show the unmasked value
+      setShowUnmasked(prev => ({ ...prev, [keyName]: true }));
+      
+      // Update the display to show the actual value
+      setApiKeys(prevKeys => prevKeys.map(key => 
+        key.name === keyName 
+          ? { ...key, key: unmaskedKeys[keyName] || key.key }
+          : key
+      ));
+    } else {
+      // Hide the key - fetch masked version
+      setShowUnmasked(prev => ({ ...prev, [keyName]: false }));
+      
+      // Refresh to get masked values
+      await fetchServerKeys();
+    }
+  };
+
   // Save settings to localStorage
   const saveSettings = async () => {
+    if (!token) {
+      error('Authentication required. Please log in and try again.');
+      return;
+    }
+
     setIsLoading(true);
     
     try {
@@ -123,6 +219,7 @@ const ApiKeysPage: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           apiKeys: apiKeys.reduce((acc, key) => {
@@ -138,20 +235,17 @@ const ApiKeysPage: React.FC = () => {
         throw new Error('Failed to update API keys on server');
       }
       
-      setSaveStatus({ 
-        type: 'success', 
-        message: 'API keys saved successfully!' 
-      });
+      success('API Keys Updated!');
       
-      // Clear success message after 3 seconds
-      setTimeout(() => {
-        setSaveStatus({ type: 'none', message: '' });
-      }, 3000);
-    } catch (error) {
-      setSaveStatus({ 
-        type: 'error', 
-        message: 'Failed to save API keys. Please try again.' 
-      });
+      // Refresh the server key status
+      await fetchServerKeyStatus();
+      // Refresh the displayed keys to show masked values
+      await fetchServerKeys();
+      // Reset visibility state to show masked values
+      setShowUnmasked({});
+      
+    } catch (err) {
+      error('Failed to save API keys. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -164,16 +258,6 @@ const ApiKeysPage: React.FC = () => {
           <h1 className={`text-2xl lg:text-3xl font-bold ${textColor} mb-2`}>API Keys</h1>
           <p className={secondaryTextColor}>Configure external API keys for enhanced data access</p>
         </div>
-
-        {/* Settings Status Message */}
-        {saveStatus.type !== 'none' && (
-          <div className={`mb-6 p-4 rounded-lg ${saveStatus.type === 'success' ? 'bg-green-800/30 border border-green-700' : 'bg-red-800/30 border border-red-700'}`}>
-            {saveStatus.type === 'error' && <AlertTriangle className="inline mr-2 text-red-400" size={18} />}
-            <span className={saveStatus.type === 'success' ? 'text-green-400' : 'text-red-400'}>
-              {saveStatus.message}
-            </span>
-          </div>
-        )}
 
         {/* API Keys Section */}
         <div className={`${cardBgColor} rounded-lg p-6 mb-8 border ${borderColor}`}>
@@ -208,13 +292,24 @@ const ApiKeysPage: React.FC = () => {
                     </Link>
                   )}
                 </label>
-                <input
-                  type="password"
-                  value={apiKey.key}
-                  onChange={(e) => handleApiKeyChange(index, e.target.value)}
-                  className={`w-full ${inputBgColor} border ${borderColor} rounded px-4 py-2 ${inputTextColor} focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
-                  placeholder={`Enter your ${apiKey.name.replace(/_/g, ' ')} here...`}
-                />
+                <div className="relative">
+                  <input
+                    type={showUnmasked[apiKey.name] ? "text" : "password"}
+                    value={apiKey.key}
+                    onChange={(e) => handleApiKeyChange(index, e.target.value)}
+                    className={`w-full ${inputBgColor} border ${borderColor} rounded px-4 py-2 pr-12 ${inputTextColor} focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                    placeholder={`Enter your ${apiKey.name.replace(/_/g, ' ')} here...`}
+                  />
+                  {apiKey.key && (
+                    <button
+                      type="button"
+                      onClick={() => toggleKeyVisibility(apiKey.name)}
+                      className={`absolute right-3 top-1/2 transform -translate-y-1/2 ${isLight ? 'text-gray-500 hover:text-gray-700' : 'text-gray-400 hover:text-gray-200'} transition-colors`}
+                    >
+                      {showUnmasked[apiKey.name] ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  )}
+                </div>
                 <p className={`text-sm ${secondaryTextColor}`}>{apiKey.description}</p>
               </div>
             ))}
@@ -246,4 +341,4 @@ const ApiKeysPage: React.FC = () => {
   );
 };
 
-export default ApiKeysPage; 
+export default ApiKeysPage;

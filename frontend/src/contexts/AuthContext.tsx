@@ -15,7 +15,7 @@ interface AuthContextType {
   token: string | null;
   user: User | null;
   loading: boolean;
-  login: (token: string) => void;
+  login: (token: string, refreshToken?: string) => void;
   logout: () => void;
   signIn: () => void;
   signOut: () => void;
@@ -25,10 +25,10 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Token refresh interval (30 minutes - more frequent)
-const REFRESH_INTERVAL = 30 * 60 * 1000;
-// Token expiration buffer (5 minutes - larger buffer)
-const EXPIRATION_BUFFER = 5 * 60 * 1000;
+// Token refresh interval (24 hours - much less frequent since tokens last 7 days)
+const REFRESH_INTERVAL = 24 * 60 * 60 * 1000;
+// Token expiration buffer (1 day - check refresh 1 day before expiry)
+const EXPIRATION_BUFFER = 24 * 60 * 60 * 1000;
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -59,13 +59,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           picture: googleUser.picture
         });
 
-        const { token: backendToken, user: userData } = response.data;
+        const { token: backendToken, refreshToken, expiresIn, user: userData } = response.data;
         
         console.log('Backend response:', response.data);
         console.log('User data received:', userData);
         
         // Store the backend token and user info
-        login(backendToken);
+        login(backendToken, refreshToken);
         const userWithToken = { ...userData, token: backendToken };
         console.log('User with token:', userWithToken);
         setUser(userWithToken);
@@ -110,21 +110,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 console.error('Error parsing saved user data:', parseError);
                 // Clear corrupted data
                 localStorage.removeItem('auth_token');
+                localStorage.removeItem('refresh_token');
                 localStorage.removeItem('token_expiry');
                 localStorage.removeItem('user');
               }
             }
           } else {
-            // Token is expired, clear everything
-            localStorage.removeItem('auth_token');
-            localStorage.removeItem('token_expiry');
-            localStorage.removeItem('user');
+            console.log('Token expired or expiring soon, will attempt refresh...');
+            // Don't clear immediately - let the refresh logic handle it
           }
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
         // Clear all auth data on any error
         localStorage.removeItem('auth_token');
+        localStorage.removeItem('refresh_token');
         localStorage.removeItem('token_expiry');
         localStorage.removeItem('user');
       } finally {
@@ -153,21 +153,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if ((error.response?.status === 401 || error.response?.status === 403) && !originalRequest._retry) {
           originalRequest._retry = true;
           
+          const refreshToken = localStorage.getItem('refresh_token');
+          if (!refreshToken) {
+            console.log('No refresh token available, logging out...');
+            logout();
+            return Promise.reject(error);
+          }
+
           try {
+            console.log('Attempting to refresh token...');
             // Attempt to refresh the token
             const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
             const response = await axios.post(`${apiUrl}/api/auth/refresh`, {
-              token: token
+              token: token // Send current token for refresh
             });
             
-            const newToken = response.data.token;
-            const expiresIn = response.data.expiresIn || 3600; // Default to 1 hour
+            const { token: newToken, refreshToken: newRefreshToken, expiresIn } = response.data;
             const expiryTime = Date.now() + (expiresIn * 1000);
+            
+            console.log('Token refreshed successfully');
             
             // Update token and expiry
             setToken(newToken);
             localStorage.setItem('auth_token', newToken);
             localStorage.setItem('token_expiry', expiryTime.toString());
+            
+            if (newRefreshToken) {
+              localStorage.setItem('refresh_token', newRefreshToken);
+            }
             
             // Update user token
             if (user) {
@@ -200,69 +213,67 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [token, user]);
 
-  // Setup proactive token refresh timer
+  // Token refresh function
+  const refreshToken = async () => {
+    const savedToken = localStorage.getItem('auth_token');
+    const refreshTokenValue = localStorage.getItem('refresh_token');
+    
+    if (!savedToken || !refreshTokenValue) {
+      console.log('No tokens available for refresh');
+      return false;
+    }
+
+    try {
+      console.log('Refreshing token...');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const response = await axios.post(`${apiUrl}/api/auth/refresh`, {
+        token: savedToken
+      });
+
+      const { token: newToken, refreshToken: newRefreshToken, expiresIn } = response.data;
+      const expiryTime = Date.now() + (expiresIn * 1000);
+
+      // Update tokens
+      setToken(newToken);
+      localStorage.setItem('auth_token', newToken);
+      localStorage.setItem('token_expiry', expiryTime.toString());
+      
+      if (newRefreshToken) {
+        localStorage.setItem('refresh_token', newRefreshToken);
+      }
+
+      console.log('Token refreshed successfully');
+      return true;
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+      logout();
+      return false;
+    }
+  };
+
+  // Check and refresh token if needed
+  const checkAndRefreshToken = () => {
+    const tokenExpiry = localStorage.getItem('token_expiry');
+    
+    if (!tokenExpiry) return;
+    
+    const expiryTime = parseInt(tokenExpiry);
+    const now = Date.now();
+    
+    // If token expires within the buffer time, refresh it
+    if (now >= expiryTime - EXPIRATION_BUFFER) {
+      refreshToken();
+    }
+  };
+
+  // Set up periodic token refresh check
   useEffect(() => {
     if (!token) return;
-
-    const refreshToken = async () => {
-      try {
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-        const response = await axios.post(`${apiUrl}/api/auth/refresh`, {
-          token: token
-        });
-        
-        const newToken = response.data.token;
-        const expiresIn = response.data.expiresIn || 3600;
-        const expiryTime = Date.now() + (expiresIn * 1000);
-        
-        setToken(newToken);
-        localStorage.setItem('auth_token', newToken);
-        localStorage.setItem('token_expiry', expiryTime.toString());
-        
-        // Update user token
-        if (user) {
-          const updatedUser = { ...user, token: newToken };
-          setUser(updatedUser);
-          try {
-            localStorage.setItem('user', JSON.stringify({ ...user, token: newToken }));
-          } catch (storageError) {
-            console.error('Error saving user to localStorage:', storageError);
-          }
-        }
-        
-        console.log('Token refreshed successfully');
-      } catch (error) {
-        console.error('Proactive token refresh failed:', error);
-        // Don't logout on proactive refresh failure, let the interceptor handle it
-      }
-    };
-
-    // Check token expiry and refresh if needed
-    const checkAndRefreshToken = () => {
-      const expiryTimeString = localStorage.getItem('token_expiry');
-      if (!expiryTimeString || expiryTimeString === 'null' || expiryTimeString === 'undefined') {
-        return;
-      }
-      
-      const expiryTime = parseInt(expiryTimeString);
-      if (isNaN(expiryTime)) {
-        console.error('Invalid token expiry time:', expiryTimeString);
-        return;
-      }
-      
-      const timeUntilExpiry = expiryTime - Date.now();
-      
-      // Refresh if token expires within the buffer time
-      if (timeUntilExpiry <= EXPIRATION_BUFFER) {
-        console.log('Token expiring soon, refreshing...');
-        refreshToken();
-      }
-    };
 
     // Initial check
     checkAndRefreshToken();
 
-    // Setup interval for regular checks
+    // Setup interval for regular checks (daily)
     const intervalId = setInterval(checkAndRefreshToken, REFRESH_INTERVAL);
 
     return () => clearInterval(intervalId);
@@ -296,13 +307,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         picture: decoded.picture
       });
 
-      const { token: backendToken, user: userData } = response.data;
+      const { token: backendToken, refreshToken, user: userData } = response.data;
       
       console.log('Backend response (credential):', response.data);
       console.log('User data received (credential):', userData);
       
       // Store the backend token and user info
-      login(backendToken);
+      login(backendToken, refreshToken);
       const userWithToken = { ...userData, token: backendToken };
       console.log('User with token (credential):', userWithToken);
       setUser(userWithToken);
@@ -325,14 +336,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(false);
   };
 
-  const login = (newToken: string) => {
-    // Set longer expiry time (24 hours)
-    const expiryTime = Date.now() + (24 * 60 * 60 * 1000);
+  const login = (newToken: string, refreshToken?: string) => {
+    // Set longer expiry time (7 days to match backend)
+    const expiryTime = Date.now() + (7 * 24 * 60 * 60 * 1000);
     setToken(newToken);
     setIsAuthenticated(true);
     try {
       localStorage.setItem('auth_token', newToken);
       localStorage.setItem('token_expiry', expiryTime.toString());
+      
+      if (refreshToken) {
+        localStorage.setItem('refresh_token', refreshToken);
+      }
       
       // Check for post-signin redirect intent
       const redirectPath = localStorage.getItem('post_signin_redirect');
@@ -355,6 +370,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     try {
       localStorage.removeItem('auth_token');
+      localStorage.removeItem('refresh_token');
       localStorage.removeItem('token_expiry');
       localStorage.removeItem('user');
     } catch (storageError) {

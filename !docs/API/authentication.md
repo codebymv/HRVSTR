@@ -2,36 +2,179 @@
 
 ## Overview
 
-The HRVSTR API employs multiple authentication mechanisms to secure both its own endpoints and its interaction with third-party APIs. This document outlines the authentication strategies implemented by the HRVSTR backend.
+The HRVSTR API uses modern JWT (JSON Web Token) authentication with Google OAuth integration. This system provides secure, long-lived sessions with automatic token refresh capabilities, replacing the previous API key system.
 
-## API Key Authentication
+## Authentication Flow
 
-### Client-to-HRVSTR Authentication
+### Google OAuth Integration
 
-For frontend applications to access the HRVSTR API, a simple API key authentication system is implemented:
+The primary authentication method is Google OAuth 2.0:
 
-1. **Header-Based Authentication**:
-   ```
-   X-API-Key: your_api_key_here
-   ```
+1. **Frontend Initiation**: User clicks "Sign in with Google"
+2. **Google OAuth**: User authenticates with Google
+3. **Token Exchange**: Frontend receives Google credentials
+4. **Backend Processing**: Backend validates Google token and creates user account
+5. **JWT Generation**: Backend generates access and refresh tokens
+6. **Session Establishment**: Tokens stored securely in frontend
 
-2. **Key Generation and Management**:
-   - API keys are generated for authorized users
-   - Keys are stored securely in the backend
-   - Keys can be revoked or rotated as needed
+### Token Types
 
-3. **Protected Endpoints**:
-   - `/api/v1/settings/*` - All settings endpoints
-   - Any endpoints that expose sensitive information
+#### Access Tokens
+- **Purpose**: Authenticate API requests
+- **Expiry**: 7 days (extended for better UX)
+- **Format**: JWT with user information
+- **Usage**: Include in Authorization header
 
-### Example Usage
+#### Refresh Tokens
+- **Purpose**: Generate new access tokens
+- **Expiry**: 30 days
+- **Storage**: LocalStorage (HttpOnly cookies recommended for production)
+- **Usage**: Automatic refresh via interceptors
+
+## Authentication Implementation
+
+### Google Login Endpoint
+
+```http
+POST /api/auth/google-login
+```
+
+**Request Body:**
+```json
+{
+  "googleId": "google_user_id",
+  "email": "user@example.com",
+  "name": "User Name",
+  "picture": "https://lh3.googleusercontent.com/..."
+}
+```
+
+**Response:**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "expiresIn": 604800,
+  "user": {
+    "id": "uuid",
+    "name": "User Name",
+    "email": "user@example.com",
+    "picture": "https://lh3.googleusercontent.com/..."
+  }
+}
+```
+
+### Token Refresh Endpoint
+
+```http
+POST /api/auth/refresh
+```
+
+**Request Body:**
+```json
+{
+  "token": "expired_or_expiring_access_token"
+}
+```
+
+**Response:**
+```json
+{
+  "token": "new_access_token",
+  "refreshToken": "new_refresh_token",
+  "expiresIn": 604800,
+  "user": {
+    "id": "uuid",
+    "name": "User Name",
+    "email": "user@example.com"
+  }
+}
+```
+
+### User Profile Endpoint
+
+```http
+GET /api/auth/profile
+Authorization: Bearer <access_token>
+```
+
+**Response:**
+```json
+{
+  "id": "uuid",
+  "email": "user@example.com",
+  "name": "User Name",
+  "tier": "free",
+  "credits_remaining": 50,
+  "credits_monthly_limit": 50,
+  "created_at": "2024-01-01T00:00:00Z",
+  "subscription_status": "active"
+}
+```
+
+## Frontend Authentication
+
+### Token Storage and Management
 
 ```javascript
-// Example of authenticating a request to the HRVSTR API
-const fetchSentimentData = async (ticker) => {
-  const response = await fetch(`http://localhost:3001/api/v1/sentiment/${ticker}`, {
+// Token storage in localStorage
+const AUTH_CONFIG = {
+  STORAGE_KEYS: {
+    AUTH_TOKEN: 'auth_token',
+    REFRESH_TOKEN: 'refresh_token',
+    TOKEN_EXPIRY: 'token_expiry',
+    USER_DATA: 'user'
+  }
+};
+
+// Store tokens after login
+const storeTokens = (tokenData) => {
+  localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.AUTH_TOKEN, tokenData.token);
+  localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.REFRESH_TOKEN, tokenData.refreshToken);
+  localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.TOKEN_EXPIRY, 
+    (Date.now() + tokenData.expiresIn * 1000).toString());
+  localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.USER_DATA, 
+    JSON.stringify(tokenData.user));
+};
+```
+
+### Automatic Token Refresh
+
+```javascript
+// Axios interceptor for automatic token refresh
+axios.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      try {
+        const refreshResult = await refreshToken();
+        if (refreshResult) {
+          originalRequest.headers['Authorization'] = `Bearer ${refreshResult.token}`;
+          return axios(originalRequest);
+        }
+      } catch (refreshError) {
+        // Refresh failed, redirect to login
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+```
+
+### Making Authenticated Requests
+
+```javascript
+// Include JWT token in requests
+const fetchUserData = async () => {
+  const token = localStorage.getItem('auth_token');
+  
+  const response = await fetch('/api/auth/profile', {
     headers: {
-      'X-API-Key': 'your_api_key_here'
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
     }
   });
   
@@ -39,174 +182,219 @@ const fetchSentimentData = async (ticker) => {
 };
 ```
 
-## Third-Party API Authentication
+## Backend Authentication Middleware
 
-The HRVSTR backend manages authentication with external APIs on behalf of the application to keep credentials secure.
-
-### Reddit API Authentication
-
-1. **OAuth 2.0 Implementation**:
-   - Uses client credentials flow
-   - Automatically refreshes access tokens
-   - Stores credentials securely server-side
-
-2. **Configuration**:
-   - `REDDIT_CLIENT_ID`: Reddit application client ID
-   - `REDDIT_CLIENT_SECRET`: Reddit application client secret
-   - `REDDIT_USER_AGENT`: Custom user agent for API requests
-
-3. **Token Management**:
-   - Access tokens cached for their lifetime
-   - Automatic refresh before expiration
-   - Error handling for authentication failures
-
-### SEC EDGAR Authentication
-
-1. **User Agent Requirements**:
-   - SEC EDGAR requires identifying user agents
-   - No formal authentication but proper identification required
-
-2. **Configuration**:
-   - `SEC_USER_AGENT`: User agent string including company name and contact info
-
-### FinViz Scraping Authentication
-
-1. **Request Headers**:
-   - Proper browser-like headers to avoid blocking
-   - No formal authentication required
-
-2. **IP Rotation** (if implemented):
-   - Rotate IP addresses to avoid rate limiting 
-   - Use of proxy services if needed
-
-## User Settings and API Keys
-
-The HRVSTR platform allows users to provide their own API keys for certain services.
-
-### User-Provided API Keys
-
-1. **Storage**:
-   - Keys stored securely in encrypted format
-   - Keys never exposed in client-side code
-
-2. **Key Management**:
-   - Web interface for users to add/update their keys
-   - Validation of keys before storing
-   - Option to use platform-provided keys (if available)
-
-### API Key Update Endpoint
-
-```
-POST /api/v1/settings/update-keys
-```
-
-**Request body**:
-```json
-{
-  "keys": {
-    "reddit_client_id": "your_reddit_client_id",
-    "reddit_client_secret": "your_reddit_client_secret"
-  }
-}
-```
-
-**Successful response**:
-```json
-{
-  "success": true,
-  "message": "API keys updated successfully"
-}
-```
-
-## Authentication Middleware
-
-The API uses Express middleware to enforce authentication:
+### JWT Verification
 
 ```javascript
-// Example authentication middleware
-const authMiddleware = (req, res, next) => {
-  const apiKey = req.headers['x-api-key'];
-  
-  if (!apiKey) {
-    return res.status(401).json({
-      error: true,
-      message: 'API key is required',
-      code: 'AUTH_REQUIRED',
-      status: 401
-    });
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ message: 'Access token required' });
   }
-  
-  // Validate API key against stored keys
-  if (!isValidApiKey(apiKey)) {
-    return res.status(403).json({
-      error: true,
-      message: 'Invalid API key',
-      code: 'INVALID_KEY',
-      status: 403
-    });
-  }
-  
-  // Authentication successful, proceed to the next middleware
-  next();
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ message: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+  });
 };
 ```
 
+### Token Generation
+
+```javascript
+const generateTokens = (userId) => {
+  const accessToken = jwt.sign(
+    { userId }, 
+    process.env.JWT_SECRET, 
+    { expiresIn: '7d' }
+  );
+  
+  const refreshToken = jwt.sign(
+    { userId, type: 'refresh' }, 
+    process.env.JWT_SECRET, 
+    { expiresIn: '30d' }
+  );
+  
+  return { accessToken, refreshToken };
+};
+```
+
+## Session Management Features
+
+### Extended Session Duration
+- **7-day access tokens**: Reduces need for frequent re-authentication
+- **30-day refresh tokens**: Enables month-long sessions
+- **Automatic refresh**: Seamless token renewal before expiration
+
+### Smart Refresh Logic
+- **Daily checks**: Token validity checked every 24 hours
+- **Expiration buffer**: Refresh 1 day before expiry
+- **Error handling**: Graceful fallback to re-authentication
+
+### Cross-Session Persistence
+- **Browser restart survival**: Sessions persist across browser restarts
+- **Multiple tab support**: Shared session state across tabs
+- **Background refresh**: Automatic token refresh even when app is inactive
+
 ## Security Considerations
 
-1. **HTTPS Enforcement**:
-   - All API requests should use HTTPS in production
-   - HTTP requests are redirected to HTTPS
+### Token Security
+- **Server-side validation**: All tokens validated server-side
+- **Short-lived access tokens**: Despite 7-day expiry, tokens are refreshed regularly
+- **Secure storage**: Tokens stored in localStorage (consider HttpOnly cookies for production)
+- **No credentials in URL**: Tokens never passed in query parameters
 
-2. **Key Rotation Policy**:
-   - Regular rotation of internal API keys
-   - Automatic expiry of unused keys
-   - Immediate revocation capabilities
+### Protection Against Attacks
+- **CSRF Protection**: JWT tokens in Authorization header prevent CSRF
+- **XSS Mitigation**: Sanitize all user inputs and outputs
+- **Replay Attack Prevention**: Token expiration limits replay window
+- **Rate Limiting**: Authentication endpoints are rate-limited
 
-3. **Rate Limiting**:
-   - Prevents brute force attacks on authentication endpoints
-   - Graduated timeout for repeated failures
-   - IP-based blocking for suspicious activity
+### Production Security Enhancements
 
-4. **Credential Storage**:
-   - Environment variables for server-side secrets
-   - No credentials in source code
-   - Encrypted storage for user-provided keys
+```javascript
+// Recommended production setup
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      connectSrc: ["'self'", "https://accounts.google.com"]
+    }
+  }
+}));
 
-5. **Access Logging**:
-   - Logging of authentication attempts
-   - Audit trail for sensitive operations
-   - Anomaly detection for unusual access patterns
+// Use HttpOnly cookies for refresh tokens
+res.cookie('refresh_token', refreshToken, {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'strict',
+  maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+});
+```
 
-## Development vs. Production
+## Error Handling
 
-Different authentication strategies may be employed in different environments:
+### Authentication Errors
 
-1. **Development**:
-   - Simplified authentication for local testing
-   - Development-specific API keys
-   - More verbose error messages
+| Status Code | Error | Description |
+|-------------|-------|-------------|
+| 401 | `Access token required` | No token provided |
+| 403 | `Invalid or expired token` | Token verification failed |
+| 401 | `Token refresh failed` | Refresh token invalid/expired |
 
-2. **Production**:
-   - Strict authentication enforcement
-   - Production-specific API keys
-   - Limited error information to prevent information leakage
+### Example Error Response
 
-## Future Authentication Enhancements
+```json
+{
+  "message": "Invalid or expired token",
+  "status": 403
+}
+```
 
-Potential future enhancements to the authentication system include:
+## Environment Configuration
 
-1. **JWT Authentication**:
-   - Token-based authentication with JWTs
-   - Support for more complex access control
+Required environment variables:
 
-2. **OAuth Integration**:
-   - User authentication via OAuth providers
-   - User-specific data access
+```bash
+# JWT Configuration
+JWT_SECRET=your_jwt_secret_key_here
 
-3. **Two-Factor Authentication**:
-   - Enhanced security for sensitive operations
-   - Time-based one-time passwords (TOTP)
+# Database
+DATABASE_URL=postgresql://user:password@host:port/database
 
-4. **API Key Scopes**:
-   - Fine-grained permissions for different API operations
-   - Limited-scope keys for different client applications
+# Google OAuth (for frontend)
+GOOGLE_CLIENT_ID=your_google_oauth_client_id
+```
+
+## Migration from API Key Authentication
+
+The system has migrated from API key to JWT authentication:
+
+### Legacy API Key System (Deprecated)
+```javascript
+// Old system - no longer used
+headers: {
+  'X-API-Key': 'your_api_key_here'
+}
+```
+
+### New JWT System
+```javascript
+// Current system
+headers: {
+  'Authorization': `Bearer ${jwt_token}`
+}
+```
+
+## User Tier Integration
+
+Authentication integrates with the tier system:
+
+```javascript
+// Middleware can access user tier
+const checkTierAccess = (requiredTier) => {
+  return async (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+    
+    const user = await getUserById(req.user.userId);
+    if (!hasTierAccess(user.tier, requiredTier)) {
+      return res.status(403).json({ message: 'Insufficient tier access' });
+    }
+    
+    req.userTier = user.tier;
+    next();
+  };
+};
+```
+
+## Development vs Production
+
+### Development Settings
+- More verbose error messages
+- Longer token expiry for testing
+- Local Google OAuth redirect URLs
+
+### Production Settings
+- Secure cookie settings
+- Shorter error messages
+- Production OAuth configuration
+- Enhanced security headers
+
+## Monitoring and Logging
+
+### Authentication Metrics
+- Login success/failure rates
+- Token refresh frequency
+- Session duration analytics
+- Geographic login patterns
+
+### Security Monitoring
+- Failed authentication attempts
+- Unusual access patterns
+- Token usage anomalies
+- Potential security threats
+
+## Related Files
+
+- `backend/src/routes/auth.js` - Authentication endpoints
+- `backend/src/middleware/authMiddleware.js` - JWT verification middleware
+- `frontend/src/contexts/AuthContext.tsx` - Frontend authentication context
+- `frontend/src/config/auth.ts` - Authentication configuration
+- `frontend/src/utils/tokenManager.ts` - Token management utilities
+
+## Future Enhancements
+
+### Planned Security Improvements
+1. **HttpOnly Cookies**: Move refresh tokens to secure cookies
+2. **Multi-Factor Authentication**: Add 2FA for enhanced security
+3. **Device Management**: Track and manage user devices
+4. **Session Analytics**: Advanced session monitoring and analytics
+5. **OAuth Providers**: Support for additional OAuth providers

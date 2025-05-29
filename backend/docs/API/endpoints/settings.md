@@ -2,670 +2,446 @@
 
 ## Overview
 
-The Settings API endpoints enable users to store, retrieve, and manage their preferences and configurations for the HRVSTR platform. These endpoints handle user-specific settings, theme preferences, chart configurations, and API key management.
+The Settings API endpoints manage user preferences, API key configuration, and application settings. These endpoints require authentication and provide secure storage for user-specific configuration data.
 
 ## Base URL
 
 ```
-/api/v1/settings
+/api/settings
 ```
 
 ## Authentication
 
-All settings endpoints require authentication using the API key method:
+All settings endpoints require JWT authentication:
 
-```
-X-API-Key: your_api_key_here
+```http
+Authorization: Bearer <jwt_token>
 ```
 
 ## Available Endpoints
 
-### Get User Settings
+### Get API Key Status
 
-Retrieves all settings for the authenticated user.
+Retrieves the configuration status of API keys for external data sources.
 
+```http
+GET /api/settings/key-status
 ```
-GET /api/v1/settings
-```
+
+#### Authentication
+- **Required**: Yes
+- **Tier Access**: Available to all user tiers
 
 #### Response Format
 
 ```json
 {
-  "settings": {
-    "user": {
-      "id": "user123",
-      "displayName": "TradingPro",
-      "email": "user@example.com",
-      "createdAt": "2025-01-15T08:30:00Z",
-      "lastLogin": "2025-05-06T09:15:22Z"
-    },
-    "preferences": {
-      "theme": "dark",
-      "timezone": "America/New_York",
-      "dateFormat": "MM/DD/YYYY",
-      "notifications": {
-        "email": true,
-        "browser": true,
-        "mobile": false
-      },
-      "defaultView": "dashboard"
-    },
-    "dashboardLayout": {
-      "widgets": [
-        {
-          "id": "sentiment-overview",
-          "position": {
-            "x": 0,
-            "y": 0,
-            "w": 6,
-            "h": 4
-          },
-          "config": {
-            "tickers": ["AAPL", "MSFT", "GOOG"],
-            "timeRange": "1w",
-            "showChart": true
-          }
-        },
-        {
-          "id": "insider-trading",
-          "position": {
-            "x": 6,
-            "y": 0,
-            "w": 6,
-            "h": 4
-          },
-          "config": {
-            "sortBy": "value",
-            "direction": "buy",
-            "limit": 10
-          }
-        },
-        // Additional widgets...
-      ],
-      "lastModified": "2025-05-01T14:22:35Z"
-    },
-    "chartDefaults": {
-      "sentimentCharts": {
-        "timeRange": "1m",
-        "resolution": "day",
-        "sources": ["reddit", "finviz", "news"],
-        "showVolume": true,
-        "colorScheme": "default"
-      },
-      "secFilingsCharts": {
-        "timeRange": "6m",
-        "showPrice": true,
-        "transactionTypes": ["P", "S"],
-        "minValue": 100000
-      }
-    },
-    "watchlists": [
-      {
-        "id": "main",
-        "name": "Main Watchlist",
-        "tickers": ["AAPL", "MSFT", "GOOG", "AMZN", "META"],
-        "sortOrder": "alphabetical",
-        "lastModified": "2025-05-02T10:15:00Z"
-      },
-      {
-        "id": "tech",
-        "name": "Tech Stocks",
-        "tickers": ["AAPL", "MSFT", "GOOG", "NVDA", "AMD"],
-        "sortOrder": "custom",
-        "lastModified": "2025-04-28T15:30:00Z"
-      },
-      // Additional watchlists...
-    ],
-    "apiKeys": {
-      "hasRedditKeys": true,
-      "hasFinvizKeys": false,
-      "thirdPartyIntegrations": ["tradingview", "stocktwits"]
-    }
+  "success": true,
+  "keyStatus": {
+    "reddit_client_id": true,
+    "reddit_client_secret": true,
+    "alpha_vantage_key": false,
+    "finviz_key": false,
+    "sec_key": true
   },
-  "timestamp": "2025-05-06T12:00:00Z"
+  "dataSourceStatus": {
+    "reddit": true,
+    "alpha_vantage": false,
+    "finviz": false,
+    "sec": true
+  },
+  "timestamp": "2024-05-06T12:00:00Z"
 }
 ```
 
-#### Example Request
+#### Key Status Explanation
+- `true`: API key is configured (either user-provided or environment variable)
+- `false`: API key is missing and needs to be configured
 
-```javascript
-fetch('http://localhost:3001/api/v1/settings', {
-  headers: {
-    'X-API-Key': 'your_api_key_here'
-  }
-})
-.then(response => response.json())
-.then(data => console.log(data));
+#### Data Source Status
+- Combined status for data sources requiring multiple keys
+- `reddit`: Requires both `reddit_client_id` and `reddit_client_secret`
+- Other sources: Single key requirement
+
+### Update API Keys
+
+Updates or adds API keys for external data sources.
+
+```http
+POST /api/settings/update-keys
 ```
 
-### Update User Settings
-
-Updates specific settings for the authenticated user.
-
-```
-PUT /api/v1/settings
-```
+#### Authentication
+- **Required**: Yes
+- **Tier Access**: Available to all user tiers
 
 #### Request Body
 
 ```json
 {
-  "preferences": {
-    "theme": "light",
-    "timezone": "Europe/London"
-  },
-  "chartDefaults": {
-    "sentimentCharts": {
-      "timeRange": "2w",
-      "showVolume": false
-    }
-  }
-}
-```
-
-#### Response Format
-
-```json
-{
-  "success": true,
-  "message": "Settings updated successfully",
-  "updated": ["preferences.theme", "preferences.timezone", "chartDefaults.sentimentCharts.timeRange", "chartDefaults.sentimentCharts.showVolume"],
-  "timestamp": "2025-05-06T12:05:33Z"
-}
-```
-
-#### Example Request
-
-```javascript
-fetch('http://localhost:3001/api/v1/settings', {
-  method: 'PUT',
-  headers: {
-    'Content-Type': 'application/json',
-    'X-API-Key': 'your_api_key_here'
-  },
-  body: JSON.stringify({
-    preferences: {
-      theme: 'light',
-      timezone: 'Europe/London'
-    }
-  })
-})
-.then(response => response.json())
-.then(data => console.log(data));
-```
-
-### Get Specific Setting
-
-Retrieves a specific setting by path.
-
-```
-GET /api/v1/settings/path/:path
-```
-
-#### Path Parameters
-
-| Parameter | Type   | Required | Description                                   |
-|-----------|--------|----------|-----------------------------------------------|
-| path      | string | Yes      | Dot-notation path to the setting (e.g., "preferences.theme") |
-
-#### Response Format
-
-```json
-{
-  "path": "preferences.theme",
-  "value": "dark",
-  "timestamp": "2025-05-06T12:00:00Z"
-}
-```
-
-#### Example Request
-
-```javascript
-fetch('http://localhost:3001/api/v1/settings/path/preferences.theme', {
-  headers: {
-    'X-API-Key': 'your_api_key_here'
-  }
-})
-.then(response => response.json())
-.then(data => console.log(data));
-```
-
-### Manage Watchlists
-
-#### Get All Watchlists
-
-```
-GET /api/v1/settings/watchlists
-```
-
-#### Response Format
-
-```json
-{
-  "watchlists": [
-    {
-      "id": "main",
-      "name": "Main Watchlist",
-      "tickers": ["AAPL", "MSFT", "GOOG", "AMZN", "META"],
-      "sortOrder": "alphabetical",
-      "lastModified": "2025-05-02T10:15:00Z"
-    },
-    {
-      "id": "tech",
-      "name": "Tech Stocks",
-      "tickers": ["AAPL", "MSFT", "GOOG", "NVDA", "AMD"],
-      "sortOrder": "custom",
-      "lastModified": "2025-04-28T15:30:00Z"
-    },
-    // Additional watchlists...
-  ],
-  "timestamp": "2025-05-06T12:00:00Z"
-}
-```
-
-#### Create Watchlist
-
-```
-POST /api/v1/settings/watchlists
-```
-
-##### Request Body
-
-```json
-{
-  "name": "Energy Stocks",
-  "tickers": ["XOM", "CVX", "COP", "SLB", "EOG"],
-  "sortOrder": "alphabetical"
-}
-```
-
-##### Response Format
-
-```json
-{
-  "success": true,
-  "watchlist": {
-    "id": "energy",
-    "name": "Energy Stocks",
-    "tickers": ["XOM", "CVX", "COP", "SLB", "EOG"],
-    "sortOrder": "alphabetical",
-    "lastModified": "2025-05-06T12:10:45Z"
-  },
-  "timestamp": "2025-05-06T12:10:45Z"
-}
-```
-
-#### Update Watchlist
-
-```
-PUT /api/v1/settings/watchlists/:id
-```
-
-##### Path Parameters
-
-| Parameter | Type   | Required | Description                                   |
-|-----------|--------|----------|-----------------------------------------------|
-| id        | string | Yes      | Watchlist ID                                  |
-
-##### Request Body
-
-```json
-{
-  "name": "Energy Leaders",
-  "tickers": ["XOM", "CVX", "COP", "SLB", "EOG", "PSX"],
-  "sortOrder": "custom"
-}
-```
-
-##### Response Format
-
-```json
-{
-  "success": true,
-  "watchlist": {
-    "id": "energy",
-    "name": "Energy Leaders",
-    "tickers": ["XOM", "CVX", "COP", "SLB", "EOG", "PSX"],
-    "sortOrder": "custom",
-    "lastModified": "2025-05-06T12:15:22Z"
-  },
-  "timestamp": "2025-05-06T12:15:22Z"
-}
-```
-
-#### Delete Watchlist
-
-```
-DELETE /api/v1/settings/watchlists/:id
-```
-
-##### Path Parameters
-
-| Parameter | Type   | Required | Description                                   |
-|-----------|--------|----------|-----------------------------------------------|
-| id        | string | Yes      | Watchlist ID                                  |
-
-##### Response Format
-
-```json
-{
-  "success": true,
-  "message": "Watchlist deleted successfully",
-  "id": "energy",
-  "timestamp": "2025-05-06T12:20:10Z"
-}
-```
-
-### Manage Dashboard Layout
-
-#### Get Dashboard Layout
-
-```
-GET /api/v1/settings/dashboard
-```
-
-#### Response Format
-
-```json
-{
-  "widgets": [
-    {
-      "id": "sentiment-overview",
-      "position": {
-        "x": 0,
-        "y": 0,
-        "w": 6,
-        "h": 4
-      },
-      "config": {
-        "tickers": ["AAPL", "MSFT", "GOOG"],
-        "timeRange": "1w",
-        "showChart": true
-      }
-    },
-    {
-      "id": "insider-trading",
-      "position": {
-        "x": 6,
-        "y": 0,
-        "w": 6,
-        "h": 4
-      },
-      "config": {
-        "sortBy": "value",
-        "direction": "buy",
-        "limit": 10
-      }
-    },
-    // Additional widgets...
-  ],
-  "lastModified": "2025-05-01T14:22:35Z",
-  "timestamp": "2025-05-06T12:00:00Z"
-}
-```
-
-#### Update Dashboard Layout
-
-```
-PUT /api/v1/settings/dashboard
-```
-
-##### Request Body
-
-```json
-{
-  "widgets": [
-    {
-      "id": "sentiment-overview",
-      "position": {
-        "x": 0,
-        "y": 0,
-        "w": 12,
-        "h": 4
-      },
-      "config": {
-        "tickers": ["AAPL", "MSFT", "GOOG", "AMZN"],
-        "timeRange": "2w",
-        "showChart": true
-      }
-    },
-    {
-      "id": "insider-trading",
-      "position": {
-        "x": 0,
-        "y": 4,
-        "w": 6,
-        "h": 4
-      },
-      "config": {
-        "sortBy": "value",
-        "direction": "buy",
-        "limit": 10
-      }
-    },
-    // Additional widgets...
-  ]
-}
-```
-
-##### Response Format
-
-```json
-{
-  "success": true,
-  "message": "Dashboard layout updated successfully",
-  "lastModified": "2025-05-06T12:25:40Z",
-  "timestamp": "2025-05-06T12:25:40Z"
-}
-```
-
-### Manage API Keys
-
-#### Get API Key Status
-
-```
-GET /api/v1/settings/api-keys
-```
-
-#### Response Format
-
-```json
-{
   "apiKeys": {
-    "reddit": {
-      "configured": true,
-      "valid": true,
-      "lastValidated": "2025-05-05T10:30:15Z"
-    },
-    "finviz": {
-      "configured": false,
-      "valid": null,
-      "lastValidated": null
-    },
-    "thirdPartyIntegrations": [
-      {
-        "name": "tradingview",
-        "configured": true,
-        "valid": true,
-        "lastValidated": "2025-05-04T18:22:10Z"
-      },
-      {
-        "name": "stocktwits",
-        "configured": true,
-        "valid": true,
-        "lastValidated": "2025-05-06T09:15:33Z"
-      }
-    ]
-  },
-  "timestamp": "2025-05-06T12:00:00Z"
-}
-```
-
-#### Update API Keys
-
-```
-PUT /api/v1/settings/api-keys
-```
-
-##### Request Body
-
-```json
-{
-  "reddit": {
-    "clientId": "your_reddit_client_id",
-    "clientSecret": "your_reddit_client_secret",
-    "username": "your_reddit_username",
-    "password": "your_reddit_password"
-  },
-  "finviz": {
-    "apiKey": "your_finviz_api_key"
-  },
-  "thirdPartyIntegrations": {
-    "tradingview": {
-      "username": "your_tradingview_username",
-      "password": "your_tradingview_password"
-    }
+    "reddit_client_id": "your_reddit_client_id",
+    "reddit_client_secret": "your_reddit_client_secret",
+    "alpha_vantage_key": "your_alpha_vantage_key",
+    "finviz_key": "your_finviz_key",
+    "sec_key": "your_sec_key"
   }
 }
 ```
 
-##### Response Format
+#### Response Format
 
 ```json
 {
   "success": true,
   "message": "API keys updated successfully",
-  "updated": ["reddit", "finviz", "thirdPartyIntegrations.tradingview"],
-  "validation": {
-    "reddit": {
-      "valid": true,
-      "message": "Successfully authenticated with Reddit API"
-    },
-    "finviz": {
-      "valid": true,
-      "message": "Successfully authenticated with FinViz API"
-    },
-    "thirdPartyIntegrations": {
-      "tradingview": {
-        "valid": true,
-        "message": "Successfully authenticated with TradingView"
-      }
-    }
-  },
-  "timestamp": "2025-05-06T12:30:55Z"
+  "timestamp": "2024-05-06T12:00:00Z"
 }
 ```
 
-#### Delete API Keys
+#### Example Request
 
+```javascript
+const updateApiKeys = async (keys) => {
+  const response = await fetch('/api/settings/update-keys', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      apiKeys: keys
+    })
+  });
+
+  return await response.json();
+};
 ```
-DELETE /api/v1/settings/api-keys/:provider
+
+### Get Masked API Keys
+
+Retrieves user's API keys in masked format for display purposes.
+
+```http
+GET /api/settings/keys
 ```
 
-##### Path Parameters
+#### Authentication
+- **Required**: Yes
+- **Tier Access**: Available to all user tiers
 
-| Parameter | Type   | Required | Description                                   |
-|-----------|--------|----------|-----------------------------------------------|
-| provider  | string | Yes      | API provider (e.g., "reddit", "finviz")       |
-
-##### Response Format
+#### Response Format
 
 ```json
 {
   "success": true,
-  "message": "API keys for reddit deleted successfully",
-  "timestamp": "2025-05-06T12:35:20Z"
+  "keys": {
+    "reddit_client_id": "abc***xyz",
+    "reddit_client_secret": "def***uvw",
+    "alpha_vantage_key": "",
+    "finviz_key": "",
+    "sec_key": "ghi***rst"
+  },
+  "timestamp": "2024-05-06T12:00:00Z"
 }
 ```
 
-## Error Responses
+#### Masking Rules
+- Shows first 3 and last 3 characters
+- Middle characters replaced with `***`
+- Empty string for unconfigured keys
 
-### Authentication Error
+### Get Unmasked API Keys
+
+Retrieves actual unmasked API keys for viewing (admin/debug purposes).
+
+```http
+GET /api/settings/keys-unmasked
+```
+
+#### Authentication
+- **Required**: Yes
+- **Tier Access**: Available to all user tiers
+- **Security Note**: Use with caution, exposes actual keys
+
+#### Response Format
 
 ```json
 {
-  "error": true,
-  "message": "Authentication required",
-  "code": "AUTH_REQUIRED",
-  "status": 401
+  "success": true,
+  "keys": {
+    "reddit_client_id": "actual_reddit_client_id",
+    "reddit_client_secret": "actual_reddit_client_secret",
+    "alpha_vantage_key": "",
+    "finviz_key": "",
+    "sec_key": "actual_sec_key"
+  },
+  "timestamp": "2024-05-06T12:00:00Z"
 }
 ```
 
-### Invalid API Key
+## Supported API Keys
+
+### Reddit API Keys
+- **reddit_client_id**: Reddit application client ID
+- **reddit_client_secret**: Reddit application client secret
+- **Usage**: Access Reddit data for sentiment analysis
+- **Required**: Both keys needed for Reddit data access
+
+### Alpha Vantage API Key
+- **alpha_vantage_key**: Alpha Vantage API key
+- **Usage**: Stock price data and financial metrics
+- **Free Tier**: 5 requests per minute, 500 per day
+
+### FinViz API Key
+- **finviz_key**: FinViz API key (if required)
+- **Usage**: News sentiment and technical indicators
+- **Note**: May not require key for basic scraping
+
+### SEC API Key
+- **sec_key**: SEC EDGAR API key (if required)
+- **Usage**: Insider trading and institutional holdings data
+- **Note**: SEC generally doesn't require API keys
+
+## Key Storage and Security
+
+### Encryption
+- All user-provided API keys are encrypted before storage
+- Keys are stored in the `user_api_keys` table
+- Environment variables used as fallback for system-wide keys
+
+### Key Validation
+- Keys are validated before storage when possible
+- Invalid keys are rejected with appropriate error messages
+- Validation varies by data source capabilities
+
+### Key Hierarchy
+1. **User-provided keys**: Highest priority, stored encrypted
+2. **Environment variables**: System-wide fallback keys
+3. **No key**: Feature unavailable, user prompted to add key
+
+## Error Handling
+
+### Common Errors
+
+| Status Code | Error | Description |
+|-------------|-------|-------------|
+| 400 | `Invalid API keys data` | Request body format invalid |
+| 401 | `Authentication required` | Missing or invalid JWT token |
+| 500 | `Failed to save API keys` | Database error during save |
+| 500 | `Failed to fetch API keys` | Database error during retrieval |
+
+### Example Error Response
 
 ```json
 {
-  "error": true,
-  "message": "Invalid API key",
-  "code": "INVALID_KEY",
-  "status": 403
+  "success": false,
+  "error": "Invalid API keys data",
+  "status": 400
 }
 ```
 
-### Setting Not Found
+## Integration with Data Sources
 
-```json
-{
-  "error": true,
-  "message": "Setting not found: preferences.unknown",
-  "code": "SETTING_NOT_FOUND",
-  "status": 404
+### Automatic Fallback
+When user hasn't provided keys, system uses environment variables:
+
+```javascript
+// Key resolution logic
+const getEffectiveApiKey = (userKey, envKey) => {
+  return userKey && userKey.trim() ? userKey : envKey;
+};
+
+// Check if data source is available
+const isDataSourceAvailable = (requiredKeys) => {
+  return requiredKeys.every(key => 
+    userKeys[key] || process.env[key.toUpperCase()]
+  );
+};
+```
+
+### Data Source Validation
+Before making API calls, system checks key availability:
+
+```javascript
+// Example: Reddit data request
+if (!dataSourceStatus.reddit) {
+  return {
+    error: true,
+    message: "Reddit API keys not configured. Please add keys in settings.",
+    code: "MISSING_API_KEYS"
+  };
 }
 ```
 
-### Watchlist Not Found
+## User Experience
 
-```json
-{
-  "error": true,
-  "message": "Watchlist not found with ID: unknown",
-  "code": "WATCHLIST_NOT_FOUND",
-  "status": 404
-}
-```
+### Settings UI Integration
+- Settings page displays key status with visual indicators
+- Users can add/update keys through secure form
+- Masked display protects sensitive information
+- Real-time validation provides immediate feedback
 
-### Invalid Request
+### Key Setup Workflow
+1. User visits settings page
+2. System shows which keys are missing
+3. User adds keys through form
+4. Keys are validated and saved
+5. Data source status updates immediately
+6. User can access previously unavailable features
 
-```json
-{
-  "error": true,
-  "message": "Invalid request",
-  "code": "INVALID_REQUEST",
-  "status": 400,
-  "details": {
-    "watchlist.name": "Name is required",
-    "watchlist.tickers": "Tickers must be an array"
+## Rate Limiting
+
+### API Key Management
+- Key update operations are rate-limited per user
+- Prevents abuse of encryption/decryption operations
+- Standard rate limits apply (based on user tier)
+
+### Data Source Limits
+- User-provided keys subject to their own rate limits
+- System tracks usage to prevent exceeding limits
+- Environment variable keys shared across all users
+
+## Migration and Compatibility
+
+### Legacy System
+- Previous system used server-side API keys only
+- New system allows user-provided keys for personalization
+- Fallback maintains compatibility for users without keys
+
+### Key Migration
+- Existing users continue using environment variable keys
+- Optional upgrade to user-provided keys for better limits
+- No breaking changes to existing functionality
+
+## Usage Examples
+
+### Check Key Configuration Status
+
+```javascript
+const checkKeyStatus = async () => {
+  try {
+    const response = await fetch('/api/settings/key-status', {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+      }
+    });
+
+    const data = await response.json();
+    
+    // Check if Reddit is available
+    if (!data.dataSourceStatus.reddit) {
+      showRedditKeyPrompt();
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error checking key status:', error);
   }
-}
+};
 ```
 
-### API Key Validation Error
+### Update Multiple API Keys
 
-```json
-{
-  "error": true,
-  "message": "API key validation failed",
-  "code": "API_KEY_VALIDATION_ERROR",
-  "status": 400,
-  "details": {
-    "reddit": "Invalid client ID or client secret"
+```javascript
+const updateMultipleKeys = async (newKeys) => {
+  try {
+    const response = await fetch('/api/settings/update-keys', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        apiKeys: newKeys
+      })
+    });
+
+    const data = await response.json();
+    
+    if (data.success) {
+      showSuccessMessage('API keys updated successfully');
+      // Refresh key status
+      await checkKeyStatus();
+    } else {
+      showErrorMessage(data.error);
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error updating keys:', error);
+    showErrorMessage('Failed to update API keys');
   }
-}
+};
 ```
 
-## Data Storage and Security
+### Display Masked Keys
 
-1. **Encryption**: All sensitive data, such as API keys and passwords, are encrypted in the database
-2. **Access Control**: Settings are user-specific and not accessible by other users
-3. **Data Isolation**: Each user's settings are isolated in separate database records
-4. **Validation**: All input is validated to prevent injection attacks or data corruption
-5. **Audit Logging**: Changes to API keys and sensitive settings are logged for security purposes
+```javascript
+const displayUserKeys = async () => {
+  try {
+    const response = await fetch('/api/settings/keys', {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+      }
+    });
 
-## Limitations
+    const data = await response.json();
+    
+    if (data.success) {
+      // Display masked keys in UI
+      Object.entries(data.keys).forEach(([keyName, maskedValue]) => {
+        const element = document.getElementById(`key-${keyName}`);
+        if (element) {
+          element.textContent = maskedValue || 'Not configured';
+        }
+      });
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error fetching keys:', error);
+  }
+};
+```
 
-1. **Data Size**: Individual settings values are limited to 100KB in size
-2. **Rate Limiting**: Settings API is limited to 60 requests per minute per user
-3. **Watchlist Size**: Each watchlist can contain a maximum of 100 tickers
-4. **Dashboard Widgets**: Maximum of 20 widgets per dashboard layout
-5. **API Key Storage**: Only supported third-party integrations can have their API keys stored
+## Related Endpoints
+
+### User Profile
+- `GET /api/auth/profile` - Get user information and tier
+
+### Data Source Status
+- `GET /api/reddit/*` - Reddit endpoints requiring keys
+- `GET /api/sec/*` - SEC endpoints 
+- `GET /api/sentiment/*` - Sentiment analysis endpoints
+
+### Subscription Management
+- `GET /api/subscription/tier-info` - Current subscription tier
+- `GET /api/subscription/usage-stats` - API usage statistics
+
+## Security Considerations
+
+### Key Protection
+- Never log actual API keys
+- Use HTTPS for all key transmission
+- Encrypt keys at rest in database
+- Mask keys in UI display
+
+### Access Control
+- Users can only access their own keys
+- No cross-user key access possible
+- Admin access requires separate authentication
+
+### Best Practices
+- Rotate API keys regularly
+- Use least-privilege access
+- Monitor unusual usage patterns
+- Implement key expiration where possible
+
+## Related Files
+
+- `backend/src/routes/settings.js` - Settings route definitions
+- `backend/src/utils/userApiKeys.js` - Key management utilities
+- `backend/src/middleware/authMiddleware.js` - Authentication middleware
+- `frontend/src/pages/Settings.tsx` - Settings UI components
+- `frontend/src/services/settingsService.js` - Frontend API integration

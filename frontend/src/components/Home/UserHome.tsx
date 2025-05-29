@@ -19,7 +19,10 @@ import {
   Trash2,
   Crown,
   Zap,
-  Building
+  Building,
+  Settings,
+  Key,
+  BarChart
 } from 'lucide-react';
 import AddTickerModal from '../Watchlist/AddTickerModal';
 import ConfirmationDialog from '../UI/ConfirmationDialog';
@@ -84,6 +87,10 @@ const UserHome: React.FC = () => {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [tickerToRemove, setTickerToRemove] = useState<{ symbol: string; name: string } | null>(null);
   const [isRemovingTicker, setIsRemovingTicker] = useState(false);
+  
+  // Alpha Vantage API key status
+  const [alphaVantageConfigured, setAlphaVantageConfigured] = useState<boolean>(false);
+  const [checkingApiKeys, setCheckingApiKeys] = useState<boolean>(true);
 
   // Add refs to track if requests are in progress to prevent duplicate calls
   const fetchingWatchlist = useRef(false);
@@ -163,6 +170,60 @@ const UserHome: React.FC = () => {
 
     return tierData[currentTier as keyof typeof tierData] || tierData.free;
   };
+
+  // Check Alpha Vantage API key status
+  const checkAlphaVantageApiKeyStatus = useCallback(async () => {
+    if (!user?.token) {
+      setCheckingApiKeys(false);
+      return;
+    }
+
+    try {
+      const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
+      const response = await fetch(`${proxyUrl}/api/settings/key-status`, {
+        headers: {
+          Authorization: `Bearer ${user.token}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.dataSources) {
+          setAlphaVantageConfigured(data.dataSources.alpha_vantage || false);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking Alpha Vantage API key status:', error);
+      setAlphaVantageConfigured(false);
+    } finally {
+      setCheckingApiKeys(false);
+    }
+  }, [user?.token]);
+
+  // Refresh API key status when the user returns to this tab/window  
+  const refreshApiKeyStatus = useCallback(async () => {
+    if (!user?.token) {
+      return;
+    }
+
+    try {
+      const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
+      const response = await fetch(`${proxyUrl}/api/settings/key-status`, {
+        headers: {
+          Authorization: `Bearer ${user.token}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.dataSources) {
+          setAlphaVantageConfigured(data.dataSources.alpha_vantage || false);
+        }
+      }
+    } catch (error) {
+      console.error('Error refreshing Alpha Vantage API key status:', error);
+    }
+  }, [user?.token]);
 
   // Fetch watchlist data from the backend with rate limiting protection
   const fetchWatchlist = useCallback(async (forceRefresh = false) => {
@@ -478,10 +539,34 @@ const UserHome: React.FC = () => {
         fetchWatchlist();
         fetchRecentActivity();
         fetchUpcomingEvents();
+        checkAlphaVantageApiKeyStatus();
       }, 500);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.token]);
+
+  // Add event listeners for when user returns to the tab/window to refresh API key status
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshApiKeyStatus();
+      }
+    };
+
+    const handleFocus = () => {
+      refreshApiKeyStatus();
+    };
+
+    // Add event listeners for when user returns to the tab
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    // Cleanup event listeners
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [refreshApiKeyStatus]);
 
   // Cleanup effect to clear debounce timers on unmount
   useEffect(() => {
@@ -727,16 +812,10 @@ const UserHome: React.FC = () => {
 
   const handleRefreshData = async () => {
     setRefreshingData(true);
+    setRateLimitActive(false);
+    
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      // Call backend endpoint to trigger data refresh
-      await axios.post(`${apiUrl}/api/stocks/refresh-watchlist-data`, {}, {
-        headers: {
-          Authorization: `Bearer ${user?.token}`
-        }
-      });
-      
-      // Clear all caches and force refresh all data
+      // Clear cache to force fresh data
       dataCache.current.watchlist.timestamp = 0;
       dataCache.current.activity.timestamp = 0;
       dataCache.current.events.timestamp = 0;
@@ -746,12 +825,67 @@ const UserHome: React.FC = () => {
         fetchRecentActivity(true),
         fetchUpcomingEvents(true)
       ]);
-
     } catch (error) {
       console.error('Error refreshing data:', error);
     } finally {
       setRefreshingData(false);
     }
+  };
+
+  // Alpha Vantage Setup Card Component
+  const AlphaVantageSetupCard: React.FC = () => {
+    const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-800';
+    const borderColor = isLight ? 'border-stone-400' : 'border-gray-700';
+    const gradientFrom = isLight ? 'from-green-500' : 'from-green-600';
+    const gradientTo = isLight ? 'to-blue-600' : 'to-blue-700';
+    const buttonBg = isLight ? 'bg-green-500 hover:bg-green-600' : 'bg-green-600 hover:bg-green-700';
+    const secondaryButtonBg = isLight ? 'bg-gray-500 hover:bg-gray-600' : 'bg-gray-600 hover:bg-gray-700';
+    
+    return (
+      <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} text-center`}>
+        <div className={`w-16 h-16 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-full flex items-center justify-center mx-auto mb-4`}>
+          <BarChart className="w-8 h-8 text-white" />
+        </div>
+        
+        <h3 className={`text-xl font-bold ${textColor} mb-2`}>
+          Setup Alpha Vantage API Keys
+        </h3>
+        
+        <p className={`${secondaryTextColor} mb-4 max-w-md mx-auto`}>
+          Configure your Alpha Vantage API credentials to unlock real-time financial data, earnings calendar, and advanced market analytics for your watchlist.
+        </p>
+        
+        <div className={`${isLight ? 'bg-green-50' : 'bg-green-900/20'} rounded-lg p-4 mb-6 border ${isLight ? 'border-green-200' : 'border-green-800'}`}>
+          <h4 className={`font-semibold ${textColor} mb-2`}>Features You'll Unlock:</h4>
+          <ul className={`text-sm ${secondaryTextColor} space-y-1 text-left max-w-xs mx-auto`}>
+            <li>• Real-time stock prices</li>
+            <li>• Earnings calendar events</li>
+            <li>• Company financial overviews</li>
+            <li>• Advanced market analytics</li>
+            <li>• Historical price data</li>
+          </ul>
+        </div>
+        
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <button
+            onClick={() => navigate('/settings/api-keys')}
+            className={`${buttonBg} text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center`}
+          >
+            <Settings className="w-4 h-4 mr-2" />
+            Configure API Keys
+          </button>
+          <a
+            href="https://www.alphavantage.co/support/#api-key"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`${secondaryButtonBg} text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center`}
+          >
+            <Key className="w-4 h-4 mr-2" />
+            Get Alpha Vantage Key
+          </a>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -766,26 +900,26 @@ const UserHome: React.FC = () => {
         )}
         {/* Welcome Section */}
         <div className={`${cardBgColor} rounded-lg p-6 mb-6 border ${borderColor} relative`}>
-          {/* HRVSTR Icon with Gold Star Badge */}
-          <div className="absolute top-4 right-4">
+          {/* HRVSTR Icon with Tier Badge - Responsive sizing and positioning */}
+          <div className="absolute top-3 right-3 sm:top-4 sm:right-4">
             <div className="relative">
-              {/* HRVSTR Icon */}
+              {/* HRVSTR Icon - Larger on mobile for better visibility */}
               <img 
                 src="/hrvstr_icon.png" 
                 alt="HRVSTR" 
-                className="w-12 h-12 object-contain"
+                className="w-16 h-16 sm:w-12 sm:h-12 object-contain"
                 style={{ filter: iconFilter }}
               />
-              {/* Gold Star Badge */}
-              <div className="absolute -top-1 -right-1">
-                <div className={`w-5 h-5 flex items-center justify-center ${getUserTierInfo().iconColor}`}>
+              {/* Tier Badge - Scaled proportionally */}
+              <div className="absolute -top-1 -right-1 sm:-top-1 sm:-right-1">
+                <div className={`w-6 h-6 sm:w-5 sm:h-5 flex items-center justify-center ${getUserTierInfo().iconColor}`}>
                   {getUserTierInfo().icon}
                 </div>
               </div>
             </div>
           </div>
           
-          <h1 className={`text-2xl font-bold ${welcomeTextColor} pr-16`}>
+          <h1 className={`text-2xl font-bold ${welcomeTextColor} pr-20 sm:pr-16`}>
             Welcome back, <br className="block sm:hidden" />
             <span className="block sm:inline bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent ml-4">
               {user?.name}!
@@ -997,107 +1131,121 @@ const UserHome: React.FC = () => {
             </div>
           </div>
 
-          {/* Upcoming Events */}
-          <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} lg:col-span-2`}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className={`text-xl font-semibold ${textColor} flex items-center`}>
-                <Clock className="w-5 h-5 mr-2 text-blue-500" />
-                Upcoming Events
-              </h2>
+          {/* Upcoming Events / Alpha Vantage Setup */}
+          {checkingApiKeys ? (
+            // Loading state while checking API keys
+            <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} lg:col-span-2 text-center`}>
+              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-500" />
+              <p className={`${secondaryTextColor}`}>Checking Alpha Vantage configuration...</p>
             </div>
-            <div className="space-y-4">
-              {loadingEvents && (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className={`w-6 h-6 animate-spin ${secondaryTextColor}`} />
-                  <span className={`ml-2 ${secondaryTextColor}`}>Loading upcoming events...</span>
-                </div>
-              )}
-              {eventsError && <p className="text-red-500">Error: {eventsError}</p>}
-              {!loadingEvents && !eventsError && upcomingEvents.length === 0 && (
-                <p className={secondaryTextColor}>No upcoming events.</p>
-              )}
-              {!loadingEvents && !eventsError && upcomingEvents.length > 0 && (() => {
-                try {
-                  // Ensure upcomingEvents is definitely an array before mapping
-                  const safeEvents = Array.isArray(upcomingEvents) ? upcomingEvents : [];
-                  
-                  // Group events by symbol
-                  const eventsBySymbol = safeEvents.reduce((acc, event) => {
-                    const symbol = event.symbol || 'Unknown';
-                    if (!acc[symbol]) {
-                      acc[symbol] = [];
-                    }
-                    acc[symbol].push(event);
-                    return acc;
-                  }, {} as { [key: string]: typeof safeEvents });
+          ) : !alphaVantageConfigured ? (
+            // Alpha Vantage setup card when not configured
+            <div className="lg:col-span-2">
+              <AlphaVantageSetupCard />
+            </div>
+          ) : (
+            // Normal upcoming events when Alpha Vantage is configured
+            <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} lg:col-span-2`}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className={`text-xl font-semibold ${textColor} flex items-center`}>
+                  <Clock className="w-5 h-5 mr-2 text-blue-500" />
+                  Upcoming Events
+                </h2>
+              </div>
+              <div className="space-y-4">
+                {loadingEvents && (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className={`w-6 h-6 animate-spin ${secondaryTextColor}`} />
+                    <span className={`ml-2 ${secondaryTextColor}`}>Loading upcoming events...</span>
+                  </div>
+                )}
+                {eventsError && <p className="text-red-500">Error: {eventsError}</p>}
+                {!loadingEvents && !eventsError && upcomingEvents.length === 0 && (
+                  <p className={secondaryTextColor}>No upcoming events.</p>
+                )}
+                {!loadingEvents && !eventsError && upcomingEvents.length > 0 && (() => {
+                  try {
+                    // Ensure upcomingEvents is definitely an array before mapping
+                    const safeEvents = Array.isArray(upcomingEvents) ? upcomingEvents : [];
+                    
+                    // Group events by symbol
+                    const eventsBySymbol = safeEvents.reduce((acc, event) => {
+                      const symbol = event.symbol || 'Unknown';
+                      if (!acc[symbol]) {
+                        acc[symbol] = [];
+                      }
+                      acc[symbol].push(event);
+                      return acc;
+                    }, {} as { [key: string]: typeof safeEvents });
 
-                  return Object.entries(eventsBySymbol).map(([symbol, symbolEvents]) => (
-                    <div key={symbol} className={`p-4 rounded-lg border ${borderColor} ${cardBgColor}`}>
-                      {/* Company Header */}
-                      <div className="flex items-center mb-3">
-                        <span className={`text-lg font-semibold ${textColor}`}>{symbol}</span>
-                        <span className={`text-sm ${secondaryTextColor} ml-2`}>
-                          ({symbolEvents.length} event{symbolEvents.length !== 1 ? 's' : ''})
-                        </span>
-                      </div>
-                      
-                      {/* Events Row */}
-                      <div className="flex space-x-4 overflow-x-auto">
-                        {symbolEvents.map((event) => (
-                          <div 
-                            key={event.id || Math.random()} 
-                            className={`min-w-64 p-3 rounded-lg border ${borderColor} bg-opacity-50 hover:bg-opacity-70 transition-all flex-shrink-0`}
-                          >
-                            <div className="flex items-center space-x-2 mb-2">
-                              {getEventIcon(event.event_type)}
-                              <span className={`text-sm font-medium ${textColor}`}>
-                                {capitalizeFirstLetter(event.event_type || 'event')}
-                              </span>
-                            </div>
-                            <div className="mb-2">
-                              <p className={`text-sm ${secondaryTextColor}`}>
-                                {formatDate(event.scheduled_at)}
-                              </p>
-                              <p className={`text-xs ${secondaryTextColor}`}>
-                                {formatTime(event.scheduled_at)}
-                              </p>
-                            </div>
-                            <div className="flex items-center">
-                              {(() => {
-                                const relativeTime = formatEventRelativeTime(event.scheduled_at);
-                                if (!relativeTime) {
-                                  // Fallback to status if no relative time available
+                    return Object.entries(eventsBySymbol).map(([symbol, symbolEvents]) => (
+                      <div key={symbol} className={`p-4 rounded-lg border ${borderColor} ${cardBgColor}`}>
+                        {/* Company Header */}
+                        <div className="flex items-center mb-3">
+                          <span className={`text-lg font-semibold ${textColor}`}>{symbol}</span>
+                          <span className={`text-sm ${secondaryTextColor} ml-2`}>
+                            ({symbolEvents.length} event{symbolEvents.length !== 1 ? 's' : ''})
+                          </span>
+                        </div>
+                        
+                        {/* Events Row */}
+                        <div className="flex space-x-4 overflow-x-auto">
+                          {symbolEvents.map((event) => (
+                            <div 
+                              key={event.id || Math.random()} 
+                              className={`min-w-64 p-3 rounded-lg border ${borderColor} bg-opacity-50 hover:bg-opacity-70 transition-all flex-shrink-0`}
+                            >
+                              <div className="flex items-center space-x-2 mb-2">
+                                {getEventIcon(event.event_type)}
+                                <span className={`text-sm font-medium ${textColor}`}>
+                                  {capitalizeFirstLetter(event.event_type || 'event')}
+                                </span>
+                              </div>
+                              <div className="mb-2">
+                                <p className={`text-sm ${secondaryTextColor}`}>
+                                  {formatDate(event.scheduled_at)}
+                                </p>
+                                <p className={`text-xs ${secondaryTextColor}`}>
+                                  {formatTime(event.scheduled_at)}
+                                </p>
+                              </div>
+                              <div className="flex items-center">
+                                {(() => {
+                                  const relativeTime = formatEventRelativeTime(event.scheduled_at);
+                                  if (!relativeTime) {
+                                    // Fallback to status if no relative time available
+                                    return (
+                                      <span className={`text-xs px-2 py-1 rounded-full ${
+                                        event.status === 'scheduled' 
+                                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                                          : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                      }`}>
+                                        {event.status || 'unknown'}
+                                      </span>
+                                    );
+                                  }
+                                  
+                                  const badgeStyle = getRelativeTimeBadgeStyle(relativeTime);
                                   return (
-                                    <span className={`text-xs px-2 py-1 rounded-full ${
-                                      event.status === 'scheduled' 
-                                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                                        : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                    }`}>
-                                      {event.status || 'unknown'}
+                                    <span className={`text-xs px-2 py-1 rounded-full ${badgeStyle.className}`}>
+                                      {relativeTime}
                                     </span>
                                   );
-                                }
-                                
-                                const badgeStyle = getRelativeTimeBadgeStyle(relativeTime);
-                                return (
-                                  <span className={`text-xs px-2 py-1 rounded-full ${badgeStyle.className}`}>
-                                    {relativeTime}
-                                  </span>
-                                );
-                              })()}
+                                })()}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ));
-                } catch (error) {
-                  console.error('Error rendering upcoming events:', error);
-                  return <p className="text-red-500">Error displaying events data</p>;
-                }
-              })()}
+                    ));
+                  } catch (error) {
+                    console.error('Error rendering upcoming events:', error);
+                    return <p className="text-red-500">Error displaying events data</p>;
+                  }
+                })()}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 

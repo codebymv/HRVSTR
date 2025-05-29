@@ -10,9 +10,12 @@
     "dev": "concurrently \"npm:dev:*\" --names \"frontend,backend\" --prefix-colors \"cyan,yellow\"",
     "dev:frontend": "cd frontend && npm run dev",
     "dev:backend": "cd backend && npm run dev",
-    "prebuild": "echo 'Preparing build...' && ls -la !docs/ || dir \"!docs\\\" || echo 'Docs folder check complete'",
-    "build": "npm run build:frontend && npm run build:backend",
-    "postbuild": "cp -r !docs backend/docs || xcopy /E /I \"!docs\" \"backend\\docs\" || echo 'Docs copy completed'",
+    "docs:sync": "node sync-docs.js sync",
+    "docs:watch": "node sync-docs.js watch",
+    "docs:check": "node sync-docs.js check",
+    "prebuild": "echo 'Preparing build...' && npm run docs:check",
+    "build": "npm run docs:sync && npm run build:frontend && npm run build:backend",
+    "postbuild": "echo 'Build completed with docs synced'",
     "build:frontend": "cd frontend && npm run build",
     "build:backend": "cd backend && npm run build",
     "start": "cd backend && npm start",
@@ -31,8 +34,10 @@
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
+    "chokidar": "^3.5.3",
     "concurrently": "^9.1.2",
     "eslint": "^9.9.1",
+    "nodemon": "^3.0.2",
     "typescript": "^5.5.3"
   }
 }
