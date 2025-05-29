@@ -144,27 +144,31 @@ const UserHome: React.FC = () => {
     const tierData = {
       free: {
         name: 'HRVSTR Free',
-        icon: <Star className="w-4 h-4" />,
+        icon: <Star className="w-5 h-5" />,
         iconColor: 'text-gray-400',
-        textColor: 'text-gray-400'
+        textColor: 'text-gray-400',
+        bgColor: 'bg-gray-100 dark:bg-gray-800'
       },
       pro: {
         name: 'HRVSTR Pro',
-        icon: <Crown className="w-4 h-4" />,
+        icon: <Crown className="w-5 h-5" />,
         iconColor: 'text-blue-500',
-        textColor: 'text-blue-400'
+        textColor: 'text-blue-400',
+        bgColor: 'bg-blue-100 dark:bg-blue-900'
       },
       elite: {
         name: 'HRVSTR Elite',
-        icon: <Zap className="w-4 h-4" />,
+        icon: <Zap className="w-5 h-5" />,
         iconColor: 'text-purple-500',
-        textColor: 'text-purple-400'
+        textColor: 'text-purple-400',
+        bgColor: 'bg-purple-100 dark:bg-purple-900'
       },
       institutional: {
         name: 'HRVSTR Institutional',
-        icon: <Building className="w-4 h-4" />,
+        icon: <Building className="w-5 h-5" />,
         iconColor: 'text-green-500',
-        textColor: 'text-green-400'
+        textColor: 'text-green-400',
+        bgColor: 'bg-green-100 dark:bg-green-900'
       }
     };
 
@@ -925,14 +929,19 @@ const UserHome: React.FC = () => {
               {user?.name}!
             </span>
           </h1>
-          <p className={`${secondaryTextColor} mt-2 flex items-center`}>
-            Tier: 
-            <span className={`font-semibold ml-2 flex items-center`}>
-              <span className={getUserTierInfo().textColor}>
-                {getUserTierInfo().name}
-              </span>
-            </span>
-          </p>
+          <div className="mt-3 flex items-center">
+            {/* Tier Badge */}
+            {tierInfo?.tier && (
+              <div className={`flex items-center space-x-2 px-3 py-1 rounded-full ${getUserTierInfo().bgColor}`}>
+                <span className={getUserTierInfo().iconColor}>
+                  {getUserTierInfo().icon}
+                </span>
+                <span className={`text-sm font-medium ${getUserTierInfo().iconColor}`}>
+                  {getUserTierInfo().name}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Quick Actions */}

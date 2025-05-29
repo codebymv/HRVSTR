@@ -183,10 +183,10 @@ const Home: React.FC = () => {
             {/* Version Notes Link */}
             <div className="mb-8">
               <a 
-                href="/help/Version/0.7.2-overview"
+                href="/help/Version/0.7.5-overview"
                 className="text-sm text-blue-500 hover:text-blue-600 flex items-center justify-center"
               >
-                📋 Version 0.7.2 Notes
+                📋 Version 0.7.5 Notes
                 <ArrowRight className="w-4 h-4 ml-1" />
               </a>
             </div>
@@ -198,11 +198,11 @@ const Home: React.FC = () => {
               {/* Overall Progress */}
               <div>
                 <div className="flex justify-between items-center mb-2">
-                  <span className={`text-lg font-medium ${textColor}`}>v 0.7.2</span>
+                  <span className={`text-lg font-medium ${textColor}`}>v 0.7.5</span>
                   <span className={`text-lg font-bold ${textColor}`}>1.0 Stable Release</span>
                 </div>
                 <div className={`w-full bg-gray-300 rounded-full h-3 ${isLight ? 'bg-stone-400' : 'bg-gray-700'}`}>
-                  <div className="bg-gradient-to-r from-teal-400 to-blue-500 h-3 rounded-full transition-all duration-500" style={{ width: '73%' }}></div>
+                  <div className="bg-gradient-to-r from-teal-400 to-blue-500 h-3 rounded-full transition-all duration-500" style={{ width: '77%' }}></div>
                 </div>
               </div>
             </div>
