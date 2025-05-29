@@ -360,14 +360,6 @@ const Home: React.FC = () => {
 
         {/* Yearly Pricing Section */}
         <div className="mt-20">
-          <div className="text-center mb-12">
-            <h2 className={`text-3xl md:text-4xl font-bold ${textColor} mb-4`}>
-              Save More with Yearly Plans
-            </h2>
-            <p className={`text-lg ${secondaryTextColor} max-w-2xl mx-auto`}>
-              Get the same great features at a discounted rate when you commit to a full year.
-            </p>
-          </div>
           <div className="max-w-6xl mx-auto">
             <YearlyPricingCards 
               onPurchaseClick={handlePurchaseClick}

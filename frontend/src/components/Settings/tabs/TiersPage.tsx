@@ -352,7 +352,7 @@ const TiersPage: React.FC = () => {
         <div className="mb-8">
           <div className="text-center mb-6">
             <h2 className={`text-xl lg:text-2xl font-bold ${textColor} mb-2`}>Yearly Plans</h2>
-            <p className={secondaryTextColor}>Save more with our annual subscription options</p>
+            <p className={secondaryTextColor}>Save more with annual subscription options</p>
           </div>
           <YearlyPricingCards 
             onPurchaseClick={handlePurchaseClick}
