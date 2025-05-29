@@ -1,6 +1,20 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+// Get the API URL with smart production detection (same logic as apiService.ts)
+const getApiUrl = (): string => {
+  // In production, use the Railway backend service URL
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.PROD) {
+    return 'https://backend-production-81ee.up.railway.app';
+  }
+  // In development, use the environment variable or default
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
+    return (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:3001';
+  }
+  // Fallback for other environments
+  return 'http://localhost:3001';
+};
+
+const API_BASE_URL = getApiUrl();
 
 export interface DocFile {
   path: string;
