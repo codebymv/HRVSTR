@@ -56,23 +56,23 @@ const ProfilePage: React.FC = () => {
     const tierData = {
       free: {
         icon: <Star className="w-5 h-5" />,
-        color: 'text-gray-400',
+        color: 'text-gray-300',
         bgColor: 'bg-gray-100 dark:bg-gray-800'
       },
       pro: {
         icon: <Crown className="w-5 h-5" />,
-        color: 'text-blue-500',
+        color: 'text-blue-400',
         bgColor: 'bg-blue-100 dark:bg-blue-900'
       },
       elite: {
         icon: <Zap className="w-5 h-5" />,
-        color: 'text-purple-500',
+        color: 'text-purple-400',
         bgColor: 'bg-purple-100 dark:bg-purple-900'
       },
       institutional: {
         icon: <Building className="w-5 h-5" />,
-        color: 'text-green-500',
-        bgColor: 'bg-green-100 dark:bg-green-900'
+        color: 'text-emerald-400',
+        bgColor: 'bg-emerald-100 dark:bg-emerald-900'
       }
     };
 
@@ -195,10 +195,18 @@ const ProfilePage: React.FC = () => {
         <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor}`}>
           <div className="flex items-center space-x-4">
             <div className={`w-16 h-16 rounded-full ${cardBgColor} border-2 ${borderColor} flex items-center justify-center`}>
-              <User className={`w-8 h-8 ${accentColor}`} />
+              <span className={`${getTierInfo(profileData?.tier || 'free').color}`}>
+                {React.cloneElement(getTierInfo(profileData?.tier || 'free').icon, { 
+                  className: 'w-8 h-8' 
+                })}
+              </span>
             </div>
             <div className="flex-1">
-              <h1 className={`text-2xl font-bold ${textColor}`}>{profileData?.name || 'User Profile'}</h1>
+              <h1 className="text-2xl font-bold">
+                <span className="bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent">
+                  {profileData?.name || 'User Profile'}
+                </span>
+              </h1>
               <p className={`${secondaryTextColor} mt-1`}>{profileData?.email}</p>
               <div className="flex items-center mt-2 space-x-4">
                 {/* Tier Badge */}
@@ -240,72 +248,8 @@ const ProfilePage: React.FC = () => {
             </div>
           </div>
         </div>
-
-        {/* Credits & Usage */}
-        <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor}`}>
-          <h2 className={`text-xl font-semibold ${textColor} mb-4 flex items-center`}>
-            <CreditCard className="w-5 h-5 mr-2" />
-            Credits & Usage
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Credits Remaining */}
-            <div className="space-y-2">
-              <h3 className={`font-medium ${textColor}`}>Credits Remaining</h3>
-              <p className={`text-2xl font-bold ${accentColor}`}>
-                {profileData?.credits_remaining ?? 'N/A'}
-              </p>
-            </div>
-
-            {/* Monthly Limit */}
-            <div className="space-y-2">
-              <h3 className={`font-medium ${textColor}`}>Monthly Limit</h3>
-              <p className={`text-2xl font-bold ${textColor}`}>
-                {profileData?.credits_monthly_limit ?? 'N/A'}
-              </p>
-            </div>
-
-            {/* Credits Reset Date */}
-            <div className="space-y-2 md:col-span-2">
-              <h3 className={`font-medium ${textColor}`}>Credits Reset Date</h3>
-              <p className={secondaryTextColor}>
-                {profileData?.credits_reset_date ? formatDate(profileData.credits_reset_date) : 'N/A'}
-              </p>
-            </div>
           </div>
         </div>
-
-        {/* Subscription Details */}
-        {(profileData?.stripe_customer_id || profileData?.stripe_subscription_id) && (
-          <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor}`}>
-            <h2 className={`text-xl font-semibold ${textColor} mb-4 flex items-center`}>
-              <CheckCircle className="w-5 h-5 mr-2" />
-              Subscription Details
-            </h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {profileData?.stripe_customer_id && (
-                <div className="space-y-2">
-                  <h3 className={`font-medium ${textColor}`}>Stripe Customer ID</h3>
-                  <p className={`font-mono text-sm ${secondaryTextColor} break-all`}>
-                    {profileData.stripe_customer_id}
-                  </p>
-                </div>
-              )}
-
-              {profileData?.stripe_subscription_id && (
-                <div className="space-y-2">
-                  <h3 className={`font-medium ${textColor}`}>Stripe Subscription ID</h3>
-                  <p className={`font-mono text-sm ${secondaryTextColor} break-all`}>
-                    {profileData.stripe_subscription_id}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
   );
 };
 

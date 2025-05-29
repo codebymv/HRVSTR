@@ -145,30 +145,30 @@ const UserHome: React.FC = () => {
       free: {
         name: 'HRVSTR Free',
         icon: <Star className="w-5 h-5" />,
-        iconColor: 'text-gray-400',
-        textColor: 'text-gray-400',
+        iconColor: 'text-gray-300',
+        textColor: 'text-gray-300',
         bgColor: 'bg-gray-100 dark:bg-gray-800'
       },
       pro: {
         name: 'HRVSTR Pro',
         icon: <Crown className="w-5 h-5" />,
-        iconColor: 'text-blue-500',
+        iconColor: 'text-blue-400',
         textColor: 'text-blue-400',
         bgColor: 'bg-blue-100 dark:bg-blue-900'
       },
       elite: {
         name: 'HRVSTR Elite',
         icon: <Zap className="w-5 h-5" />,
-        iconColor: 'text-purple-500',
+        iconColor: 'text-purple-400',
         textColor: 'text-purple-400',
         bgColor: 'bg-purple-100 dark:bg-purple-900'
       },
       institutional: {
         name: 'HRVSTR Institutional',
         icon: <Building className="w-5 h-5" />,
-        iconColor: 'text-green-500',
-        textColor: 'text-green-400',
-        bgColor: 'bg-green-100 dark:bg-green-900'
+        iconColor: 'text-emerald-400',
+        textColor: 'text-emerald-400',
+        bgColor: 'bg-emerald-100 dark:bg-emerald-900'
       }
     };
 
