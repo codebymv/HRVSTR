@@ -32,6 +32,9 @@ const HelpPage: React.FC = () => {
   const sidebarBg = theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50';
   const searchBg = theme === 'dark' ? 'bg-gray-700' : 'bg-white';
   const searchBorder = theme === 'dark' ? 'border-gray-600' : 'border-gray-300';
+  const linkColor = theme === 'dark' ? 'text-blue-400' : 'text-blue-600';
+  const linkHoverColor = theme === 'dark' ? 'text-blue-300' : 'text-blue-800';
+  const mutedTextColor = theme === 'dark' ? 'text-gray-400' : 'text-gray-500';
 
   // Load document structure on component mount
   useEffect(() => {
@@ -53,13 +56,40 @@ const HelpPage: React.FC = () => {
       setLoading(true);
       // If path is empty (root /help) or 'getting-started', fetch 'getting-started.md'
       const effectivePath = (!path || path === '/') ? 'getting-started' : path;
-      const markdownContent = await docsService.getDocContent(effectivePath);
+      
+      // Check if this path is a folder in our structure
+      const structure = await docsService.getDocStructure();
+      const isFolder = findItemByPath(structure, effectivePath)?.type === 'folder';
+      
+      let markdownContent: string;
+      if (isFolder) {
+        // Generate folder content listing
+        markdownContent = docsService.generateFolderContent(effectivePath);
+      } else {
+        // Load actual markdown content
+        markdownContent = await docsService.getDocContent(effectivePath);
+      }
+      
       setContent(markdownContent);
     } catch (error) {
       setContent('## Error\n\nUnable to load documentation content.');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Helper function to find an item by path in the structure
+  const findItemByPath = (items: DocStructure[], path: string): DocStructure | null => {
+    for (const item of items) {
+      if (item.path === path) {
+        return item;
+      }
+      if (item.children) {
+        const found = findItemByPath(item.children, path);
+        if (found) return found;
+      }
+    }
+    return null;
   };
 
   // Update path and breadcrumbs
@@ -116,8 +146,13 @@ const HelpPage: React.FC = () => {
       <div key={item.path} className={`ml-${level * 3}`}>
         <Link
           to={`/help/${item.path}`}
-          className={`flex items-center px-3 py-2 rounded-md text-sm hover:${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} transition-colors ${
-            (pathParam === item.path || (pathParam === '' && item.path === 'getting-started')) ? (theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200') : ''
+          className={`flex items-center px-3 py-2 rounded-md text-sm transition-colors ${
+            (pathParam === item.path || (pathParam === '' && item.path === 'getting-started')) 
+              ? (theme === 'dark' ? 'bg-gray-700 text-blue-300' : 'bg-gray-200 text-blue-700') 
+              : (theme === 'dark' 
+                  ? 'text-gray-300 hover:bg-gray-700 hover:text-blue-300' 
+                  : 'text-gray-700 hover:bg-gray-200 hover:text-blue-700'
+                )
           }`}
           onClick={() => {
             // Close sidebar on mobile when link is clicked
@@ -127,9 +162,13 @@ const HelpPage: React.FC = () => {
           }}
         >
           {item.type === 'folder' ? (
-            <Folder className="h-4 w-4 mr-2 text-blue-500 flex-shrink-0" />
+            <Folder className={`h-4 w-4 mr-2 flex-shrink-0 ${
+              theme === 'dark' ? 'text-blue-400' : 'text-blue-500'
+            }`} />
           ) : (
-            <FileText className="h-4 w-4 mr-2 text-green-500 flex-shrink-0" />
+            <FileText className={`h-4 w-4 mr-2 flex-shrink-0 ${
+              theme === 'dark' ? 'text-green-400' : 'text-green-500'
+            }`} />
           )}
           <span className="truncate">{item.name}</span>
         </Link>
@@ -207,13 +246,19 @@ const HelpPage: React.FC = () => {
             {/* Search */}
             <div className="mb-6">
               <div className="relative">
-                <Search className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <Search className={`h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 ${
+                  theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                }`} />
                 <input
                   type="text"
                   placeholder="Search documentation..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className={`w-full pl-10 pr-4 py-2 rounded-lg border ${searchBorder} ${searchBg} focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm`}
+                  className={`w-full pl-10 pr-4 py-2 rounded-lg border ${searchBorder} ${searchBg} focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm ${
+                    theme === 'dark' 
+                      ? 'text-gray-100 placeholder-gray-400 focus:border-blue-400' 
+                      : 'text-gray-900 placeholder-gray-500 focus:border-blue-500'
+                  }`}
                 />
               </div>
             </div>
@@ -242,7 +287,11 @@ const HelpPage: React.FC = () => {
                 <button
                   id="mobile-menu-button"
                   onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                  className={`flex items-center px-3 py-2 rounded-md ${theme === 'dark' ? 'bg-gray-800 text-white border-gray-600' : 'bg-white text-gray-900 border-gray-300'} border shadow-sm hover:shadow-md transition-shadow`}
+                  className={`flex items-center px-3 py-2 rounded-md border shadow-sm hover:shadow-md transition-shadow ${
+                    theme === 'dark' 
+                      ? 'bg-gray-800 text-white border-gray-600 hover:bg-gray-700' 
+                      : 'bg-white text-gray-900 border-gray-300 hover:bg-gray-50'
+                  }`}
                 >
                   <Menu className="h-5 w-5 mr-2" />
                   <span className="text-sm font-medium">Documentation Menu</span>
@@ -257,28 +306,28 @@ const HelpPage: React.FC = () => {
                       {index === 0 && breadcrumbs.length > 1 && pathParam !== '' ? (
                          <Link
                           to={crumb.path}
-                          className="text-blue-600 hover:text-blue-800 transition-colors flex items-center text-sm lg:text-base"
+                          className={`${linkColor} hover:${linkHoverColor} transition-colors flex items-center text-sm lg:text-base`}
                         >
                            <Home className="h-4 w-4 mr-1" /> 
                            <span className="hidden sm:inline">{crumb.name}</span>
                            <span className="sm:hidden">Help</span>
                          </Link>
                       ) : index === 0 && (pathParam === '' || breadcrumbs.length === 1) ? (
-                        <span className="text-gray-500 flex items-center text-sm lg:text-base">
+                        <span className={`${mutedTextColor} flex items-center text-sm lg:text-base`}>
                           <Home className="h-4 w-4 mr-1" /> 
                           <span className="hidden sm:inline">{crumb.name}</span>
                           <span className="sm:hidden">Help</span>
                         </span>
                       ) : (
-                        <ChevronRight className="h-4 w-4 mx-1 lg:mx-2 text-gray-400 flex-shrink-0" />
+                        <ChevronRight className={`h-4 w-4 mx-1 lg:mx-2 ${mutedTextColor} flex-shrink-0`} />
                       )}
                       {index > 0 && (
                         index === breadcrumbs.length - 1 ? (
-                          <span className="text-gray-500 text-sm lg:text-base truncate max-w-xs lg:max-w-none">{crumb.name}</span>
+                          <span className={`${mutedTextColor} text-sm lg:text-base truncate max-w-xs lg:max-w-none`}>{crumb.name}</span>
                         ) : (
                           <Link
                             to={crumb.path}
-                            className="text-blue-600 hover:text-blue-800 transition-colors text-sm lg:text-base truncate max-w-xs lg:max-w-none"
+                            className={`${linkColor} hover:${linkHoverColor} transition-colors text-sm lg:text-base truncate max-w-xs lg:max-w-none`}
                           >
                             {crumb.name}
                           </Link>
@@ -302,12 +351,41 @@ const HelpPage: React.FC = () => {
               ) : (
                 <div className={`
                   prose prose-sm sm:prose lg:prose-lg max-w-none 
-                  ${theme === 'dark' ? 'prose-invert' : ''}
-                  prose-headings:font-semibold
-                  prose-a:text-blue-600 hover:prose-a:text-blue-800
-                  prose-code:text-sm prose-code:bg-gray-100 dark:prose-code:bg-gray-800
-                  prose-pre:text-sm prose-pre:overflow-x-auto
-                  prose-img:rounded-lg prose-img:shadow-md
+                  ${theme === 'dark' 
+                    ? 'prose-invert prose-headings:text-gray-100 prose-p:text-gray-200 prose-li:text-gray-200 prose-td:text-gray-200 prose-th:text-gray-200' 
+                    : 'prose-headings:text-gray-900 prose-p:text-gray-800 prose-li:text-gray-800 prose-td:text-gray-800 prose-th:text-gray-800'
+                  }
+                  prose-headings:font-semibold prose-headings:tracking-tight
+                  ${theme === 'dark' 
+                    ? 'prose-a:text-blue-400 hover:prose-a:text-blue-300' 
+                    : 'prose-a:text-blue-600 hover:prose-a:text-blue-800'
+                  }
+                  prose-strong:font-semibold
+                  ${theme === 'dark' 
+                    ? 'prose-strong:text-gray-100 prose-code:text-blue-300 prose-code:bg-gray-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded' 
+                    : 'prose-strong:text-gray-900 prose-code:text-blue-700 prose-code:bg-gray-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded'
+                  }
+                  prose-pre:text-sm prose-pre:overflow-x-auto prose-pre:rounded-lg prose-pre:border
+                  ${theme === 'dark' 
+                    ? 'prose-pre:bg-gray-900 prose-pre:border-gray-700 prose-pre:text-gray-200' 
+                    : 'prose-pre:bg-gray-50 prose-pre:border-gray-200 prose-pre:text-gray-800'
+                  }
+                  prose-blockquote:border-l-4 prose-blockquote:pl-4 prose-blockquote:italic
+                  ${theme === 'dark' 
+                    ? 'prose-blockquote:border-blue-400 prose-blockquote:text-gray-300' 
+                    : 'prose-blockquote:border-blue-500 prose-blockquote:text-gray-600'
+                  }
+                  prose-img:rounded-lg prose-img:shadow-md prose-img:border
+                  ${theme === 'dark' ? 'prose-img:border-gray-700' : 'prose-img:border-gray-200'}
+                  prose-table:text-sm
+                  ${theme === 'dark' 
+                    ? 'prose-th:bg-gray-800 prose-td:border-gray-700 prose-th:border-gray-700' 
+                    : 'prose-th:bg-gray-50 prose-td:border-gray-200 prose-th:border-gray-200'
+                  }
+                  prose-hr:border-gray-300 dark:prose-hr:border-gray-600
+                  prose-ul:list-disc prose-ol:list-decimal
+                  prose-li:my-1
+                  ${theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}
                 `}>
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}

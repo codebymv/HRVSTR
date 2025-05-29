@@ -249,14 +249,86 @@ class DocsService {
 
   async searchDocs(query: string): Promise<DocStructure[]> {
     try {
-      const response = await axios.get(`${this.baseUrl}/search`, {
-        params: { q: query }
-      });
+      const response = await axios.get(`${this.baseUrl}/api/docs/search?q=${encodeURIComponent(query)}`);
       return response.data;
     } catch (error) {
       console.error('Error searching docs:', error);
       return [];
     }
+  }
+
+  generateFolderContent(path: string): string {
+    const structure = this.getStaticStructure();
+    const folder = this.findFolderByPath(structure, path);
+    
+    if (!folder || folder.type !== 'folder') {
+      return this.getFallbackContent(path);
+    }
+
+    const folderName = folder.name;
+    let content = `# ${folderName}\n\n`;
+    
+    // Add context-aware descriptions
+    const description = this.getFolderDescription(path, folderName);
+    content += `${description}\n\n`;
+
+    if (folder.children && folder.children.length > 0) {
+      content += `## Contents\n\n`;
+      
+      // Separate folders and files
+      const folders = folder.children.filter(child => child.type === 'folder');
+      const files = folder.children.filter(child => child.type === 'file');
+
+      // Add folders first
+      if (folders.length > 0) {
+        content += `### 📁 Folders\n\n`;
+        folders.forEach(child => {
+          content += `- **[${child.name}](/help/${child.path})** - `;
+          content += `${child.children?.length || 0} item${(child.children?.length || 0) !== 1 ? 's' : ''}\n`;
+        });
+        content += `\n`;
+      }
+
+      // Add files
+      if (files.length > 0) {
+        content += `### 📄 Documentation Files\n\n`;
+        files.forEach(child => {
+          content += `- **[${child.name}](/help/${child.path})**\n`;
+        });
+        content += `\n`;
+      }
+
+      // Add quick navigation
+      content += `## Quick Navigation\n\n`;
+      content += `| Name | Type | Path |\n`;
+      content += `|------|------|------|\n`;
+      folder.children.forEach(child => {
+        const icon = child.type === 'folder' ? '📁' : '📄';
+        content += `| ${icon} [${child.name}](/help/${child.path}) | ${child.type} | \`${child.path}\` |\n`;
+      });
+
+    } else {
+      content += `*This folder is currently empty or has no documented items.*\n\n`;
+    }
+
+    content += `\n---\n\n`;
+    content += `💡 **Tip**: Use the sidebar navigation or search above to quickly find specific documentation.\n\n`;
+    content += `[🏠 Back to Documentation Home](/help)`;
+
+    return content;
+  }
+
+  private findFolderByPath(structure: DocStructure[], path: string): DocStructure | null {
+    for (const item of structure) {
+      if (item.path === path) {
+        return item;
+      }
+      if (item.children) {
+        const found = this.findFolderByPath(item.children, path);
+        if (found) return found;
+      }
+    }
+    return null;
   }
 
   private getFallbackContent(path: string): string {
@@ -449,6 +521,33 @@ class DocsService {
         ]
       }
     ];
+  }
+
+  private getFolderDescription(path: string, folderName: string): string {
+    const descriptions: Record<string, string> = {
+      'API': 'Complete API documentation including endpoints, authentication, and configuration details.',
+      'Config': 'Configuration guides for both frontend and backend components.',
+      'Dependencies': 'Information about project dependencies and how to manage them.',
+      'Deploy': 'Deployment guides and best practices for production environments.',
+      'Implementations': 'Detailed implementation guides for various features and integrations.',
+      'Security': 'Security guidelines and best practices for the HRVSTR platform.',
+      'Stack': 'Technology stack overview and architectural decisions.',
+      'Tests': 'Testing documentation and guidelines for both frontend and backend.',
+      'Version': 'Version history and release notes.',
+      'API/endpoints': 'API endpoint documentation for all available services.',
+      'Implementations/APIs': 'API integration implementations and examples.',
+      'Implementations/Caching': 'Caching strategies and implementation details.',
+      'Implementations/Charts': 'Chart and visualization implementation guides.',
+      'Implementations/Lists': 'List components and data handling implementations.',
+      'Implementations/OAuth': 'OAuth authentication implementation details.',
+      'Implementations/Processing': 'Data processing and transformation implementations.',
+      'Implementations/ProxyServer': 'Proxy server setup and configuration.',
+      'Implementations/Settings': 'Settings and preferences implementation guides.',
+      'Tests/Backend': 'Backend testing strategies and test suites.',
+      'Tests/Frontend': 'Frontend testing approaches and component tests.'
+    };
+
+    return descriptions[path] || `This section contains documentation for ${folderName.toLowerCase()}.`;
   }
 }
 

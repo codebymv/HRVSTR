@@ -61,14 +61,14 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
   
   // Theme-specific styling
   const bgColor = isLight ? 'bg-stone-200' : 'bg-gray-950';
-  const textColor = isLight ? 'text-stone-800' : 'text-white';
-  const secondaryTextColor = isLight ? 'text-stone-700' : 'text-gray-300';
+  const textColor = isLight ? 'text-stone-700' : 'text-white';
+  const secondaryTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
   const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-900';
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
   const inputBgColor = isLight ? 'bg-white' : 'bg-gray-800';
-  const inputTextColor = isLight ? 'text-stone-800' : 'text-gray-200';
-  const labelColor = isLight ? 'text-stone-900' : 'text-white';
-  const descriptionColor = isLight ? 'text-stone-700' : 'text-gray-300';
+  const inputTextColor = isLight ? 'text-stone-700' : 'text-gray-200';
+  const labelColor = isLight ? 'text-stone-700' : 'text-white';
+  const descriptionColor = isLight ? 'text-stone-600' : 'text-gray-400';
   const buttonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
 
   // Mock credits data - this would come from your backend in a real app
