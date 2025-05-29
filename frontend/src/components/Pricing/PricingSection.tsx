@@ -65,7 +65,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
         '500 scrape credits/month',
         'Reddit sentiment access',
         'All sentiment sources',
-        'Reddit sentiment (with your API keys)',
+        'Reddit sentiment',
         'Full SEC filings access',
         'Complete earnings analysis',
         'Up to 1-month historical data',
