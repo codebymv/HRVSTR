@@ -112,7 +112,7 @@ const Home: React.FC = () => {
             </span>
             </h1>
 
-          <p className={`text-xl md:text-2xl mb-8 ${secondaryTextColor} max-w-3xl mx-auto`}>
+          <p className={`text-xl md:text-2xl mb-8 ${secondaryTextColor} max-w-4xl mx-auto`}>
             A comprehensive solution for market sentiment analysis and financial monitoring.
           </p>
           {!isAuthenticated && (
