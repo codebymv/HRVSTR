@@ -561,28 +561,43 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
  */
 router.post('/create-checkout-session', authenticateToken, async (req, res) => {
   try {
+    console.log('📦 Create checkout session request received');
+    console.log('🔑 Stripe key available:', !!process.env.STRIPE_SECRET_KEY);
+    console.log('🌐 Frontend URL:', process.env.FRONTEND_URL);
+    
     const { priceId, mode = 'subscription', successUrl, cancelUrl } = req.body;
     const userId = req.user.id;
+
+    console.log('📝 Request data:', { priceId, mode, userId });
 
     if (!priceId) {
       return res.status(400).json({ error: 'Price ID is required' });
     }
 
+    if (!process.env.STRIPE_SECRET_KEY) {
+      console.error('❌ Missing STRIPE_SECRET_KEY environment variable');
+      return res.status(500).json({ error: 'Stripe configuration missing' });
+    }
+
     // Get user info
+    console.log('🔍 Looking up user:', userId);
     const userResult = await pool.query(
       'SELECT * FROM users WHERE id = $1',
       [userId]
     );
     
     if (!userResult.rows[0]) {
+      console.error('❌ User not found:', userId);
       return res.status(404).json({ error: 'User not found' });
     }
     
     const user = userResult.rows[0];
+    console.log('✅ User found:', user.email);
 
     // Get or create Stripe customer
     let customer;
     try {
+      console.log('🔍 Looking for existing Stripe customer:', user.email);
       const customers = await stripe.customers.list({
         email: user.email,
         limit: 1
@@ -590,7 +605,9 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
 
       if (customers.data.length > 0) {
         customer = customers.data[0];
+        console.log('✅ Found existing customer:', customer.id);
       } else {
+        console.log('🆕 Creating new Stripe customer');
         customer = await stripe.customers.create({
           email: user.email,
           name: user.name,
@@ -599,19 +616,23 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
           }
         });
         
+        console.log('✅ Created customer:', customer.id);
+        
         // Update user record with customer ID
         await pool.query(
           'UPDATE users SET stripe_customer_id = $1 WHERE id = $2',
           [customer.id, userId]
         );
+        console.log('✅ Updated user record with customer ID');
       }
     } catch (error) {
-      console.error('Error creating/finding customer:', error);
-      return res.status(500).json({ error: 'Failed to create customer' });
+      console.error('❌ Error creating/finding customer:', error);
+      return res.status(500).json({ error: 'Failed to create customer', details: error.message });
     }
 
     // Create checkout session
-    const session = await stripe.checkout.sessions.create({
+    console.log('🛒 Creating checkout session');
+    const sessionConfig = {
       customer: customer.id,
       payment_method_types: ['card'],
       mode: mode,
@@ -621,20 +642,30 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
           quantity: 1,
         }
       ],
-      success_url: successUrl || `${process.env.FRONTEND_URL}/settings/billing?success=true`,
-      cancel_url: cancelUrl || `${process.env.FRONTEND_URL}/settings/tiers?cancelled=true`,
+      success_url: successUrl || `${process.env.FRONTEND_URL || 'https://hrvstr.up.railway.app'}/settings/billing?success=true`,
+      cancel_url: cancelUrl || `${process.env.FRONTEND_URL || 'https://hrvstr.up.railway.app'}/settings/tiers?cancelled=true`,
       metadata: {
         userId: userId.toString(),
         priceId: priceId
       },
-      subscription_data: mode === 'subscription' ? {
+      billing_address_collection: 'required',
+      allow_promotion_codes: true,
+    };
+
+    if (mode === 'subscription') {
+      sessionConfig.subscription_data = {
         metadata: {
           userId: userId.toString()
         }
-      } : undefined,
-      billing_address_collection: 'required',
-      allow_promotion_codes: true,
-    });
+      };
+    }
+
+    console.log('🛒 Session config:', JSON.stringify(sessionConfig, null, 2));
+
+    const session = await stripe.checkout.sessions.create(sessionConfig);
+
+    console.log('✅ Checkout session created:', session.id);
+    console.log('🔗 Checkout URL:', session.url);
 
     res.json({ 
       url: session.url,
@@ -642,10 +673,11 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Create checkout session error:', error);
+    console.error('❌ Create checkout session error:', error);
     res.status(500).json({ 
       error: 'Failed to create checkout session',
-      details: error.message
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
