@@ -1,0 +1,23 @@
+# Railway Ignore File
+# Specify files and directories that Railway should NOT ignore (opposite of .gitignore)
+
+# Include the docs folder explicitly
+!docs/
+!!docs/
+
+# Don't upload development files
+node_modules/
+.git/
+*.log
+.env.local
+.env.development
+
+# Don't upload test files
+coverage/
+*.test.js
+*.spec.js
+
+# Don't upload unnecessary frontend dev files when deploying backend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/ 

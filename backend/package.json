@@ -5,6 +5,8 @@
   "main": "src/index.js",
   "scripts": {
     "prebuild": "cp -r ../!docs ./docs || xcopy /E /I \"..\\!docs\" \"docs\" 2>nul || echo 'Failed to copy docs folder'",
+    "build": "echo 'Backend build complete' && npm run copy-docs",
+    "copy-docs": "cp -r ../!docs ./docs || xcopy /E /I \"..\\!docs\" \"docs\" 2>nul || mkdir -p docs",
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "test": "jest"

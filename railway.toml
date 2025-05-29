@@ -1,1 +1,13 @@
 [build]
+command = "npm install && npm run build"
+
+[deploy]
+startCommand = "npm start"
+
+# Ensure the !docs folder is included in deployment
+[deploy.envs]
+NODE_ENV = "production"
+
+# Make sure Railway includes all necessary files
+[build.watchIgnore]
+# Don't ignore the !docs folder - we want it included

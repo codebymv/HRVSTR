@@ -5,6 +5,10 @@ const router = express.Router();
 
 // Function to find the docs folder in different deployment scenarios
 const findDocsPath = () => {
+  console.log('Starting docs folder search...');
+  console.log('Current working directory:', process.cwd());
+  console.log('__dirname:', __dirname);
+  
   // Possible locations for the !docs folder
   const possiblePaths = [
     path.join(__dirname, '../../docs'),          // Copied docs folder in backend/docs
@@ -15,18 +19,30 @@ const findDocsPath = () => {
     path.join(process.cwd(), '!docs'),          // Using process working directory
     path.join(process.cwd(), '../!docs'),       // One level up from working directory
     path.join(process.cwd(), 'docs'),           // Copied docs in working directory
+    path.join(process.cwd(), 'backend/docs'),   // Copied docs in backend subfolder
   ];
+
+  console.log('Checking paths:', possiblePaths);
 
   // Try each path and return the first one that exists
   for (const docsPath of possiblePaths) {
     try {
+      console.log(`Checking path: ${docsPath}`);
       // Check if the path exists and is a directory
       const stats = require('fs').statSync(docsPath);
       if (stats.isDirectory()) {
-        console.log(`Found docs folder at: ${docsPath}`);
+        console.log(`✅ Found docs folder at: ${docsPath}`);
+        // List contents to verify
+        try {
+          const contents = require('fs').readdirSync(docsPath);
+          console.log(`Contents: ${contents.join(', ')}`);
+        } catch (e) {
+          console.log('Could not list contents');
+        }
         return docsPath;
       }
     } catch (error) {
+      console.log(`❌ Path not found: ${docsPath} - ${error.message}`);
       // Path doesn't exist, try next one
       continue;
     }
