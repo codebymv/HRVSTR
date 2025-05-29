@@ -3,9 +3,19 @@ command = "npm install && npm run build"
 
 [deploy]
 startCommand = "npm start"
-workingDirectory = "/app"
 
-# Ensure the !docs folder is included in deployment
+# Deploy from project root to include !docs folder
+[[services]]
+name = "backend"
+source = "."
+startCommand = "cd backend && npm start"
+
+[[services]]  
+name = "frontend"
+source = "."
+startCommand = "cd frontend && npm start"
+
+# Environment variables
 [deploy.envs]
 NODE_ENV = "production"
 

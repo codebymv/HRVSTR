@@ -5,10 +5,10 @@
   "main": "src/index.js",
   "scripts": {
     "prestart": "npm run ensure-docs",
-    "ensure-docs": "cp -r ../!docs ./docs 2>/dev/null || xcopy /E /I \"..\\!docs\" \"docs\" 2>nul || echo 'Could not copy from parent dir, checking if docs already exist' && ls docs 2>/dev/null || dir docs 2>nul || echo 'No docs found'",
+    "ensure-docs": "echo 'Checking for docs...' && (cp -r ../!docs ./docs 2>/dev/null && echo 'Copied from parent dir' && ls -la docs/) || (xcopy /E /I \"..\\!docs\" \"docs\" 2>nul && echo 'Copied via xcopy' && dir docs) || (echo 'Could not copy from parent dir, checking if docs already exist' && (ls -la docs/ 2>/dev/null || dir docs 2>nul) || echo 'No docs found')",
     "prebuild": "npm run ensure-docs",
     "build": "echo 'Backend build complete' && npm run copy-docs",
-    "copy-docs": "cp -r ../!docs ./docs || xcopy /E /I \"..\\!docs\" \"docs\" 2>nul || mkdir -p docs",
+    "copy-docs": "echo 'Force copying docs...' && (cp -r ../!docs ./docs 2>/dev/null && echo 'Successfully copied docs' && ls -la docs/) || (xcopy /E /I \"..\\!docs\" \"docs\" 2>nul && echo 'Successfully copied via xcopy') || (mkdir -p docs 2>/dev/null || md docs 2>nul && echo 'Created empty docs folder')",
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "test": "jest"
