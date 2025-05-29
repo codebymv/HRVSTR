@@ -4,6 +4,7 @@
   "description": "Backend server for HRVSTR application",
   "main": "src/index.js",
   "scripts": {
+    "prebuild": "cp -r ../!docs ./docs || xcopy /E /I \"..\\!docs\" \"docs\" 2>nul || echo 'Failed to copy docs folder'",
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "test": "jest"

@@ -3,8 +3,42 @@ const fs = require('fs').promises;
 const path = require('path');
 const router = express.Router();
 
+// Function to find the docs folder in different deployment scenarios
+const findDocsPath = () => {
+  // Possible locations for the !docs folder
+  const possiblePaths = [
+    path.join(__dirname, '../../docs'),          // Copied docs folder in backend/docs
+    path.join(__dirname, '../../../!docs'),      // Development: backend/src/routes -> project root
+    path.join(__dirname, '../../!docs'),         // Production scenario 1: backend -> project root
+    path.join(__dirname, '../!docs'),            // Production scenario 2: src -> project root
+    path.join(__dirname, '../../../../!docs'),   // Production scenario 3: deeper nesting
+    path.join(process.cwd(), '!docs'),          // Using process working directory
+    path.join(process.cwd(), '../!docs'),       // One level up from working directory
+    path.join(process.cwd(), 'docs'),           // Copied docs in working directory
+  ];
+
+  // Try each path and return the first one that exists
+  for (const docsPath of possiblePaths) {
+    try {
+      // Check if the path exists and is a directory
+      const stats = require('fs').statSync(docsPath);
+      if (stats.isDirectory()) {
+        console.log(`Found docs folder at: ${docsPath}`);
+        return docsPath;
+      }
+    } catch (error) {
+      // Path doesn't exist, try next one
+      continue;
+    }
+  }
+
+  // If no docs folder found, log error and use default
+  console.error('!docs folder not found in any expected location. Tried:', possiblePaths);
+  return path.join(__dirname, '../../../!docs'); // fallback to original path
+};
+
 // Base path to the docs folder
-const DOCS_BASE_PATH = path.join(__dirname, '../../../!docs');
+const DOCS_BASE_PATH = findDocsPath();
 
 /**
  * Get markdown content for a specific document path
