@@ -3,11 +3,14 @@ command = "npm install && npm run build"
 
 [deploy]
 startCommand = "npm start"
+workingDirectory = "/app"
 
 # Ensure the !docs folder is included in deployment
 [deploy.envs]
 NODE_ENV = "production"
 
-# Make sure Railway includes all necessary files
+# Make sure Railway includes all necessary files and doesn't ignore docs
 [build.watchIgnore]
-# Don't ignore the !docs folder - we want it included
+# Only ignore actual unnecessary files
+"node_modules"
+".git"

@@ -4,7 +4,9 @@
   "description": "Backend server for HRVSTR application",
   "main": "src/index.js",
   "scripts": {
-    "prebuild": "cp -r ../!docs ./docs || xcopy /E /I \"..\\!docs\" \"docs\" 2>nul || echo 'Failed to copy docs folder'",
+    "prestart": "npm run ensure-docs",
+    "ensure-docs": "cp -r ../!docs ./docs 2>/dev/null || xcopy /E /I \"..\\!docs\" \"docs\" 2>nul || echo 'Could not copy from parent dir, checking if docs already exist' && ls docs 2>/dev/null || dir docs 2>nul || echo 'No docs found'",
+    "prebuild": "npm run ensure-docs",
     "build": "echo 'Backend build complete' && npm run copy-docs",
     "copy-docs": "cp -r ../!docs ./docs || xcopy /E /I \"..\\!docs\" \"docs\" 2>nul || mkdir -p docs",
     "start": "node src/index.js",
