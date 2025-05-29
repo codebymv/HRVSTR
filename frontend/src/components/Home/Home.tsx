@@ -153,7 +153,7 @@ const Home: React.FC = () => {
                   onClick={signIn}
                   className={`${buttonBgColor} text-white px-6 py-2 rounded-lg font-medium transition-colors`}
                 >
-                  Sign In Now
+                  Log In Now
                 </button>
               )}
             </div>

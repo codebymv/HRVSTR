@@ -11,6 +11,7 @@ export const SentimentPreview: React.FC = () => {
   const cardBorder = isLight ? 'border-stone-400' : 'border-gray-800';
   const textColor = isLight ? 'text-stone-900' : 'text-white';
   const subTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
+  const progressBg = isLight ? 'bg-stone-400' : 'bg-gray-700';
 
   // Mock data for the last 7 days
   const mockData = [
@@ -34,7 +35,7 @@ export const SentimentPreview: React.FC = () => {
           <div key={day.date} className="flex items-center justify-between">
             <span className={`text-sm ${subTextColor} w-8`}>{day.date}</span>
             <div className="flex-1 mx-3">
-              <div className="flex h-3 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700">
+              <div className={`flex h-3 rounded-full overflow-hidden ${progressBg}`}>
                 <div 
                   className="bg-green-500"
                   style={{ width: `${(day.bullish / 100) * 100}%` }}
@@ -182,9 +183,11 @@ export const SECFilingsPreview: React.FC = () => {
               <div className="flex items-center space-x-2 min-w-0 flex-1">
                 <span className={`font-medium ${textColor} text-sm truncate`}>{filing.institution}</span>
                 <span className={`text-xs px-1 py-0.5 rounded flex-shrink-0 ${
-                  filing.action === 'Increased' ? 'bg-green-500/20 text-green-400' :
-                  filing.action === 'Decreased' ? 'bg-red-500/20 text-red-400' :
-                  'bg-blue-500/20 text-blue-400'
+                  filing.action === 'Increased' 
+                    ? isLight ? 'bg-green-100 text-green-700' : 'bg-green-500/20 text-green-400'
+                    : filing.action === 'Decreased' 
+                    ? isLight ? 'bg-red-100 text-red-700' : 'bg-red-500/20 text-red-400'
+                    : isLight ? 'bg-blue-100 text-blue-700' : 'bg-blue-500/20 text-blue-400'
                 }`}>
                   {filing.action}
                 </span>
@@ -193,8 +196,9 @@ export const SECFilingsPreview: React.FC = () => {
             </div>
             <div className="flex items-center justify-between text-xs">
               <span className={`${subTextColor} truncate`}>{filing.shares} • {filing.value}</span>
-              <span className={`flex-shrink-0 ${filing.change === 'New' ? 'text-blue-400' : 
-                filing.change.startsWith('+') ? 'text-green-500' : 'text-red-500'}`}>
+              <span className={`flex-shrink-0 ${filing.change === 'New' 
+                ? isLight ? 'text-blue-600' : 'text-blue-400'
+                : filing.change.startsWith('+') ? 'text-green-500' : 'text-red-500'}`}>
                 {filing.change}
               </span>
             </div>
@@ -222,6 +226,16 @@ export const WatchlistPreview: React.FC = () => {
     { ticker: 'TSLA', price: '$248.50', change: '+4.56%', sentiment: 'Bullish' }
   ];
 
+  const getSentimentBadgeClasses = (sentiment: string) => {
+    if (sentiment === 'Bullish') {
+      return isLight ? 'bg-green-100 text-green-700' : 'bg-green-500/20 text-green-400';
+    } else if (sentiment === 'Bearish') {
+      return isLight ? 'bg-red-100 text-red-700' : 'bg-red-500/20 text-red-400';
+    } else {
+      return isLight ? 'bg-yellow-100 text-yellow-700' : 'bg-yellow-500/20 text-yellow-400';
+    }
+  };
+
   return (
     <div className={`${cardBg} rounded-lg p-4 border ${cardBorder} h-64 flex flex-col`}>
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
@@ -237,17 +251,13 @@ export const WatchlistPreview: React.FC = () => {
           <div key={stock.ticker} className="flex items-center justify-between">
             <div className="flex items-center space-x-2 min-w-0 flex-1">
               <span className={`font-medium ${textColor} text-sm`}>{stock.ticker}</span>
-              <span className={`text-xs px-2 py-1 rounded flex-shrink-0 ${
-                stock.sentiment === 'Bullish' ? 'bg-green-500/20 text-green-400' :
-                stock.sentiment === 'Bearish' ? 'bg-red-500/20 text-red-400' :
-                'bg-yellow-500/20 text-yellow-400'
-              }`}>
+              <span className={`text-xs px-2 py-1 rounded flex-shrink-0 font-medium ${getSentimentBadgeClasses(stock.sentiment)}`}>
                 {stock.sentiment}
               </span>
             </div>
             <div className="text-right flex-shrink-0">
               <div className={`font-medium ${textColor} text-sm`}>{stock.price}</div>
-              <div className={`text-xs ${stock.change.startsWith('+') ? 'text-green-500' : 'text-red-500'}`}>
+              <div className={`text-xs font-medium ${stock.change.startsWith('+') ? 'text-green-500' : 'text-red-500'}`}>
                 {stock.change}
               </div>
             </div>
@@ -267,6 +277,7 @@ export const ActivityPreview: React.FC = () => {
   const cardBorder = isLight ? 'border-stone-400' : 'border-gray-800';
   const textColor = isLight ? 'text-stone-900' : 'text-white';
   const subTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
+  const dividerBorder = isLight ? 'border-stone-400' : 'border-gray-600';
 
   const mockActivities = [
     { 
@@ -305,6 +316,10 @@ export const ActivityPreview: React.FC = () => {
     }
   };
 
+  const getSymbolBadgeClasses = () => {
+    return isLight ? 'bg-blue-100 text-blue-700' : 'bg-blue-500/20 text-blue-400';
+  };
+
   return (
     <div className={`${cardBg} rounded-lg p-4 border ${cardBorder} h-64 flex flex-col`}>
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
@@ -323,7 +338,7 @@ export const ActivityPreview: React.FC = () => {
               <div className="flex items-center justify-between mb-1">
                 <p className={`text-sm font-medium ${textColor} truncate`}>{activity.title}</p>
                 {activity.symbol && (
-                  <span className={`text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 flex-shrink-0 ml-2`}>
+                  <span className={`text-xs px-2 py-1 rounded font-medium flex-shrink-0 ml-2 ${getSymbolBadgeClasses()}`}>
                     {activity.symbol}
                   </span>
                 )}
@@ -335,7 +350,7 @@ export const ActivityPreview: React.FC = () => {
         ))}
       </div>
       
-      <div className="mt-4 pt-3 border-t border-gray-600 flex-shrink-0">
+      <div className={`mt-4 pt-3 border-t ${dividerBorder} flex-shrink-0`}>
         <p className={`text-xs ${subTextColor} text-center`}>
           Track your research and analysis activities
         </p>
