@@ -53,18 +53,36 @@ export const TierProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setError(null);
 
     try {
-      const response = await fetch('/api/subscription/tier-info', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      console.log('🔄 TierContext: Fetching tier info from:', `${apiUrl}/api/subscription/tier-info`);
+      console.log('🔑 TierContext: Using token:', token ? token.substring(0, 20) + '...' : 'No token');
+      
+      const response = await fetch(`${apiUrl}/api/subscription/tier-info`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       });
 
+      console.log('📡 TierContext: Response status:', response.status);
+      console.log('📡 TierContext: Response headers:', Object.fromEntries(response.headers.entries()));
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error('❌ TierContext: Response error text:', errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText.substring(0, 200)}...`);
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const responseText = await response.text();
+        console.error('❌ TierContext: Non-JSON response:', responseText.substring(0, 500));
+        throw new Error(`Expected JSON response but got ${contentType}: ${responseText.substring(0, 200)}...`);
       }
 
       const data = await response.json();
+      console.log('✅ TierContext: Tier data received:', data);
+      
       if (data.success) {
         setTierInfo(data.data);
         console.log('✅ TierContext: Updated to', data.data.tier, 'tier');

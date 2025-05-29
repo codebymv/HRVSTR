@@ -43,6 +43,9 @@ const billingRoutes = require('./routes/billing');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Trust proxy for Railway deployment
+app.set('trust proxy', 1);
+
 // Register global rate limits
 cacheManager.registerRateLimit('api-global', 100, 15 * 60); // 100 requests per 15 minutes
 
