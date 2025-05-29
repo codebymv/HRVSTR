@@ -27,16 +27,16 @@ const TiersPage: React.FC = () => {
   const getPriceIdForTier = (tierName: string, isYearly: boolean = false): string => {
     const priceIds = {
       'pro': {
-        monthly: process.env.VITE_STRIPE_PRICE_PRO_MONTHLY || 'price_1QT8PKRxBJaRlFvtr3lA4XFy',
-        yearly: process.env.VITE_STRIPE_PRICE_PRO_YEARLY || 'price_1QT8PKRxBJaRlFvtoWaNE2gM'
+        monthly: process.env.VITE_STRIPE_PRICE_PRO_MONTHLY || 'price_1RU7GkRxBJaRlFvt0pcAxK8Q',
+        yearly: process.env.VITE_STRIPE_PRICE_PRO_YEARLY || 'price_1RU7HRRxBJaRlFvtmPFoZhmB'
       },
       'elite': {
-        monthly: process.env.VITE_STRIPE_PRICE_ELITE_MONTHLY || 'price_1QT8PkRxBJaRlFvt8gLwJhzv',
-        yearly: process.env.VITE_STRIPE_PRICE_ELITE_YEARLY || 'price_1QT8PkRxBJaRlFvtdw8LBOBt'
+        monthly: process.env.VITE_STRIPE_PRICE_ELITE_MONTHLY || 'price_1RU7IIRxBJaRlFvtugLXLVDq',
+        yearly: process.env.VITE_STRIPE_PRICE_ELITE_YEARLY || 'price_1RU7IiRxBJaRlFvtvagv3s7J'
       },
       'institutional': {
-        monthly: process.env.VITE_STRIPE_PRICE_INSTITUTIONAL_MONTHLY || 'price_1QT8Q8RxBJaRlFvtoXZqOZ6w',
-        yearly: process.env.VITE_STRIPE_PRICE_INSTITUTIONAL_YEARLY || 'price_1QT8Q8RxBJaRlFvtZp1Q6GYF'
+        monthly: process.env.VITE_STRIPE_PRICE_INSTITUTIONAL_MONTHLY || 'price_1RU7JLRxBJaRlFvtcQWSwReg',
+        yearly: process.env.VITE_STRIPE_PRICE_INSTITUTIONAL_YEARLY || 'price_1RU7JsRxBJaRlFvthkm01EeY'
       }
     };
 
