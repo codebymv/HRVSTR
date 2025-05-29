@@ -37,6 +37,7 @@ const stocksRouter = require('./routes/stocks');
 const settingsRoutes = require('./routes/settings');
 const docsRoutes = require('./routes/docs');
 const subscriptionRoutes = require('./routes/subscription');
+const billingRoutes = require('./routes/billing');
 
 // Create Express app
 const app = express();
@@ -182,6 +183,7 @@ app.use('/api/stocks', stocksRouter);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/docs', docsRoutes);
 app.use('/api/subscription', subscriptionRoutes);
+app.use('/api/billing', billingRoutes);
 
 // Serve static files from the frontend build directory in production
 if (process.env.NODE_ENV === 'production') {

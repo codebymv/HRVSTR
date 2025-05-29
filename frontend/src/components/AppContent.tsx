@@ -19,6 +19,7 @@ import DataSourcesPage from './Settings/tabs/DataSourcesPage';
 import TiersPage from './Settings/tabs/TiersPage';
 import ProfilePage from './Settings/tabs/ProfilePage';
 import PreferencesPage from './Settings/tabs/PreferencesPage';
+import BillingPage from './Settings/tabs/BillingPage';
 import { useAuth } from '../contexts/AuthContext';
 
 // Component for unauthorized access
@@ -88,6 +89,7 @@ const AppContent = () => {
               <Route path="notifications" element={<div className="p-8"><h1 className="text-2xl">Notifications - Coming Soon</h1></div>} />
               <Route path="preferences" element={<PreferencesPage />} />
               <Route path="tiers" element={<TiersPage />} />
+              <Route path="billing" element={<BillingPage />} />
             </Route>
             
             {/* Additional routes */}

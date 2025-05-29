@@ -8,7 +8,8 @@ import {
   BarChart3, 
   Key, 
   Database,
-  Monitor
+  Monitor,
+  DollarSign
 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -44,6 +45,7 @@ const SettingsLayout: React.FC = () => {
       items: [
         { path: '/settings/usage', label: 'Usage', icon: BarChart3 },
         { path: '/settings/tiers', label: 'Tiers', icon: CreditCard },
+        { path: '/settings/billing', label: 'Billing', icon: DollarSign },
       ]
     },
     {

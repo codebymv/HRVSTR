@@ -4,6 +4,8 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { TierProvider } from './contexts/TierContext';
 import AppContent from './components/AppContent';
+import { Elements } from '@stripe/react-stripe-js';
+import stripePromise from './lib/stripe';
 
 function App() {
   return (
@@ -11,7 +13,9 @@ function App() {
       <ThemeProvider>
         <AuthProvider>
           <TierProvider>
-            <AppContent />
+            <Elements stripe={stripePromise}>
+              <AppContent />
+            </Elements>
           </TierProvider>
         </AuthProvider>
       </ThemeProvider>

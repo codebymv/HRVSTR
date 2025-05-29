@@ -19,6 +19,7 @@
     "node-cache": "^5.1.2",
     "pg": "^8.16.0",
     "sentiment": "^5.0.2",
+    "stripe": "^18.2.0",
     "xml2js": "^0.6.2",
     "yahoo-finance2": "^2.13.3"
   },
