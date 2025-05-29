@@ -7,6 +7,33 @@ const { FinancialCalendarService } = require('../services/financialCalendar');
 
 const financialCalendarService = new FinancialCalendarService();
 
+// Helper function to clean up old activities for a user
+const cleanupOldActivities = async (userId, maxActivities = 100) => {
+  try {
+    // Get count of current activities for user
+    const countResult = await pool.query(
+      'SELECT COUNT(*) FROM activities WHERE user_id = $1',
+      [userId]
+    );
+    
+    const currentCount = parseInt(countResult.rows[0].count);
+    
+    if (currentCount > maxActivities) {
+      // Delete oldest activities beyond the limit
+      const deleteCount = currentCount - maxActivities;
+      await pool.query(
+        'DELETE FROM activities WHERE user_id = $1 AND id IN (SELECT id FROM activities WHERE user_id = $1 ORDER BY created_at ASC LIMIT $2)',
+        [userId, deleteCount]
+      );
+      
+      console.log(`Cleaned up ${deleteCount} old activities for user ${userId}. Total activities now: ${maxActivities}`);
+    }
+  } catch (error) {
+    console.error('Error cleaning up old activities:', error);
+    // Don't throw error to avoid breaking the main operation
+  }
+};
+
 // Search stocks
 router.get('/search', authenticateToken, async (req, res) => {
   const { query } = req.query;
@@ -119,11 +146,36 @@ router.post('/watchlist', authenticateToken, async (req, res) => {
       console.warn('Alpha Vantage GLOBAL_QUOTE API did not return expected price data for symbol:', symbol, priceResponse.data);
     }
 
+    // Check if this is a new addition or update
+    const existingWatchlistItem = await pool.query(
+      'SELECT id FROM watchlist WHERE user_id = $1 AND symbol = $2',
+      [userId, symbol]
+    );
+
+    const isNewAddition = existingWatchlistItem.rows.length === 0;
+
     // Add to watchlist
     await pool.query(
       'INSERT INTO watchlist (user_id, symbol, company_name, last_price, price_change) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (user_id, symbol) DO UPDATE SET company_name = $3, last_price = $4, price_change = $5',
       [userId, symbol, companyName, lastPrice, priceChange]
     );
+
+    // Create activity record only for new additions (not updates)
+    if (isNewAddition) {
+      await pool.query(
+        'INSERT INTO activities (user_id, activity_type, title, description, symbol) VALUES ($1, $2, $3, $4, $5)',
+        [
+          userId,
+          'watchlist_add',
+          `Added ${symbol} to watchlist`,
+          `Added ${companyName} (${symbol}) to watchlist`,
+          symbol
+        ]
+      );
+      
+      // Clean up old activities to maintain performance
+      await cleanupOldActivities(userId);
+    }
 
     res.json({ message: 'Stock added to watchlist' });
   } catch (error) {
@@ -151,7 +203,24 @@ router.delete('/watchlist', authenticateToken, async (req, res) => {
       return res.status(404).json({ message: 'Ticker not found in watchlist' });
     }
 
-    res.status(200).json({ message: 'Ticker removed from watchlist', removedTicker: result.rows[0] });
+    const removedStock = result.rows[0];
+
+    // Create activity record for watchlist removal
+    await pool.query(
+      'INSERT INTO activities (user_id, activity_type, title, description, symbol) VALUES ($1, $2, $3, $4, $5)',
+      [
+        userId,
+        'watchlist_remove',
+        `Removed ${symbol} from watchlist`,
+        `Removed ${removedStock.company_name} (${symbol}) from watchlist`,
+        symbol
+      ]
+    );
+    
+    // Clean up old activities to maintain performance
+    await cleanupOldActivities(userId);
+
+    res.status(200).json({ message: 'Ticker removed from watchlist', removedTicker: removedStock });
   } catch (error) {
     console.error('Error removing ticker from watchlist:', error);
     res.status(500).json({ message: 'Internal server error' });

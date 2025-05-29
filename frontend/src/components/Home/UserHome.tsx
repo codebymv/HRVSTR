@@ -15,7 +15,8 @@ import {
   DollarSign,
   Calendar,
   RefreshCw,
-  Loader2
+  Loader2,
+  Trash2
 } from 'lucide-react';
 import AddTickerModal from '../Watchlist/AddTickerModal';
 import { formatEventRelativeTime, getRelativeTimeBadgeStyle } from '../../utils/timeUtils';
@@ -24,8 +25,8 @@ interface WatchlistItem {
   id: string;
   symbol: string;
   company_name: string;
-  last_price: number | null;
-  price_change: number | null;
+  last_price: string | number | null;
+  price_change: string | number | null;
 }
 
 interface ActivityItem {
@@ -68,6 +69,7 @@ const UserHome: React.FC = () => {
   const [isAddTickerModalOpen, setIsAddTickerModalOpen] = useState(false);
   const [refreshingData, setRefreshingData] = useState(false);
   const [rateLimitActive, setRateLimitActive] = useState(false);
+  const [isAddingTicker, setIsAddingTicker] = useState(false);
 
   // Add refs to track if requests are in progress to prevent duplicate calls
   const fetchingWatchlist = useRef(false);
@@ -144,13 +146,50 @@ const UserHome: React.FC = () => {
         }
       });
       
+      // Defensive programming: ensure we have an array
+      let watchlistData = response.data;
+      
+      // Log the response for debugging in production
+      console.log('Watchlist API response:', { 
+        status: response.status,
+        data: response.data,
+        dataType: typeof response.data,
+        isArray: Array.isArray(response.data)
+      });
+      
+      // Handle different response structures
+      if (response.data && typeof response.data === 'object') {
+        if (Array.isArray(response.data)) {
+          watchlistData = response.data;
+        } else if (response.data.data && Array.isArray(response.data.data)) {
+          // Handle wrapped response like { data: [...] }
+          watchlistData = response.data.data;
+        } else if (response.data.watchlist && Array.isArray(response.data.watchlist)) {
+          // Handle response like { watchlist: [...] }
+          watchlistData = response.data.watchlist;
+        } else {
+          // Fallback: if it's an object but not an array, create empty array
+          console.warn('Unexpected watchlist response structure:', response.data);
+          watchlistData = [];
+        }
+      } else {
+        // If response.data is null, undefined, or not an object, use empty array
+        watchlistData = [];
+      }
+      
+      // Ensure it's definitely an array
+      if (!Array.isArray(watchlistData)) {
+        console.error('Failed to convert watchlist response to array, using empty array');
+        watchlistData = [];
+      }
+      
       // Update cache
       dataCache.current.watchlist = {
-        data: response.data,
+        data: watchlistData,
         timestamp: Date.now()
       };
       
-      setWatchlist(response.data);
+      setWatchlist(watchlistData);
       setWatchlistError(null);
     } catch (error: any) {
       console.error('Error fetching watchlist:', error);
@@ -167,6 +206,8 @@ const UserHome: React.FC = () => {
       } else {
         setWatchlistError('Failed to fetch watchlist');
       }
+      // Ensure watchlist is set to empty array on error
+      setWatchlist([]);
     } finally {
       setLoadingWatchlist(false);
       fetchingWatchlist.current = false;
@@ -204,13 +245,50 @@ const UserHome: React.FC = () => {
         }
       });
       
+      // Defensive programming: ensure we have an array
+      let activityData = response.data;
+      
+      // Log the response for debugging in production
+      console.log('Activity API response:', { 
+        status: response.status,
+        data: response.data,
+        dataType: typeof response.data,
+        isArray: Array.isArray(response.data)
+      });
+      
+      // Handle different response structures
+      if (response.data && typeof response.data === 'object') {
+        if (Array.isArray(response.data)) {
+          activityData = response.data;
+        } else if (response.data.data && Array.isArray(response.data.data)) {
+          // Handle wrapped response like { data: [...] }
+          activityData = response.data.data;
+        } else if (response.data.activity && Array.isArray(response.data.activity)) {
+          // Handle response like { activity: [...] }
+          activityData = response.data.activity;
+        } else {
+          // Fallback: if it's an object but not an array, create empty array
+          console.warn('Unexpected activity response structure:', response.data);
+          activityData = [];
+        }
+      } else {
+        // If response.data is null, undefined, or not an object, use empty array
+        activityData = [];
+      }
+      
+      // Ensure it's definitely an array
+      if (!Array.isArray(activityData)) {
+        console.error('Failed to convert activity response to array, using empty array');
+        activityData = [];
+      }
+      
       // Update cache
       dataCache.current.activity = {
-        data: response.data,
+        data: activityData,
         timestamp: Date.now()
       };
       
-      setRecentActivity(response.data);
+      setRecentActivity(activityData);
       setActivityError(null);
     } catch (error: any) {
       console.error('Error fetching recent activity:', error);
@@ -225,6 +303,8 @@ const UserHome: React.FC = () => {
       } else {
         setActivityError('Failed to fetch recent activity');
       }
+      // Ensure activity is set to empty array on error
+      setRecentActivity([]);
     } finally {
       setLoadingActivity(false);
       fetchingActivity.current = false;
@@ -262,13 +342,50 @@ const UserHome: React.FC = () => {
         }
       });
       
+      // Defensive programming: ensure we have an array
+      let eventsData = response.data;
+      
+      // Log the response for debugging in production
+      console.log('Events API response:', { 
+        status: response.status,
+        data: response.data,
+        dataType: typeof response.data,
+        isArray: Array.isArray(response.data)
+      });
+      
+      // Handle different response structures
+      if (response.data && typeof response.data === 'object') {
+        if (Array.isArray(response.data)) {
+          eventsData = response.data;
+        } else if (response.data.data && Array.isArray(response.data.data)) {
+          // Handle wrapped response like { data: [...] }
+          eventsData = response.data.data;
+        } else if (response.data.events && Array.isArray(response.data.events)) {
+          // Handle response like { events: [...] }
+          eventsData = response.data.events;
+        } else {
+          // Fallback: if it's an object but not an array, create empty array
+          console.warn('Unexpected events response structure:', response.data);
+          eventsData = [];
+        }
+      } else {
+        // If response.data is null, undefined, or not an object, use empty array
+        eventsData = [];
+      }
+      
+      // Ensure it's definitely an array
+      if (!Array.isArray(eventsData)) {
+        console.error('Failed to convert events response to array, using empty array');
+        eventsData = [];
+      }
+      
       // Update cache
       dataCache.current.events = {
-        data: response.data,
+        data: eventsData,
         timestamp: Date.now()
       };
       
-      setUpcomingEvents(response.data);
+      setUpcomingEvents(eventsData);
       setEventsError(null);
     } catch (error: any) {
       console.error('Error fetching upcoming events:', error);
@@ -283,6 +400,8 @@ const UserHome: React.FC = () => {
       } else {
         setEventsError('Failed to fetch upcoming events');
       }
+      // Ensure events is set to empty array on error
+      setUpcomingEvents([]);
     } finally {
       setLoadingEvents(false);
       fetchingEvents.current = false;
@@ -311,7 +430,16 @@ const UserHome: React.FC = () => {
     };
   }, []);
 
-  // Helper function to format date/time (basic example)
+  // Helper function to format date/time with MM/DD/YY for better context
+  const formatActivityTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    
+    // Always show MM/DD/YY + time for all dates
+    return date.toLocaleDateString([], { month: '2-digit', day: '2-digit', year: '2-digit' }) + ' ' + 
+           date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  // Helper function to format time for events (basic example)
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString();
@@ -328,6 +456,49 @@ const UserHome: React.FC = () => {
     return str.charAt(0).toUpperCase() + str.slice(1);
   };
 
+  // Helper function to safely parse price values (handles both strings and numbers)
+  const parsePrice = (price: string | number | null | undefined): number | null => {
+    if (price === null || price === undefined) return null;
+    
+    // If it's already a number, return it
+    if (typeof price === 'number' && !isNaN(price)) {
+      return price;
+    }
+    
+    // If it's a string, try to parse it
+    if (typeof price === 'string') {
+      const parsed = parseFloat(price);
+      return !isNaN(parsed) ? parsed : null;
+    }
+    
+    return null;
+  };
+
+  // Helper function to format price for display
+  const formatPrice = (price: string | number | null | undefined): string => {
+    const parsedPrice = parsePrice(price);
+    return parsedPrice !== null ? `$${parsedPrice.toFixed(2)}` : 'N/A';
+  };
+
+  // Helper function to format price change for display
+  const formatPriceChange = (change: string | number | null | undefined): string => {
+    const parsedChange = parsePrice(change);
+    if (parsedChange !== null) {
+      const formatted = parsedChange.toFixed(2);
+      return parsedChange >= 0 ? `+${formatted}` : formatted;
+    }
+    return 'N/A';
+  };
+
+  // Helper function to get price change color
+  const getPriceChangeColor = (change: string | number | null | undefined): string => {
+    const parsedChange = parsePrice(change);
+    if (parsedChange !== null) {
+      return parsedChange >= 0 ? 'text-green-500' : 'text-red-500';
+    }
+    return 'text-gray-500';
+  };
+
   // Add this helper function before the return statement
   const getEventIcon = (eventType: string) => {
     switch (eventType) {
@@ -341,6 +512,7 @@ const UserHome: React.FC = () => {
   };
 
   const handleAddTicker = async (symbol: string) => {
+    setIsAddingTicker(true);
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       // Add ticker to watchlist
@@ -360,12 +532,16 @@ const UserHome: React.FC = () => {
 
       // Clear cache and force refresh data for frontend display
       dataCache.current.watchlist.timestamp = 0;
+      dataCache.current.activity.timestamp = 0;
       dataCache.current.events.timestamp = 0;
       await fetchWatchlist(true);
+      await fetchRecentActivity(true);
       await fetchUpcomingEvents(true);
 
     } catch (error) {
       console.error('Error adding ticker:', error);
+    } finally {
+      setIsAddingTicker(false);
     }
   };
 
@@ -381,8 +557,10 @@ const UserHome: React.FC = () => {
       });
       // Clear cache and force refresh data after removing
       dataCache.current.watchlist.timestamp = 0;
+      dataCache.current.activity.timestamp = 0;
       dataCache.current.events.timestamp = 0;
       fetchWatchlist(true);
+      fetchRecentActivity(true);
       fetchUpcomingEvents(true);
     } catch (error) {
       console.error('Error removing ticker:', error);
@@ -455,7 +633,7 @@ const UserHome: React.FC = () => {
           
           <h1 className={`text-2xl font-bold ${welcomeTextColor} pr-16`}>
             Welcome back, <br className="block sm:hidden" />
-            <span className="block sm:inline bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent">
+            <span className="block sm:inline bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent ml-4">
               {user?.name}!
             </span>
           </h1>
@@ -492,7 +670,7 @@ const UserHome: React.FC = () => {
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Watchlist */}
-          <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor}`}>
+          <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} h-96`}>
             <div className="flex items-center justify-between mb-4">
               <h2 className={`text-xl font-semibold ${textColor} flex items-center`}>
                 <Star className="w-5 h-5 mr-2 text-blue-500" />
@@ -519,69 +697,126 @@ const UserHome: React.FC = () => {
                 </button>
               </div>
             </div>
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-y-auto h-72">
               {loadingWatchlist && <p className={secondaryTextColor}>Loading watchlist...</p>}
               {watchlistError && <p className="text-red-500">Error: {watchlistError}</p>}
               {!loadingWatchlist && !watchlistError && watchlist.length === 0 && (
                 <p className={secondaryTextColor}>Your watchlist is empty.</p>
               )}
-              {!loadingWatchlist && !watchlistError && watchlist.length > 0 && (
-                watchlist.map((item) => (
-                  <div key={item.symbol} className={`flex justify-between items-center py-2 border-b ${borderColor}`}>
-                    <div>
-                      <div className={`text-lg font-semibold ${textColor}`}>{item.symbol}</div>
-                      <div className={`text-sm ${secondaryTextColor}`}>{item.company_name}</div>
-                    </div>
-                    {/* Placeholder for price info - currently shows N/A */}
-                    <div className="text-right">
-                      <div className={`text-lg font-semibold ${textColor}`}>
-                        {item.last_price !== null && typeof item.last_price === 'number' && !isNaN(item.last_price) 
-                          ? item.last_price.toFixed(2) 
-                          : 'N/A'}
+              {!loadingWatchlist && !watchlistError && watchlist.length > 0 && (() => {
+                try {
+                  // Ensure watchlist is definitely an array before mapping
+                  const safeWatchlist = Array.isArray(watchlist) ? watchlist : [];
+                  return safeWatchlist.map((item) => (
+                    <div key={item.symbol || Math.random()} className={`py-3 border-b ${borderColor}`}>
+                      {/* Mobile Layout */}
+                      <div className="block sm:hidden">
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <div className={`text-lg font-semibold ${textColor}`}>{item.symbol || 'N/A'}</div>
+                            <div className={`text-sm ${secondaryTextColor} truncate`}>{item.company_name || 'N/A'}</div>
+                          </div>
+                          <button
+                            className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                            onClick={() => handleRemoveTicker(item.symbol)}
+                            title="Remove from watchlist"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-center space-x-4">
+                          <div className="text-center">
+                            <div className={`text-sm ${secondaryTextColor} mb-1`}>Current Price</div>
+                            <div className={`text-xl font-bold ${textColor}`}>
+                              {formatPrice(item.last_price)}
+                            </div>
+                            <div className={`text-sm ${secondaryTextColor} mt-2 mb-1`}>Change</div>
+                            <div className={`text-sm font-medium ${getPriceChangeColor(item.price_change)}`}>
+                              {formatPriceChange(item.price_change)}
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div className={`text-sm ${typeof item.price_change === 'number' && item.price_change >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                        {item.price_change !== null && typeof item.price_change === 'number' && !isNaN(item.price_change) 
-                          ? item.price_change.toFixed(2) 
-                          : 'N/A'}
+
+                      {/* Desktop Layout */}
+                      <div className="hidden sm:grid sm:grid-cols-12 sm:gap-4 sm:items-center">
+                        {/* Company Info */}
+                        <div className="sm:col-span-5">
+                          <div className={`text-lg font-semibold ${textColor}`}>{item.symbol || 'N/A'}</div>
+                          <div className={`text-sm ${secondaryTextColor} truncate`}>{item.company_name || 'N/A'}</div>
+                        </div>
+                        
+                        {/* Price Info and Remove Button for Desktop */}
+                        <div className="sm:col-span-7 sm:grid sm:grid-cols-3 sm:gap-4 sm:items-center">
+                          {/* Current Price */}
+                          <div className="text-center">
+                            <div className={`text-xs ${secondaryTextColor} mb-1`}>Current Price</div>
+                            <div className={`text-lg font-semibold ${textColor}`}>
+                              {formatPrice(item.last_price)}
+                            </div>
+                          </div>
+                          
+                          {/* Change */}
+                          <div className="text-center">
+                            <div className={`text-xs ${secondaryTextColor} mb-1`}>Change</div>
+                            <div className={`text-sm font-medium ${getPriceChangeColor(item.price_change)}`}>
+                              {formatPriceChange(item.price_change)}
+                            </div>
+                          </div>
+                          
+                          {/* Remove Button */}
+                          <div className="flex justify-center">
+                            <button
+                              className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                              onClick={() => handleRemoveTicker(item.symbol)}
+                              title="Remove from watchlist"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <button
-                      className="ml-4 px-2 py-1 border border-red-500 text-red-500 rounded hover:bg-red-500 hover:text-white transition-colors"
-                      onClick={() => handleRemoveTicker(item.symbol)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))
-              )}
+                  ));
+                } catch (error) {
+                  console.error('Error rendering watchlist:', error);
+                  return <p className="text-red-500">Error displaying watchlist data</p>;
+                }
+              })()}
             </div>
           </div>
 
           {/* Recent Activity */}
-          <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor}`}>
+          <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} h-96`}>
             <div className="flex items-center justify-between mb-4">
               <h2 className={`text-xl font-semibold ${textColor} flex items-center`}>
                 <Activity className="w-5 h-5 mr-2 text-blue-500" />
                 Recent Activity
               </h2>
             </div>
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-y-auto h-72">
               {loadingActivity && <p className={secondaryTextColor}>Loading recent activity...</p>}
               {activityError && <p className="text-red-500">Error: {activityError}</p>}
               {!loadingActivity && !activityError && recentActivity.length === 0 && (
                 <p className={secondaryTextColor}>No recent activity.</p>
               )}
-              {!loadingActivity && !activityError && recentActivity.length > 0 && (
-                recentActivity.map((activity) => (
-                  <div key={activity.id} className="flex items-center justify-between">
-                    <div>
-                      <p className={`font-medium ${textColor}`}>{activity.title}</p>
-                      <p className={`text-sm ${secondaryTextColor}`}>{formatTime(activity.created_at)}</p>
+              {!loadingActivity && !activityError && recentActivity.length > 0 && (() => {
+                try {
+                  // Ensure recentActivity is definitely an array before mapping
+                  const safeActivity = Array.isArray(recentActivity) ? recentActivity : [];
+                  return safeActivity.map((activity) => (
+                    <div key={activity.id || Math.random()} className="flex items-center">
+                      <div>
+                        <p className={`font-medium ${textColor}`}>{activity.title || 'No title'}</p>
+                        <p className={`text-sm ${secondaryTextColor}`}>{formatActivityTime(activity.created_at)}</p>
+                      </div>
                     </div>
-                    <ArrowRight className="w-5 h-5 text-blue-500" />
-                  </div>
-                ))
-              )}
+                  ));
+                } catch (error) {
+                  console.error('Error rendering recent activity:', error);
+                  return <p className="text-red-500">Error displaying activity data</p>;
+                }
+              })()}
             </div>
           </div>
 
@@ -593,62 +828,92 @@ const UserHome: React.FC = () => {
                 Upcoming Events
               </h2>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-4">
               {loadingEvents && <p className={secondaryTextColor}>Loading upcoming events...</p>}
               {eventsError && <p className="text-red-500">Error: {eventsError}</p>}
               {!loadingEvents && !eventsError && upcomingEvents.length === 0 && (
                 <p className={secondaryTextColor}>No upcoming events.</p>
               )}
-              {!loadingEvents && !eventsError && upcomingEvents.length > 0 && (
-                upcomingEvents.map((event) => (
-                  <div 
-                    key={event.id} 
-                    className={`p-4 rounded-lg border ${borderColor} ${cardBgColor} hover:scale-105 transition-transform`}
-                  >
-                    <div className="flex items-center space-x-2 mb-2">
-                      {getEventIcon(event.event_type)}
-                      <div>
-                        <span className={`font-medium ${textColor}`}>{event.symbol}</span>
+              {!loadingEvents && !eventsError && upcomingEvents.length > 0 && (() => {
+                try {
+                  // Ensure upcomingEvents is definitely an array before mapping
+                  const safeEvents = Array.isArray(upcomingEvents) ? upcomingEvents : [];
+                  
+                  // Group events by symbol
+                  const eventsBySymbol = safeEvents.reduce((acc, event) => {
+                    const symbol = event.symbol || 'Unknown';
+                    if (!acc[symbol]) {
+                      acc[symbol] = [];
+                    }
+                    acc[symbol].push(event);
+                    return acc;
+                  }, {} as { [key: string]: typeof safeEvents });
+
+                  return Object.entries(eventsBySymbol).map(([symbol, symbolEvents]) => (
+                    <div key={symbol} className={`p-4 rounded-lg border ${borderColor} ${cardBgColor}`}>
+                      {/* Company Header */}
+                      <div className="flex items-center mb-3">
+                        <span className={`text-lg font-semibold ${textColor}`}>{symbol}</span>
                         <span className={`text-sm ${secondaryTextColor} ml-2`}>
-                          {capitalizeFirstLetter(event.event_type)}
+                          ({symbolEvents.length} event{symbolEvents.length !== 1 ? 's' : ''})
                         </span>
                       </div>
+                      
+                      {/* Events Row */}
+                      <div className="flex space-x-4 overflow-x-auto">
+                        {symbolEvents.map((event) => (
+                          <div 
+                            key={event.id || Math.random()} 
+                            className={`min-w-64 p-3 rounded-lg border ${borderColor} bg-opacity-50 hover:bg-opacity-70 transition-all flex-shrink-0`}
+                          >
+                            <div className="flex items-center space-x-2 mb-2">
+                              {getEventIcon(event.event_type)}
+                              <span className={`text-sm font-medium ${textColor}`}>
+                                {capitalizeFirstLetter(event.event_type || 'event')}
+                              </span>
+                            </div>
+                            <div className="mb-2">
+                              <p className={`text-sm ${secondaryTextColor}`}>
+                                {formatDate(event.scheduled_at)}
+                              </p>
+                              <p className={`text-xs ${secondaryTextColor}`}>
+                                {formatTime(event.scheduled_at)}
+                              </p>
+                            </div>
+                            <div className="flex items-center">
+                              {(() => {
+                                const relativeTime = formatEventRelativeTime(event.scheduled_at);
+                                if (!relativeTime) {
+                                  // Fallback to status if no relative time available
+                                  return (
+                                    <span className={`text-xs px-2 py-1 rounded-full ${
+                                      event.status === 'scheduled' 
+                                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                                        : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                    }`}>
+                                      {event.status || 'unknown'}
+                                    </span>
+                                  );
+                                }
+                                
+                                const badgeStyle = getRelativeTimeBadgeStyle(relativeTime);
+                                return (
+                                  <span className={`text-xs px-2 py-1 rounded-full ${badgeStyle.className}`}>
+                                    {relativeTime}
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="mt-2">
-                      <p className={`text-sm ${secondaryTextColor}`}>
-                        {formatDate(event.scheduled_at)}
-                      </p>
-                      <p className={`text-xs ${secondaryTextColor} mt-1`}>
-                        {formatTime(event.scheduled_at)}
-                      </p>
-                    </div>
-                    <div className="mt-2 flex items-center">
-                      {(() => {
-                        const relativeTime = formatEventRelativeTime(event.scheduled_at);
-                        if (!relativeTime) {
-                          // Fallback to status if no relative time available
-                          return (
-                            <span className={`text-xs px-2 py-1 rounded-full ${
-                              event.status === 'scheduled' 
-                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                                : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                            }`}>
-                              {event.status}
-                            </span>
-                          );
-                        }
-                        
-                        const badgeStyle = getRelativeTimeBadgeStyle(relativeTime);
-                        return (
-                          <span className={`text-xs px-2 py-1 rounded-full ${badgeStyle.className}`}>
-                            {relativeTime}
-                          </span>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                ))
-              )}
+                  ));
+                } catch (error) {
+                  console.error('Error rendering upcoming events:', error);
+                  return <p className="text-red-500">Error displaying events data</p>;
+                }
+              })()}
             </div>
           </div>
         </div>
@@ -658,6 +923,7 @@ const UserHome: React.FC = () => {
         isOpen={isAddTickerModalOpen}
         onClose={() => setIsAddTickerModalOpen(false)}
         onAdd={handleAddTicker}
+        isAdding={isAddingTicker}
       />
     </div>
   );

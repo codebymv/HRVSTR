@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Search } from 'lucide-react';
+import { X, Search, Loader2 } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -7,9 +7,10 @@ interface AddTickerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAdd: (symbol: string) => void;
+  isAdding?: boolean;
 }
 
-const AddTickerModal: React.FC<AddTickerModalProps> = ({ isOpen, onClose, onAdd }) => {
+const AddTickerModal: React.FC<AddTickerModalProps> = ({ isOpen, onClose, onAdd, isAdding = false }) => {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{ symbol: string; name: string }>>([]);
@@ -87,8 +88,8 @@ const AddTickerModal: React.FC<AddTickerModalProps> = ({ isOpen, onClose, onAdd 
             {searchResults.map((result) => (
               <div
                 key={result.symbol}
-                className="flex items-center justify-between p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer"
-                onClick={() => handleAdd(result.symbol)}
+                className={`flex items-center justify-between p-2 rounded ${isAdding ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'}`}
+                onClick={() => !isAdding && handleAdd(result.symbol)}
               >
                 <div>
                   <div className="font-medium text-gray-900 dark:text-white">{result.symbol}</div>
@@ -99,9 +100,17 @@ const AddTickerModal: React.FC<AddTickerModalProps> = ({ isOpen, onClose, onAdd 
                     e.stopPropagation();
                     handleAdd(result.symbol);
                   }}
-                  className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                  disabled={isAdding}
+                  className={`px-3 py-1 ${isAdding ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'} text-white rounded flex items-center space-x-1`}
                 >
-                  Add
+                  {isAdding ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Adding...</span>
+                    </>
+                  ) : (
+                    <span>Add</span>
+                  )}
                 </button>
               </div>
             ))}

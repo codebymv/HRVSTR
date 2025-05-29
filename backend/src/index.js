@@ -87,16 +87,25 @@ app.use(cors(corsOptions));
 // Handle preflight requests
 app.options('*', cors(corsOptions));
 
-// Middleware to handle CORS headers
+// Middleware to handle CORS headers and Cross-Origin-Opener-Policy
 app.use((req, res, next) => {
   // Set CORS headers
   const origin = req.headers.origin;
-  if (['https://hrvstr.up.railway.app', 'http://localhost:5173', 'http://localhost:3000'].includes(origin)) { res.header('Access-Control-Allow-Origin', origin); }
+  if (['https://hrvstr.up.railway.app', 'http://localhost:5173', 'http://localhost:3000'].includes(origin)) { 
+    res.header('Access-Control-Allow-Origin', origin); 
+  }
   res.header('Access-Control-Allow-Methods', corsOptions.methods.join(','));
   res.header('Access-Control-Allow-Headers', corsOptions.allowedHeaders.join(','));
   res.header('Access-Control-Expose-Headers', corsOptions.exposedHeaders.join(','));
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Max-Age', '600');
+  
+  // Fix Cross-Origin-Opener-Policy issues for OAuth flows
+  // This allows popup windows to communicate with their opener
+  res.header('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  
+  // Additional security headers for OAuth
+  res.header('Cross-Origin-Embedder-Policy', 'unsafe-none');
   
   // Handle preflight requests
   if (req.method === 'OPTIONS') {

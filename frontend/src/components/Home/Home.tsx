@@ -71,7 +71,6 @@ const Home: React.FC = () => {
               style={{ filter: logoFilter }}
             />
           </div>
-          
           <h1 className={`text-4xl md:text-6xl font-bold mb-6 ${textColor}`}>
             Strategic Web Scraping,{" "}
             <span className="bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent">
