@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, AlertCircle } from 'lucide-react';
+import { Check, AlertCircle, Star, Crown, Zap, Building } from 'lucide-react';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useTier } from '../../../contexts/TierContext';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -112,6 +112,59 @@ const TiersPage: React.FC = () => {
     }
   };
 
+  // Helper function to get user tier information with icon and color
+  const getUserTierInfo = () => {
+    // Use TierContext tierInfo instead of hardcoded user data
+    const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
+    
+    const tierData = {
+      free: {
+        name: 'HRVSTR Free',
+        icon: <Star className="w-4 h-4" />,
+        iconColor: 'text-gray-400',
+        textColor: 'text-gray-400'
+      },
+      pro: {
+        name: 'HRVSTR Pro',
+        icon: <Crown className="w-4 h-4" />,
+        iconColor: 'text-blue-500',
+        textColor: 'text-blue-400'
+      },
+      elite: {
+        name: 'HRVSTR Elite',
+        icon: <Zap className="w-4 h-4" />,
+        iconColor: 'text-purple-500',
+        textColor: 'text-purple-400'
+      },
+      institutional: {
+        name: 'HRVSTR Institutional',
+        icon: <Building className="w-4 h-4" />,
+        iconColor: 'text-green-500',
+        textColor: 'text-green-400'
+      }
+    };
+
+    return tierData[currentTier as keyof typeof tierData] || tierData.free;
+  };
+
+  const getStatusBadge = (status: string) => {
+    const statusClasses = {
+      active: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+      canceled: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
+      past_due: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+      trialing: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+      paid: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+      pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+      failed: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+    };
+
+    return (
+      <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusClasses[status as keyof typeof statusClasses] || statusClasses.canceled}`}>
+        {status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ')}
+      </span>
+    );
+  };
+
   return (
     <div className={`${bgColor} min-h-screen p-4 lg:p-8`}>
       <div className="max-w-6xl mx-auto">
@@ -127,16 +180,22 @@ const TiersPage: React.FC = () => {
           <div className={`${cardBgColor} rounded-lg p-6 mb-8 border ${borderColor}`}>
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className={`text-lg font-semibold ${textColor} capitalize`}>
-                  Current Plan: {tierInfo.tier}
-                </h3>
+                <div className="flex items-center">
+                  <p className={`text-lg font-semibold ${textColor} capitalize mr-2`}>
+                    {tierInfo.tier}
+                  </p>
+                  {tierInfo && (
+                    <div className={`w-5 h-5 flex items-center justify-center ${getUserTierInfo().iconColor}`}>
+                      {getUserTierInfo().icon}
+                    </div>
+                  )}
+                </div>
                 <p className={`text-sm ${secondaryTextColor}`}>
                   {tierInfo.credits.remaining} credits remaining of {tierInfo.credits.monthly} monthly credits
                 </p>
               </div>
-              <div className="flex items-center text-green-500">
-                <Check className="w-5 h-5 mr-2" />
-                <span className="font-medium">Active</span>
+              <div className="flex items-center">
+                {getStatusBadge('active')}
               </div>
             </div>
             

@@ -14,7 +14,11 @@ import {
   Download,
   Edit3,
   Trash2,
-  X
+  X,
+  Star,
+  Crown,
+  Zap,
+  Building
 } from 'lucide-react';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -247,6 +251,41 @@ const BillingPage: React.FC = () => {
     }).format(amount / 100);
   };
 
+  // Helper function to get user tier information with icon and color
+  const getUserTierInfo = () => {
+    // Use TierContext tierInfo instead of hardcoded user data
+    const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
+    
+    const tierData = {
+      free: {
+        name: 'HRVSTR Free',
+        icon: <Star className="w-4 h-4" />,
+        iconColor: 'text-gray-400',
+        textColor: 'text-gray-400'
+      },
+      pro: {
+        name: 'HRVSTR Pro',
+        icon: <Crown className="w-4 h-4" />,
+        iconColor: 'text-blue-500',
+        textColor: 'text-blue-400'
+      },
+      elite: {
+        name: 'HRVSTR Elite',
+        icon: <Zap className="w-4 h-4" />,
+        iconColor: 'text-purple-500',
+        textColor: 'text-purple-400'
+      },
+      institutional: {
+        name: 'HRVSTR Institutional',
+        icon: <Building className="w-4 h-4" />,
+        iconColor: 'text-green-500',
+        textColor: 'text-green-400'
+      }
+    };
+
+    return tierData[currentTier as keyof typeof tierData] || tierData.free;
+  };
+
   if (!isAuthenticated) {
     return (
       <div className={`${bgColor} min-h-screen p-4 lg:p-8`}>
@@ -356,10 +395,17 @@ const BillingPage: React.FC = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div>
-                  <h3 className={`font-medium ${textColor} mb-1`}>Plan</h3>
-                  <p className={`${secondaryTextColor} capitalize`}>
-                    {tierInfo?.tier || 'Free'} Plan
-                  </p>
+                  {/* <h3 className={`font-medium ${textColor} mb-1`}>Plan</h3> */}
+                  <div className="flex items-center">
+                    <p className={`${secondaryTextColor} capitalize mr-2`}>
+                      {tierInfo?.tier || 'Free'}
+                    </p>
+                    {tierInfo && (
+                      <div className={`w-5 h-5 flex items-center justify-center ${getUserTierInfo().iconColor}`}>
+                        {getUserTierInfo().icon}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 
                 {subscription && (
@@ -382,14 +428,16 @@ const BillingPage: React.FC = () => {
               </div>
 
               <div className="mt-6 flex flex-wrap gap-3">
-                <button
-                  onClick={openCustomerPortal}
-                  className={`${buttonBgColor} text-white px-4 py-2 rounded-lg font-medium flex items-center transition-colors`}
-                >
-                  <Settings className="w-4 h-4 mr-2" />
-                  Manage Subscription
-                  <ExternalLink className="w-4 h-4 ml-1" />
-                </button>
+                {tierInfo?.tier !== 'free' && (
+                  <button
+                    onClick={openCustomerPortal}
+                    className={`${buttonBgColor} text-white px-4 py-2 rounded-lg font-medium flex items-center transition-colors`}
+                  >
+                    <Settings className="w-4 h-4 mr-2" />
+                    Manage Subscription
+                    <ExternalLink className="w-4 h-4 ml-1" />
+                  </button>
+                )}
                 
                 {tierInfo?.tier === 'free' && (
                   <button
@@ -508,7 +556,7 @@ const BillingPage: React.FC = () => {
             </div>
 
             {/* Billing Info Note */}
-            <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor}`}>
+            {/* <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor}`}>
               <div className="flex items-start">
                 <AlertCircle className={`w-5 h-5 ${secondaryTextColor} mr-3 mt-0.5`} />
                 <div>
@@ -522,7 +570,7 @@ const BillingPage: React.FC = () => {
                   </p>
                 </div>
               </div>
-            </div>
+            </div> */}
           </div>
         )}
       </div>
