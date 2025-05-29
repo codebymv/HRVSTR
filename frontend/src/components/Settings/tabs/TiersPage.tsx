@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import { Check, AlertCircle } from 'lucide-react';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useTier } from '../../../contexts/TierContext';
-import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../contexts/AuthContext';
 import PricingSection from '../../Pricing/PricingSection';
 
 const TiersPage: React.FC = () => {
   const { theme } = useTheme();
   const { tierInfo } = useTier();
-  const navigate = useNavigate();
+  const { token } = useAuth();
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
   const [upgrading, setUpgrading] = useState(false);
   const [upgradeMessage, setUpgradeMessage] = useState<string | null>(null);
@@ -44,15 +44,6 @@ const TiersPage: React.FC = () => {
     return priceIds[tierKey]?.[isYearly ? 'yearly' : 'monthly'] || '';
   };
 
-  const getPriceForTier = (tierName: string): number => {
-    const prices = {
-      'pro': 1900, // $19.00 in cents
-      'elite': 4900, // $49.00 in cents  
-      'institutional': 19900 // $199.00 in cents
-    };
-    return prices[tierName.toLowerCase() as keyof typeof prices] || 0;
-  };
-
   const handlePurchaseClick = async (tierName: string) => {
     setSelectedTier(tierName);
     setUpgrading(true);
@@ -65,20 +56,52 @@ const TiersPage: React.FC = () => {
         return;
       }
 
-      // For paid tiers, redirect to checkout with Stripe Elements
+      // For paid tiers, create Stripe Checkout Session
       const priceId = getPriceIdForTier(tierName, false); // Default to monthly
-      const amount = getPriceForTier(tierName);
 
       if (!priceId) {
         setUpgradeMessage('Pricing configuration error. Please contact support.');
         return;
       }
 
-      // Navigate to checkout form with tier details
-      navigate(`/checkout?tier=${tierName.toLowerCase()}&priceId=${priceId}&amount=${amount}&interval=month`);
+      // Get auth token
+      if (!token) {
+        setUpgradeMessage('Authentication error. Please sign in again.');
+        return;
+      }
+
+      // Create Stripe Checkout Session
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/billing/create-checkout-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          priceId: priceId,
+          mode: 'subscription',
+          successUrl: `${window.location.origin}/settings/billing?success=true`,
+          cancelUrl: `${window.location.origin}/settings/tiers?cancelled=true`
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setUpgradeMessage(data.error || 'Failed to create checkout session. Please try again.');
+        return;
+      }
+
+      // Redirect to Stripe Checkout
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setUpgradeMessage('Checkout session creation failed. Please try again.');
+      }
       
     } catch (error) {
-      setUpgradeMessage('An error occurred during upgrade. Please try again.');
+      console.error('Checkout error:', error);
+      setUpgradeMessage('An error occurred during checkout. Please try again.');
     } finally {
       setUpgrading(false);
       // Clear message after 5 seconds

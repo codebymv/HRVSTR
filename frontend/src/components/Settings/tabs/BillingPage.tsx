@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   CreditCard, 
   Calendar, 
@@ -12,7 +13,8 @@ import {
   DollarSign,
   Download,
   Edit3,
-  Trash2
+  Trash2,
+  X
 } from 'lucide-react';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -54,13 +56,16 @@ interface Subscription {
 const BillingPage: React.FC = () => {
   const { theme } = useTheme();
   const { isAuthenticated, user } = useAuth();
-  const { tierInfo } = useTier();
+  const { tierInfo, refreshTierInfo } = useTier();
+  const [searchParams, setSearchParams] = useSearchParams();
   
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [cancelMessage, setCancelMessage] = useState<string | null>(null);
   
   const isLight = theme === 'light';
   
@@ -72,6 +77,38 @@ const BillingPage: React.FC = () => {
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
   const buttonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
   const dangerButtonBg = isLight ? 'bg-red-500 hover:bg-red-600' : 'bg-red-600 hover:bg-red-700';
+
+  useEffect(() => {
+    // Check for success/cancel parameters from Stripe Checkout
+    const success = searchParams.get('success');
+    const cancelled = searchParams.get('cancelled');
+
+    if (success === 'true') {
+      setSuccessMessage('🎉 Payment successful! Your subscription has been activated.');
+      // Refresh tier info to reflect the new subscription
+      refreshTierInfo();
+      // Clear URL parameters after showing message
+      searchParams.delete('success');
+      setSearchParams(searchParams);
+      
+      // Auto-hide success message after 10 seconds
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 10000);
+    }
+
+    if (cancelled === 'true') {
+      setCancelMessage('Payment was cancelled. You can try again anytime by selecting a plan.');
+      // Clear URL parameters
+      searchParams.delete('cancelled');
+      setSearchParams(searchParams);
+      
+      // Auto-hide cancel message after 7 seconds
+      setTimeout(() => {
+        setCancelMessage(null);
+      }, 7000);
+    }
+  }, [searchParams, setSearchParams, refreshTierInfo]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -233,6 +270,56 @@ const BillingPage: React.FC = () => {
             Manage your subscription, payment methods, and billing history
           </p>
         </div>
+
+        {/* Success Message */}
+        {successMessage && (
+          <div className="mb-6 p-4 rounded-lg border border-green-500 bg-green-50 dark:bg-green-900/20">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center">
+                <CheckCircle className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-green-700 dark:text-green-300 font-medium">
+                    {successMessage}
+                  </p>
+                  <p className="text-green-600 dark:text-green-400 text-sm mt-1">
+                    Your new subscription features are now available. Check your usage limits in the settings.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSuccessMessage(null)}
+                className="text-green-500 hover:text-green-700 dark:hover:text-green-300 ml-4"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Cancel Message */}
+        {cancelMessage && (
+          <div className="mb-6 p-4 rounded-lg border border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center">
+                <AlertCircle className="w-5 h-5 text-yellow-500 mr-3 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-yellow-700 dark:text-yellow-300 font-medium">
+                    {cancelMessage}
+                  </p>
+                  <p className="text-yellow-600 dark:text-yellow-400 text-sm mt-1">
+                    No charges were made to your account.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setCancelMessage(null)}
+                className="text-yellow-500 hover:text-yellow-700 dark:hover:text-yellow-300 ml-4"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {loading && (
           <div className={`${cardBgColor} rounded-lg p-8 border ${borderColor} text-center`}>
@@ -443,4 +530,4 @@ const BillingPage: React.FC = () => {
   );
 };
 
-export default BillingPage; 
+export default BillingPage;

@@ -20,7 +20,6 @@ import TiersPage from './Settings/tabs/TiersPage';
 import ProfilePage from './Settings/tabs/ProfilePage';
 import PreferencesPage from './Settings/tabs/PreferencesPage';
 import BillingPage from './Settings/tabs/BillingPage';
-import CheckoutPage from './Billing/CheckoutPage';
 import { useAuth } from '../contexts/AuthContext';
 
 // Component for unauthorized access
@@ -59,11 +58,6 @@ const AppContent = () => {
             <Route path="/user-home" element={
               <ProtectedRoute>
                 <UserHome />
-              </ProtectedRoute>
-            } />
-            <Route path="/checkout" element={
-              <ProtectedRoute>
-                <CheckoutPage />
               </ProtectedRoute>
             } />
             <Route path="/sentiment" element={
