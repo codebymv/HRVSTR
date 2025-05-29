@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { Check, AlertCircle } from 'lucide-react';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useTier } from '../../../contexts/TierContext';
+import { useNavigate } from 'react-router-dom';
 import PricingSection from '../../Pricing/PricingSection';
 
 const TiersPage: React.FC = () => {
   const { theme } = useTheme();
-  const { tierInfo, simulateUpgrade } = useTier();
+  const { tierInfo } = useTier();
+  const navigate = useNavigate();
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
   const [upgrading, setUpgrading] = useState(false);
   const [upgradeMessage, setUpgradeMessage] = useState<string | null>(null);
@@ -21,6 +23,36 @@ const TiersPage: React.FC = () => {
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
   const buttonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
 
+  // Mapping of tier names to Stripe price IDs
+  const getPriceIdForTier = (tierName: string, isYearly: boolean = false): string => {
+    const priceIds = {
+      'pro': {
+        monthly: process.env.VITE_STRIPE_PRICE_PRO_MONTHLY || 'price_1QT8PKRxBJaRlFvtr3lA4XFy',
+        yearly: process.env.VITE_STRIPE_PRICE_PRO_YEARLY || 'price_1QT8PKRxBJaRlFvtoWaNE2gM'
+      },
+      'elite': {
+        monthly: process.env.VITE_STRIPE_PRICE_ELITE_MONTHLY || 'price_1QT8PkRxBJaRlFvt8gLwJhzv',
+        yearly: process.env.VITE_STRIPE_PRICE_ELITE_YEARLY || 'price_1QT8PkRxBJaRlFvtdw8LBOBt'
+      },
+      'institutional': {
+        monthly: process.env.VITE_STRIPE_PRICE_INSTITUTIONAL_MONTHLY || 'price_1QT8Q8RxBJaRlFvtoXZqOZ6w',
+        yearly: process.env.VITE_STRIPE_PRICE_INSTITUTIONAL_YEARLY || 'price_1QT8Q8RxBJaRlFvtZp1Q6GYF'
+      }
+    };
+
+    const tierKey = tierName.toLowerCase() as keyof typeof priceIds;
+    return priceIds[tierKey]?.[isYearly ? 'yearly' : 'monthly'] || '';
+  };
+
+  const getPriceForTier = (tierName: string): number => {
+    const prices = {
+      'pro': 1900, // $19.00 in cents
+      'elite': 4900, // $49.00 in cents  
+      'institutional': 19900 // $199.00 in cents
+    };
+    return prices[tierName.toLowerCase() as keyof typeof prices] || 0;
+  };
+
   const handlePurchaseClick = async (tierName: string) => {
     setSelectedTier(tierName);
     setUpgrading(true);
@@ -33,14 +65,18 @@ const TiersPage: React.FC = () => {
         return;
       }
 
-      // Simulate the upgrade process
-      const success = await simulateUpgrade(tierName.toLowerCase());
-      
-      if (success) {
-        setUpgradeMessage(`Successfully upgraded to ${tierName} plan! Your new features and credits are now available.`);
-      } else {
-        setUpgradeMessage('Upgrade failed. Please try again or contact support.');
+      // For paid tiers, redirect to checkout with Stripe Elements
+      const priceId = getPriceIdForTier(tierName, false); // Default to monthly
+      const amount = getPriceForTier(tierName);
+
+      if (!priceId) {
+        setUpgradeMessage('Pricing configuration error. Please contact support.');
+        return;
       }
+
+      // Navigate to checkout form with tier details
+      navigate(`/checkout?tier=${tierName.toLowerCase()}&priceId=${priceId}&amount=${amount}&interval=month`);
+      
     } catch (error) {
       setUpgradeMessage('An error occurred during upgrade. Please try again.');
     } finally {

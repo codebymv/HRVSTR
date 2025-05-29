@@ -156,9 +156,24 @@ const BillingPage: React.FC = () => {
         if (data.success && data.url) {
           window.open(data.url, '_blank');
         }
+      } else if (response.status === 400) {
+        // Handle the case where user doesn't have a Stripe subscription
+        const errorData = await response.json().catch(() => ({}));
+        
+        // Show a user-friendly message
+        alert(`🔔 Subscription Required\n\nTo manage your subscription, you need to first subscribe to a paid plan through Stripe.\n\nYour current "${tierInfo?.tier || 'free'}" tier is simulated for development/testing purposes.\n\nClick "Upgrade Plan" to subscribe to a real plan with payment processing.`);
+        
+        // Optionally redirect to upgrade page
+        setTimeout(() => {
+          window.location.href = '/settings/tiers';
+        }, 2000);
+      } else {
+        console.error('Customer portal error:', response.status);
+        alert('Unable to open customer portal. Please try again later.');
       }
     } catch (err) {
       console.error('Error opening customer portal:', err);
+      alert('Failed to open customer portal. Please check your connection and try again.');
     }
   };
 
