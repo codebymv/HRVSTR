@@ -445,10 +445,10 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
 
             <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
               <div className="flex items-center justify-between">
-                <p className={`text-sm ${secondaryTextColor}`}>
+                {/* <p className={`text-sm ${secondaryTextColor}`}>
                   Once the usage limit is reached, HRVSTR can continue to be used with the base functionality. To 
                   continue using premium web scraping, purchase add-on scrape credits.
-                </p>
+                </p> */}
                 <button 
                   onClick={() => navigate('/billing')}
                   className={`ml-4 ${buttonBgColor} text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center whitespace-nowrap`}
@@ -458,7 +458,7 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
               </div>
             </div>
 
-            <div className="pt-4">
+            {/* <div className="pt-4">
               <button
                 onClick={() => navigate('/referrals')}
                 className={`text-sm ${secondaryTextColor} hover:${textColor} flex items-center transition-colors`}
@@ -467,7 +467,7 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
                 Refer a friend to get 250 free add-on scrape credits
                 <ArrowRight className="w-4 h-4 ml-1" />
               </button>
-            </div>
+            </div> */}
           </div>
         </div>
 

@@ -670,7 +670,7 @@ const UserHome: React.FC = () => {
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Watchlist */}
-          <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} h-96`}>
+          <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} h-[32rem] sm:h-96`}>
             <div className="flex items-center justify-between mb-4">
               <h2 className={`text-xl font-semibold ${textColor} flex items-center`}>
                 <Star className="w-5 h-5 mr-2 text-blue-500" />
@@ -697,7 +697,7 @@ const UserHome: React.FC = () => {
                 </button>
               </div>
             </div>
-            <div className="space-y-4 overflow-y-auto h-72">
+            <div className="space-y-4 overflow-y-auto h-[26rem] sm:h-72">
               {loadingWatchlist && <p className={secondaryTextColor}>Loading watchlist...</p>}
               {watchlistError && <p className="text-red-500">Error: {watchlistError}</p>}
               {!loadingWatchlist && !watchlistError && watchlist.length === 0 && (
