@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { BarChart2, ListChecks, TrendingUp, ArrowRight, Eye, Star } from 'lucide-react';
+import { BarChart2, ListChecks, TrendingUp, ArrowRight, Eye, Star, Map } from 'lucide-react';
 import { 
   SentimentPreview, 
   EarningsPreview, 
@@ -79,7 +79,7 @@ const Home: React.FC = () => {
             </h1>
 
           <p className={`text-xl md:text-2xl mb-8 ${secondaryTextColor} max-w-3xl mx-auto`}>
-            Your comprehensive platform for market sentiment analysis and financial monitoring.
+            A comprehensive solution for market sentiment analysis and financial monitoring.
           </p>
           {!isAuthenticated && (
             <button
@@ -160,6 +160,49 @@ const Home: React.FC = () => {
 
 
         </div>
+
+        {/* Progress Section */}
+        <div className="max-w-7xl mx-auto mt-20">
+          <div className="text-center mb-12">
+            <div className="flex items-center justify-center mb-4">
+              <Map className="w-6 h-6 text-blue-500 mr-2" />
+              <h2 className={`text-3xl md:text-4xl font-bold ${textColor}`}>
+                Roadmap to 1.0!
+              </h2>
+            </div>
+            <p className={`text-lg ${secondaryTextColor} max-w-2xl mx-auto mb-6`}>
+              Tracking the progress of work to be done until 1.0 Release.
+            </p>
+            
+            {/* Version Notes Link */}
+            <div className="mb-8">
+              <a 
+                href="/help/Version/0.7.2-overview"
+                className="text-sm text-blue-500 hover:text-blue-600 flex items-center justify-center"
+              >
+                📋 Version 0.7.2 Notes
+                <ArrowRight className="w-4 h-4 ml-1" />
+              </a>
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          <div className={`${cardBgColor} rounded-lg p-8 border ${borderColor} max-w-4xl mx-auto mb-12`}>
+            <div className="space-y-6">
+              {/* Overall Progress */}
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className={`text-lg font-medium ${textColor}`}>v 0.7.2</span>
+                  <span className={`text-lg font-bold ${textColor}`}>1.0 Stable Release</span>
+                </div>
+                <div className={`w-full bg-gray-300 rounded-full h-3 ${isLight ? 'bg-stone-400' : 'bg-gray-700'}`}>
+                  <div className="bg-gradient-to-r from-teal-400 to-blue-500 h-3 rounded-full transition-all duration-500" style={{ width: '73%' }}></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   );

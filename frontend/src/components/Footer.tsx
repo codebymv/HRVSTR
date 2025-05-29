@@ -121,7 +121,7 @@ const Footer: React.FC = () => {
           <div className={`${secondaryTextColor} text-sm mb-4 md:mb-0`}>
             © {currentYear} HRVSTR. All rights reserved.
           </div>
-          <div className="flex items-center space-x-6">
+          {/* <div className="flex items-center space-x-6">
             <a 
               href="/privacy" 
               className={`${secondaryTextColor} hover:${hoverTextColor.split(' ')[0].replace('text-', '')} transition-colors text-sm`}
@@ -140,7 +140,7 @@ const Footer: React.FC = () => {
             >
               Cookies
             </a>
-          </div>
+          </div> */}
         </div>
       </div>
     </footer>
