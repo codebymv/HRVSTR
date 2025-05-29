@@ -204,7 +204,7 @@ class DocsService {
   private baseUrl: string;
 
   constructor() {
-    this.baseUrl = `${API_BASE_URL}/api/v1/docs`;
+    this.baseUrl = `${API_BASE_URL}/api/docs`;
   }
 
   async getDocContent(path: string): Promise<string> {
@@ -424,6 +424,14 @@ class DocsService {
               { name: 'Frontend Testing Overview', path: 'Tests/Frontend/frontend-testing-overview', type: 'file' }
             ]
           }
+        ]
+      },
+      {
+        name: 'Version',
+        path: 'Version',
+        type: 'folder',
+        children: [
+          { name: '0.7.2 Overview', path: 'Version/0.7.2-overview', type: 'file' }
         ]
       }
     ];
