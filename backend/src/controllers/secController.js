@@ -259,49 +259,71 @@ async function getTickerSummary(req, res, next) {
   try {
     const { ticker } = req.params;
     const { timeRange = '1m' } = req.query;
-    const cacheKey = `sec-summary-${ticker.toUpperCase()}-${timeRange}`;
+    const userTier = req.userTier || req.user?.tier || 'free';
+    const hasInstitutionalAccess = userTier !== 'free';
+    
+    const cacheKey = `sec-summary-${ticker.toUpperCase()}-${timeRange}-${userTier}`;
     const ttl = getCacheTtl('insider-trades'); // Use shorter TTL for summary
 
     const result = await cacheManager.getOrFetch(cacheKey, 'sec-insider', async () => {
-      console.log(`Fetching SEC summary for ticker ${ticker}`);
+      console.log(`Fetching SEC summary for ticker ${ticker} (tier: ${userTier})`);
       
-      // Fetch both insider trades and institutional holdings in parallel
-      const [insiderTrades, institutionalHoldings] = await Promise.all([
-        secService.fetchInsiderTrades(timeRange, 100),
-        secService.fetchInstitutionalHoldings(timeRange, 100)
-      ]);
+      // Always fetch insider trades (available to all tiers)
+      const insiderTrades = await secService.fetchInsiderTrades(timeRange, 100);
+      
+      // Only fetch institutional holdings for Pro+ users
+      let institutionalHoldings = [];
+      if (hasInstitutionalAccess) {
+        institutionalHoldings = await secService.fetchInstitutionalHoldings(timeRange, 100);
+      }
 
       // Filter by ticker
       const tickerInsiderTrades = insiderTrades.filter(trade => 
         trade.ticker && trade.ticker.toUpperCase() === ticker.toUpperCase()
       );
       
-      const tickerInstitutionalHoldings = institutionalHoldings.filter(holding => 
-        holding.ticker && holding.ticker.toUpperCase() === ticker.toUpperCase()
-      );
+      const tickerInstitutionalHoldings = hasInstitutionalAccess ? 
+        institutionalHoldings.filter(holding => 
+          holding.ticker && holding.ticker.toUpperCase() === ticker.toUpperCase()
+        ) : [];
 
       // Analyze patterns
       const insiderActivity = analyzeInsiderActivity(tickerInsiderTrades);
-      const institutionalActivity = analyzeInstitutionalActivity(tickerInstitutionalHoldings);
+      const institutionalActivity = hasInstitutionalAccess ? 
+        analyzeInstitutionalActivity(tickerInstitutionalHoldings) : 
+        { tierRestricted: true, message: 'Institutional holdings require Pro tier or higher' };
 
-      return {
+      const summary = {
         ticker: ticker.toUpperCase(),
         timeRange,
+        userTier,
         summary: {
           insiderTrades: {
             count: tickerInsiderTrades.length,
             trades: tickerInsiderTrades.slice(0, 10), // Top 10 recent
             analysis: insiderActivity
-          },
-          institutionalHoldings: {
-            count: tickerInstitutionalHoldings.length,
-            holdings: tickerInstitutionalHoldings.slice(0, 10), // Top 10 by value
-            analysis: institutionalActivity
           }
         },
         source: 'sec-edgar',
         lastUpdated: new Date().toISOString()
       };
+
+      // Only include institutional holdings for Pro+ users
+      if (hasInstitutionalAccess) {
+        summary.summary.institutionalHoldings = {
+          count: tickerInstitutionalHoldings.length,
+          holdings: tickerInstitutionalHoldings.slice(0, 10), // Top 10 by value
+          analysis: institutionalActivity
+        };
+      } else {
+        summary.summary.institutionalHoldings = {
+          tierRestricted: true,
+          message: 'Institutional holdings analysis is available with Pro tier or higher',
+          upgradeRequired: true
+        };
+      }
+
+      return summary;
     }, ttl);
 
     res.json(result);
@@ -479,30 +501,36 @@ function analyzeInstitutionalActivity(holdings) {
 async function getSecDataParallel(req, res, next) {
   try {
     const { timeRange = '1m', insiderLimit = 100, institutionalLimit = 50, refresh = 'false' } = req.query;
+    const userTier = req.userTier || req.user?.tier || 'free';
+    const hasInstitutionalAccess = userTier !== 'free';
     
-    // Use parallel cache keys for both data types
+    // Use parallel cache keys for both data types, including tier in key for proper caching
     const insiderCacheKey = `sec-insider-trades-${timeRange}-${insiderLimit}`;
     const institutionalCacheKey = `sec-institutional-holdings-${timeRange}-${institutionalLimit}`;
     
     const insiderTtl = getCacheTtl('insider-trades');
     const institutionalTtl = getCacheTtl('institutional-holdings');
     
-    // Fetch both datasets in parallel for optimal performance
-    const [insiderResult, institutionalResult] = await Promise.all([
-      cacheManager.getOrFetch(insiderCacheKey, 'sec-insider', async () => {
-        console.log(`Fetching fresh SEC insider trades data for ${timeRange}`);
-        const insiderTrades = await secService.fetchInsiderTrades(timeRange, parseInt(insiderLimit));
-        return {
-          timeRange,
-          insiderTrades,
-          count: insiderTrades.length,
-          source: 'sec-edgar',
-          refreshed: true,
-          lastUpdated: new Date().toISOString()
-        };
-      }, insiderTtl, refresh === 'true'),
-      
-      cacheManager.getOrFetch(institutionalCacheKey, 'sec-institutional', async () => {
+    console.log(`Parallel SEC data fetch for user tier: ${userTier}, institutional access: ${hasInstitutionalAccess}`);
+
+    // Always fetch insider trades (available to all tiers)
+    const insiderResult = await cacheManager.getOrFetch(insiderCacheKey, 'sec-insider', async () => {
+      console.log(`Fetching fresh SEC insider trades data for ${timeRange}`);
+      const insiderTrades = await secService.fetchInsiderTrades(timeRange, parseInt(insiderLimit));
+      return {
+        timeRange,
+        insiderTrades,
+        count: insiderTrades.length,
+        source: 'sec-edgar',
+        refreshed: true,
+        lastUpdated: new Date().toISOString()
+      };
+    }, insiderTtl, refresh === 'true');
+
+    // Conditionally fetch institutional holdings based on tier
+    let institutionalResult;
+    if (hasInstitutionalAccess) {
+      institutionalResult = await cacheManager.getOrFetch(institutionalCacheKey, 'sec-institutional', async () => {
         console.log(`Fetching fresh SEC institutional holdings data for ${timeRange}`);
         const institutionalHoldings = await secService.fetchInstitutionalHoldings(timeRange, parseInt(institutionalLimit));
         return {
@@ -513,22 +541,32 @@ async function getSecDataParallel(req, res, next) {
           refreshed: true,
           lastUpdated: new Date().toISOString()
         };
-      }, institutionalTtl, refresh === 'true')
-    ]);
+      }, institutionalTtl, refresh === 'true');
+    } else {
+      // Return tier restriction message for free users
+      institutionalResult = {
+        tierRestricted: true,
+        message: 'Institutional holdings analysis is available with Pro tier or higher',
+        upgradeRequired: true,
+        userTier,
+        lastUpdated: new Date().toISOString()
+      };
+    }
 
     // Combine results for a single response
     const combinedResult = {
       timeRange,
+      userTier,
       insiderTrades: {
         data: insiderResult.insiderTrades,
         count: insiderResult.count,
         lastUpdated: insiderResult.lastUpdated
       },
-      institutionalHoldings: {
+      institutionalHoldings: hasInstitutionalAccess ? {
         data: institutionalResult.institutionalHoldings,
         count: institutionalResult.count,
         lastUpdated: institutionalResult.lastUpdated
-      },
+      } : institutionalResult,
       source: 'sec-edgar',
       refreshed: refresh === 'true',
       fetchedAt: new Date().toISOString()

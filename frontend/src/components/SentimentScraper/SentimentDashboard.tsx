@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useTier } from '../../contexts/TierContext';
+import { useTierLimits } from '../../hooks/useTierLimits';
 import { TimeRange } from '../../types';
-import { RefreshCw, Loader2 } from 'lucide-react';
+import { RefreshCw, Loader2, Crown, Lock } from 'lucide-react';
 
 // Custom hooks
 import { useSentimentData } from '../../hooks/useSentimentData';
@@ -11,9 +13,12 @@ import { useTimeRangeDebounce } from '../../hooks/useTimeRangeDebounce';
 import SentimentChartCard from './SentimentChartCard';
 import SentimentScoresSection from './SentimentScoresSection';
 import RedditPostsSection from './RedditPostsSection';
+import TierLimitDialog from '../UI/TierLimitDialog';
 
 const SentimentDashboard: React.FC = () => {
   const { theme } = useTheme();
+  const { tierInfo } = useTier();
+  const { showTierLimitDialog, tierLimitDialog, closeTierLimitDialog } = useTierLimits();
   const isLight = theme === 'light';
   
   // Theme-specific styling
@@ -22,6 +27,21 @@ const SentimentDashboard: React.FC = () => {
   
   // State for time range selection
   const [timeRange, setTimeRange] = useState<TimeRange>('1w');
+  
+  // State to track if tier limit dialog has been shown for this session
+  const [tierLimitDialogShown, setTierLimitDialogShown] = useState(false);
+  
+  // Reddit posts tier limits (posts per page = 10)
+  const REDDIT_TIER_LIMITS = {
+    free: 0,         // No access to Reddit posts
+    pro: -1,         // unlimited
+    elite: -1,       // unlimited
+    institutional: -1 // unlimited
+  };
+  
+  const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
+  const redditPostLimit = REDDIT_TIER_LIMITS[currentTier as keyof typeof REDDIT_TIER_LIMITS] || REDDIT_TIER_LIMITS.free;
+  const hasRedditAccess = currentTier !== 'free';
   
   // Use sentiment data hook for all data management
   const {
@@ -49,8 +69,8 @@ const SentimentDashboard: React.FC = () => {
     
     // Actions
     refreshData,
-    handleLoadMorePosts,
-  } = useSentimentData(timeRange);
+    handleLoadMorePosts: originalHandleLoadMorePosts,
+  } = useSentimentData(timeRange, hasRedditAccess);
   
   // Use time range debounce hook for smooth transitions
   const {
@@ -62,6 +82,27 @@ const SentimentDashboard: React.FC = () => {
   // Combined transitioning state
   const isTransitioning = dataTransitioning || uiTransitioning;
   
+  // Custom handleLoadMorePosts with tier limit checking
+  const handleLoadMorePosts = () => {
+    // Check if tier limit would be exceeded and dialog hasn't been shown yet
+    if (redditPostLimit !== -1 && redditPosts.length >= redditPostLimit && !tierLimitDialogShown) {
+      // Show tier limit dialog with Reddit context
+      showTierLimitDialog(
+        'Reddit Posts',
+        `You've reached the Reddit posts limit for the ${currentTier === 'free' ? 'Free' : currentTier} tier (${redditPosts.length}/${redditPostLimit} posts). Upgrade for unlimited access to social sentiment data.`,
+        'Upgrade to Pro for unlimited Reddit posts, advanced sentiment analysis, and real-time social media monitoring across all platforms.',
+        'reddit'
+      );
+      setTierLimitDialogShown(true);
+      return;
+    }
+    
+    // If under limit, proceed with normal loading
+    if (redditPostLimit === -1 || redditPosts.length < redditPostLimit) {
+      originalHandleLoadMorePosts();
+    }
+  };
+
   // Handle time range changes with debouncing
   const onTimeRangeChange = (range: TimeRange) => {
     // Prevent unnecessary changes if the range is the same
@@ -69,11 +110,63 @@ const SentimentDashboard: React.FC = () => {
       return;
     }
     
+    // Reset tier limit dialog state when changing time ranges
+    setTierLimitDialogShown(false);
+    
     handleTimeRangeChange(range, (newRange) => {
       setTimeRange(newRange);
       // Reset transitioning state after a short delay to allow data to load
       setTimeout(() => setIsTransitioning(false), 300);
     });
+  };
+
+  // Reddit Upgrade Card Component for free users
+  const RedditUpgradeCard: React.FC = () => {
+    const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-800';
+    const borderColor = isLight ? 'border-stone-400' : 'border-gray-700';
+    const gradientFrom = isLight ? 'from-blue-500' : 'from-blue-600';
+    const gradientTo = isLight ? 'to-purple-600' : 'to-purple-700';
+    const buttonBg = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
+    
+    return (
+      <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} text-center`}>
+        <div className={`w-16 h-16 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-full flex items-center justify-center mx-auto mb-4`}>
+          <Lock className="w-8 h-8 text-white" />
+        </div>
+        
+        <h3 className={`text-xl font-bold ${textColor} mb-2`}>
+          Reddit Sentiment Analysis
+        </h3>
+        
+        <p className={`${mutedTextColor} mb-4 max-w-md mx-auto`}>
+          Unlock real-time Reddit sentiment analysis, social media monitoring, and community insights to enhance your market intelligence.
+        </p>
+        
+        <div className={`${isLight ? 'bg-stone-200' : 'bg-gray-900'} rounded-lg p-4 mb-6`}>
+          <h4 className={`font-semibold ${textColor} mb-2`}>Pro Features Include:</h4>
+          <ul className={`text-sm ${mutedTextColor} space-y-1 text-left max-w-xs mx-auto`}>
+            <li>• Live Reddit posts & sentiment</li>
+            <li>• Social media trend analysis</li>
+            <li>• Community sentiment tracking</li>
+            <li>• Advanced filtering options</li>
+            <li>• Real-time data updates</li>
+          </ul>
+        </div>
+        
+        <button
+          onClick={() => showTierLimitDialog(
+            'Reddit Sentiment',
+            'Reddit sentiment analysis is a Pro feature. Upgrade to access real-time social media monitoring and community insights.',
+            'Unlock Reddit posts, sentiment analysis, and advanced social media monitoring with HRVSTR Pro.',
+            'reddit'
+          )}
+          className={`${buttonBg} text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center mx-auto`}
+        >
+          <Crown className="w-4 h-4 mr-2" />
+          Upgrade to Pro
+        </button>
+      </div>
+    );
   };
 
   return (
@@ -120,18 +213,23 @@ const SentimentDashboard: React.FC = () => {
                 rateLimited: errors.rateLimited
               }}
               onRefresh={refreshData}
+              hasRedditAccess={hasRedditAccess}
             />
             
             {/* Reddit Posts Section */}
-            <RedditPostsSection
-              posts={redditPosts}
-              isLoading={loading.posts}
-              loadingProgress={loadingProgress}
-              loadingStage={loadingStage}
-              error={errors.posts}
-              hasMore={hasMorePosts}
-              onLoadMore={handleLoadMorePosts}
-            />
+            {hasRedditAccess ? (
+              <RedditPostsSection
+                posts={redditPosts}
+                isLoading={loading.posts}
+                loadingProgress={loadingProgress}
+                loadingStage={loadingStage}
+                error={errors.posts}
+                hasMore={redditPostLimit === -1 ? hasMorePosts : (hasMorePosts && (!tierLimitDialogShown || redditPosts.length < redditPostLimit))}
+                onLoadMore={handleLoadMorePosts}
+              />
+            ) : (
+              <RedditUpgradeCard />
+            )}
           </div>
           
           {/* Sidebar */}
@@ -147,10 +245,21 @@ const SentimentDashboard: React.FC = () => {
               loadingStage={loadingStage}
               error={errors.sentiment}
               isRateLimited={errors.rateLimited}
+              hasRedditAccess={hasRedditAccess}
             />
           </div>
         </div>
       </div>
+      
+      <TierLimitDialog
+        isOpen={tierLimitDialog.isOpen}
+        onClose={closeTierLimitDialog}
+        featureName={tierLimitDialog.featureName}
+        message={tierLimitDialog.message}
+        upgradeMessage={tierLimitDialog.upgradeMessage}
+        currentTier={tierInfo?.tier || 'Free'}
+        context={tierLimitDialog.context}
+      />
     </div>
   );
 };

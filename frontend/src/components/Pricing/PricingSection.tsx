@@ -35,17 +35,21 @@ const PricingSection: React.FC<PricingSectionProps> = ({
       icon: <Star className="w-5 h-5" />,
       gradient: 'from-gray-400 to-gray-600',
       features: [
-        '5 watchlist stocks',
+        '3 watchlist stocks',
         '50 scrape credits/month',
         'Basic sentiment (FinViz)',
         'SEC insider trades',
         'SEC institutional holdings',
         'Basic earnings calendar',
-        '1-day historical data'
+        '1-day historical data',
+        'Basic stock search'
       ],
       limitations: [
-        'No Reddit sentiment',
+        'No Reddit sentiment access',
         'Limited historical data',
+        'Limited watchlist capacity',
+        'Basic search functionality',
+        'No advanced analytics'
       ]
     },
     {
@@ -57,14 +61,17 @@ const PricingSection: React.FC<PricingSectionProps> = ({
       gradient: 'from-blue-400 to-blue-600',
       popular: true,
       features: [
-        '25 watchlist stocks',
+        '15 watchlist stocks',
         '500 scrape credits/month',
+        'Reddit sentiment access',
         'All sentiment sources',
         'Reddit sentiment (with your API keys)',
         'Full SEC filings access',
         'Complete earnings analysis',
         'Up to 1-month historical data',
-        'Theme customization'
+        'Advanced stock search',
+        'Theme customization',
+        'Real-time data refresh'
       ]
     },
     {
@@ -75,14 +82,16 @@ const PricingSection: React.FC<PricingSectionProps> = ({
       icon: <Zap className="w-5 h-5" />,
       gradient: 'from-purple-400 to-purple-600',
       features: [
-        'Unlimited watchlist',
+        '50 watchlist stocks',
         '2000 scrape credits/month',
         'All data sources',
         'Reddit + Alpha Vantage integration',
         '3+ month historical data',
         'Advanced time range options',
         'Enhanced data refresh rates',
-        'Usage analytics dashboard'
+        'Advanced stock search & filters',
+        'Usage analytics dashboard',
+        'Priority data processing'
       ]
     },
     {
@@ -93,14 +102,17 @@ const PricingSection: React.FC<PricingSectionProps> = ({
       icon: <Building className="w-5 h-5" />,
       gradient: 'from-emerald-400 to-emerald-600',
       features: [
-        'Everything in Elite',
+        'Unlimited watchlist',
         '10,000 scrape credits/month',
+        'All premium data sources',
         'Bulk data operations',
         'Extended historical data',
         'Multiple API key management',
         'Advanced usage monitoring',
         'Priority data processing',
-        'Extended data retention'
+        'Extended data retention',
+        'Team collaboration features',
+        'White-label options'
       ]
     }
   ];

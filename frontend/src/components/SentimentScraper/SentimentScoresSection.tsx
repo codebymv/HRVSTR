@@ -10,26 +10,28 @@ type DataSource = 'reddit' | 'finviz' | 'yahoo' | 'combined';
 interface SentimentScoresSectionProps {
   redditSentiments: SentimentData[];
   finvizSentiments: SentimentData[];
-  yahooSentiments?: SentimentData[];
+  yahooSentiments: SentimentData[];
   combinedSentiments: SentimentData[];
   isLoading: boolean;
   loadingProgress: number;
   loadingStage: string;
   error: string | null;
   isRateLimited: boolean;
+  hasRedditAccess?: boolean;
   className?: string;
 }
 
 const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
   redditSentiments,
   finvizSentiments,
-  yahooSentiments = [], // Default to empty array if not provided
+  yahooSentiments,
   combinedSentiments,
   isLoading,
   loadingProgress,
   loadingStage,
   error,
   isRateLimited,
+  hasRedditAccess = true,
   className = ''
 }) => {
   const [dataSource, setDataSource] = useState<DataSource>('combined');
@@ -41,6 +43,21 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-700';
   const textColor = isLight ? 'text-stone-800' : 'text-white';
   const mutedTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
+
+  // Prevent Reddit selection for free users and switch away from Reddit if they lose access
+  React.useEffect(() => {
+    if (!hasRedditAccess && dataSource === 'reddit') {
+      setDataSource('combined');
+    }
+  }, [hasRedditAccess, dataSource]);
+
+  // Custom setDataSource function that checks Reddit access
+  const handleDataSourceChange = (source: DataSource) => {
+    if (source === 'reddit' && !hasRedditAccess) {
+      return; // Prevent changing to Reddit for free users
+    }
+    setDataSource(source);
+  };
 
   // Get the appropriate sentiment data based on the selected source
   const getSentimentData = () => {
@@ -84,18 +101,27 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
   // Use hard-coded values to match the chart percentages
   const getSourceDistribution = () => {
     // For individual sources, return 100% for the selected source
-    if (dataSource === 'reddit') return { reddit: 100, finviz: 0, yahoo: 0 };
+    if (dataSource === 'reddit') return { reddit: hasRedditAccess ? 100 : 0, finviz: 0, yahoo: 0 };
     if (dataSource === 'finviz') return { reddit: 0, finviz: 100, yahoo: 0 };
     if (dataSource === 'yahoo') return { reddit: 0, finviz: 0, yahoo: 100 };
     
-    // For combined view, use the hard-coded values from the chart
+    // For combined view, adjust based on Reddit access
     if (dataSource === 'combined') {
-      // These values are taken directly from the chart's percentages
-      return {
-        reddit: 72,
-        finviz: 16,
-        yahoo: 12
-      };
+      if (hasRedditAccess) {
+        // Pro users get all sources
+        return {
+          reddit: 72,
+          finviz: 16,
+          yahoo: 12
+        };
+      } else {
+        // Free users only get FinViz and Yahoo
+        return {
+          reddit: 0,
+          finviz: 60,
+          yahoo: 40
+        };
+      }
     }
     
     console.log('Unknown data source:', dataSource);
@@ -111,29 +137,39 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
         <div className="flex items-center space-x-2">
         <div className={`flex space-x-1 ${cardBgColor} rounded-full p-1`}>
             <button
-              className={`p-1.5 rounded-full transition-all ${dataSource === 'reddit' ? 'bg-orange-100 text-orange-500' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-              onClick={() => setDataSource('reddit')}
-              title="Reddit"
+              className={`p-1.5 rounded-full transition-all ${
+                dataSource === 'reddit' 
+                  ? hasRedditAccess 
+                    ? 'bg-orange-100 text-orange-500' 
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : hasRedditAccess
+                    ? 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    : 'text-gray-400 cursor-not-allowed'
+              }`}
+              onClick={() => handleDataSourceChange('reddit')}
+              disabled={!hasRedditAccess}
+              title={hasRedditAccess ? "Reddit" : "Reddit (Pro feature)"}
             >
               <MessageSquare size={18} />
+              {!hasRedditAccess && <span className="text-xs absolute -top-1 -right-1">🔒</span>}
             </button>
             <button
               className={`p-1.5 rounded-full transition-all ${dataSource === 'finviz' ? 'bg-amber-100 text-amber-600' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-              onClick={() => setDataSource('finviz')}
+              onClick={() => handleDataSourceChange('finviz')}
               title="FinViz"
             >
               <TrendingUp size={18} />
             </button>
             <button
               className={`p-1.5 rounded-full transition-all ${dataSource === 'yahoo' ? 'bg-blue-100 text-blue-500' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-              onClick={() => setDataSource('yahoo')}
+              onClick={() => handleDataSourceChange('yahoo')}
               title="Yahoo Finance"
             >
               <Globe size={18} />
             </button>
             <button
               className={`p-1.5 rounded-full transition-all ${dataSource === 'combined' ? 'bg-gray-100 text-gray-900 dark:bg-gray-700 dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-              onClick={() => setDataSource('combined')}
+              onClick={() => handleDataSourceChange('combined')}
               title="All Sources"
             >
               <Layers size={18} />
@@ -147,9 +183,14 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
           <span className={mutedTextColor}>Data sources:</span>
           <div className="flex ml-2 space-x-2">
             {dataSource === 'reddit' || dataSource === 'combined' ? (
-              <span className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-full px-2 py-0.5 text-gray-700 dark:text-gray-300">
-                <MessageSquare size={12} className="text-orange-500" />
+              <span className={`flex items-center space-x-1 rounded-full px-2 py-0.5 ${
+                hasRedditAccess 
+                  ? 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                  : 'bg-gray-200 dark:bg-gray-800 text-gray-400 opacity-60'
+              }`}>
+                <MessageSquare size={12} className={hasRedditAccess ? "text-orange-500" : "text-gray-400"} />
                 <span>{dataSource === 'reddit' ? '100%' : `${Math.round(distribution.reddit)}%`}</span>
+                {!hasRedditAccess && <span className="text-xs">🔒</span>}
               </span>
             ) : null}
             {dataSource === 'finviz' || dataSource === 'combined' ? (

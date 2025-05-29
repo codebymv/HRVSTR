@@ -17,7 +17,9 @@ import {
   CreditCard,
   Key,
   Database,
-  Monitor
+  Monitor,
+  BarChart3,
+  DollarSign
 } from 'lucide-react';
 // import { Bell, Search, User, Sun, Moon } from 'lucide-react'; // Commented out for now
 import { useLocation } from 'react-router-dom';
@@ -85,16 +87,20 @@ const Navbar: React.FC = () => {
   // Add logo filter for theme switching
   const logoFilter = isLight ? 'invert(1) brightness(0)' : 'none';
 
-  // Settings sub-items
+  // Settings sub-items - organized to match SettingsLayout sidebar structure
   const settingsItems = [
-    { path: '/settings/usage', label: 'Usage', icon: BarChart2 },
-    { path: '/settings/tiers', label: 'Tiers', icon: CreditCard },
-    { path: '/settings/api-keys', label: 'API Keys', icon: Key },
-    { path: '/settings/data-sources', label: 'Data Sources', icon: Database },
-    { path: '/settings/interface', label: 'Interface', icon: Monitor },
-    { path: '/settings/profile', label: 'Profile', icon: User },
-    { path: '/settings/notifications', label: 'Notifications', icon: Bell },
-    { path: '/settings/preferences', label: 'Preferences', icon: Cog },
+    // ACCOUNT section
+    { path: '/settings/profile', label: 'Profile', icon: User, category: 'ACCOUNT' },
+    { path: '/settings/preferences', label: 'Preferences', icon: Cog, category: 'ACCOUNT' },
+    
+    // SUBSCRIPTION section  
+    { path: '/settings/usage', label: 'Usage', icon: BarChart3, category: 'SUBSCRIPTION' },
+    { path: '/settings/tiers', label: 'Tiers', icon: CreditCard, category: 'SUBSCRIPTION' },
+    { path: '/settings/billing', label: 'Billing', icon: DollarSign, category: 'SUBSCRIPTION' },
+    
+    // FEATURES section
+    { path: '/settings/api-keys', label: 'API Keys', icon: Key, category: 'FEATURES' },
+    { path: '/settings/data-sources', label: 'Data Sources', icon: Database, category: 'FEATURES' },
   ];
 
   const handleMenuItemClick = () => {
@@ -103,7 +109,7 @@ const Navbar: React.FC = () => {
   };
 
   return (
-    <header className={`${bgColor} border-b ${borderColor} sticky top-0 z-50`}>
+    <header className={`${bgColor} border-b ${borderColor} sticky top-0 z-50 relative`}>
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-14 py-2">
           {/* Logo Section - Enhanced for better display on all devices */}
@@ -176,7 +182,7 @@ const Navbar: React.FC = () => {
       {isAuthenticated && isMenuOpen && (
         <div 
           ref={menuRef}
-          className={`lg:hidden ${bgColor} p-4 border-t ${borderColor} fixed w-full z-50 max-h-screen overflow-y-auto`}
+          className={`lg:hidden ${bgColor} p-4 border-t ${borderColor} absolute top-full left-0 right-0 z-50 max-h-[calc(100vh-3.5rem)] overflow-y-auto`}
           aria-label="Mobile navigation">
           {/* Close button */}
           <div className="flex justify-end mb-2">
@@ -247,26 +253,92 @@ const Navbar: React.FC = () => {
               {/* Settings submenu */}
               {isSettingsExpanded && (
                 <div className="ml-6 mt-1 space-y-1">
-                  {settingsItems.map((item) => {
-                    const Icon = item.icon;
-                    const isActive = location.pathname === item.path;
-                    
-                    return (
-                      <a
-                        key={item.path}
-                        href={item.path}
-                        className={`flex items-center space-x-3 py-2 px-3 text-sm ${
-                          isActive 
-                            ? `${activeBgColor} ${activeTextColor}` 
-                            : `${secondaryTextColor} ${hoverBgColor}`
-                        } rounded-lg transition-colors`}
-                        onClick={handleMenuItemClick}
-                      >
-                        <Icon size={16} />
-                        <span>{item.label}</span>
-                      </a>
-                    );
-                  })}
+                  {/* ACCOUNT section */}
+                  <div className="mb-3">
+                    <h4 className={`text-xs font-semibold ${secondaryTextColor} uppercase tracking-wider mb-2 px-3`}>
+                      ACCOUNT
+                    </h4>
+                    {settingsItems
+                      .filter(item => item.category === 'ACCOUNT')
+                      .map((item) => {
+                        const Icon = item.icon;
+                        const isActive = location.pathname === item.path;
+                        
+                        return (
+                          <a
+                            key={item.path}
+                            href={item.path}
+                            className={`flex items-center space-x-3 py-2 px-3 text-sm ${
+                              isActive 
+                                ? `${activeBgColor} ${activeTextColor}` 
+                                : `${secondaryTextColor} ${hoverBgColor}`
+                            } rounded-lg transition-colors`}
+                            onClick={handleMenuItemClick}
+                          >
+                            <Icon size={16} />
+                            <span>{item.label}</span>
+                          </a>
+                        );
+                      })}
+                  </div>
+
+                  {/* SUBSCRIPTION section */}
+                  <div className="mb-3">
+                    <h4 className={`text-xs font-semibold ${secondaryTextColor} uppercase tracking-wider mb-2 px-3`}>
+                      SUBSCRIPTION
+                    </h4>
+                    {settingsItems
+                      .filter(item => item.category === 'SUBSCRIPTION')
+                      .map((item) => {
+                        const Icon = item.icon;
+                        const isActive = location.pathname === item.path;
+                        
+                        return (
+                          <a
+                            key={item.path}
+                            href={item.path}
+                            className={`flex items-center space-x-3 py-2 px-3 text-sm ${
+                              isActive 
+                                ? `${activeBgColor} ${activeTextColor}` 
+                                : `${secondaryTextColor} ${hoverBgColor}`
+                            } rounded-lg transition-colors`}
+                            onClick={handleMenuItemClick}
+                          >
+                            <Icon size={16} />
+                            <span>{item.label}</span>
+                          </a>
+                        );
+                      })}
+                  </div>
+
+                  {/* FEATURES section */}
+                  <div className="mb-3">
+                    <h4 className={`text-xs font-semibold ${secondaryTextColor} uppercase tracking-wider mb-2 px-3`}>
+                      FEATURES
+                    </h4>
+                    {settingsItems
+                      .filter(item => item.category === 'FEATURES')
+                      .map((item) => {
+                        const Icon = item.icon;
+                        const isActive = location.pathname === item.path;
+                        
+                        return (
+                          <a
+                            key={item.path}
+                            href={item.path}
+                            className={`flex items-center space-x-3 py-2 px-3 text-sm ${
+                              isActive 
+                                ? `${activeBgColor} ${activeTextColor}` 
+                                : `${secondaryTextColor} ${hoverBgColor}`
+                            } rounded-lg transition-colors`}
+                            onClick={handleMenuItemClick}
+                          >
+                            <Icon size={16} />
+                            <span>{item.label}</span>
+                          </a>
+                        );
+                      })}
+                  </div>
                 </div>
               )}
             </div>

@@ -50,9 +50,24 @@ CREATE TABLE events (
     symbol VARCHAR(10) NOT NULL,
     event_type VARCHAR(50) NOT NULL,
     scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    status VARCHAR(50) DEFAULT 'scheduled',
+    status VARCHAR(20) DEFAULT 'scheduled',
+    title VARCHAR(255),
+    description TEXT,
+    importance INTEGER DEFAULT 1,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- API Usage tracking table for tier limits
+CREATE TABLE api_usage (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    usage_date DATE NOT NULL,
+    daily_searches INTEGER DEFAULT 0,
+    daily_price_updates INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, usage_date)
 );
 
 -- Create indexes for better query performance

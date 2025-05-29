@@ -87,6 +87,7 @@ const RedditPostsSection: React.FC<RedditPostsSectionProps> = ({
   return (
     <div className={`${cardBgColor} rounded-lg p-4 lg:p-5 border ${borderColor} ${className}`}>
       <h2 className={`text-lg font-semibold mb-2 ${textColor}`}>Latest Reddit Posts</h2>
+      
       {isLoading && posts.length === 0 ? (
         <div className="flex flex-col items-center justify-center p-10 text-center">
           <Loader2 className="mb-2 text-blue-500 animate-spin" size={32} />

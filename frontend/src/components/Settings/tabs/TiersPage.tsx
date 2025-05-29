@@ -265,23 +265,39 @@ const TiersPage: React.FC = () => {
               <h4 className={`font-medium ${textColor} mb-2`}>Credit Usage</h4>
               <ul className={`text-sm ${secondaryTextColor} space-y-1`}>
                 <li>• Basic sentiment analysis: 1 credit</li>
-                <li>• Reddit sentiment: 3 credits</li>
+                <li>• Reddit sentiment fetch: 3 credits</li>
                 <li>• SEC filing data: 2 credits</li>
                 <li>• Earnings analysis: 2 credits</li>
-                <li>• Real-time refresh: 1 credit</li>
-                <li>• Historical data access: 5 credits</li>
+                <li>• Stock search query: 1 credit</li>
+                <li>• Real-time data refresh: 1 credit</li>
+                <li>• Historical data access: 3-5 credits</li>
+                <li>• Watchlist sync: 1 credit</li>
               </ul>
             </div>
             <div>
-              <h4 className={`font-medium ${textColor} mb-2`}>Billing Information</h4>
+              <h4 className={`font-medium ${textColor} mb-2`}>Tier Limitations</h4>
               <ul className={`text-sm ${secondaryTextColor} space-y-1`}>
-                <li>• All plans include automatic renewal</li>
-                <li>• Cancel anytime with immediate effect</li>
-                <li>• Unused credits don't roll over</li>
-                <li>• Upgrades take effect immediately</li>
-                <li>• Secure payment processing via Stripe</li>
+                <li>• Free: 3 watchlist stocks maximum</li>
+                <li>• Pro: 15 watchlist stocks maximum</li>
+                <li>• Elite: 50 watchlist stocks maximum</li>
+                <li>• Institutional: Unlimited watchlist</li>
+                <li>• Upgrade prompts shown at limits</li>
+                <li>• Free tier: Basic search only</li>
+                <li>• Paid tiers: Advanced filtering</li>
               </ul>
             </div>
+          </div>
+          
+          <div className="mt-6 pt-4 border-t border-gray-700">
+            <h4 className={`font-medium ${textColor} mb-2`}>Billing Information</h4>
+            <ul className={`text-sm ${secondaryTextColor} space-y-1`}>
+              <li>• All plans include automatic renewal</li>
+              <li>• Cancel anytime with immediate effect</li>
+              <li>• Unused credits don't roll over monthly</li>
+              <li>• Upgrades take effect immediately</li>
+              <li>• Secure payment processing via Stripe</li>
+              <li>• 30-day money-back guarantee on first purchase</li>
+            </ul>
           </div>
         </div>
       </div>

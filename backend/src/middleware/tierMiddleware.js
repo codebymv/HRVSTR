@@ -5,25 +5,25 @@ const TIER_LIMITS = {
   free: {
     watchlistLimit: 5,
     monthlyCredits: 50,
-    features: ['FinViz', 'SEC', 'Earnings'],
+    features: ['FinViz', 'SEC-Insider', 'Earnings'],
     historyDays: 1
   },
   pro: {
     watchlistLimit: 25,
     monthlyCredits: 500,
-    features: ['FinViz', 'SEC', 'Earnings', 'Reddit', 'Yahoo'],
+    features: ['FinViz', 'SEC-Insider', 'SEC-Institutional', 'Earnings', 'Reddit', 'Yahoo'],
     historyDays: 30
   },
   elite: {
     watchlistLimit: -1, // unlimited
     monthlyCredits: 2000,
-    features: ['FinViz', 'SEC', 'Earnings', 'Reddit', 'Yahoo', 'AlphaVantage'],
+    features: ['FinViz', 'SEC-Insider', 'SEC-Institutional', 'Earnings', 'Reddit', 'Yahoo', 'AlphaVantage'],
     historyDays: 90
   },
   institutional: {
     watchlistLimit: -1, // unlimited
     monthlyCredits: 10000,
-    features: ['FinViz', 'SEC', 'Earnings', 'Reddit', 'Yahoo', 'AlphaVantage'],
+    features: ['FinViz', 'SEC-Insider', 'SEC-Institutional', 'Earnings', 'Reddit', 'Yahoo', 'AlphaVantage'],
     historyDays: 365
   }
 };

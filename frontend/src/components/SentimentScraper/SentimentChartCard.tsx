@@ -21,6 +21,7 @@ interface SentimentChartCardProps {
     rateLimited: boolean;
   };
   onRefresh: () => void;
+  hasRedditAccess?: boolean;
 }
 
 const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
@@ -33,7 +34,8 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
   loadingStage,
   isDataLoading,
   errors,
-  onRefresh
+  onRefresh,
+  hasRedditAccess = true
 }) => {
   const { theme } = useTheme();
   const isLight = theme === 'light';
@@ -93,6 +95,7 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
           isLoading={loading}
           loadingProgress={loadingProgress}
           loadingStage={loadingStage}
+          hasRedditAccess={hasRedditAccess}
         />
       );
     }

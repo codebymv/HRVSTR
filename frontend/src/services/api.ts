@@ -518,21 +518,39 @@ export const fetchFinvizMarketSentiment = async (signal?: AbortSignal): Promise<
 /**
  * Fetch aggregated market sentiment from all sources
  */
-export const fetchAggregatedMarketSentiment = async (timeRange: TimeRange = '1w', signal?: AbortSignal): Promise<SentimentData[]> => {
+export const fetchAggregatedMarketSentiment = async (timeRange: TimeRange = '1w', signal?: AbortSignal, hasRedditAccess: boolean = true): Promise<SentimentData[]> => {
   try {
-    console.log('Fetching aggregated market sentiment from all sources...');
+    console.log(`Fetching aggregated market sentiment from ${hasRedditAccess ? 'all sources' : 'FinViz + Yahoo only'}...`);
     
-    // Fetch data from all sources in parallel
-    const [redditData, yahooData, finvizData] = await Promise.allSettled([
-      fetchSentimentData(timeRange, signal),
+    // Conditionally fetch data based on tier access
+    const promises = [
       fetchYahooMarketSentiment(signal),
       fetchFinvizMarketSentiment(signal)
-    ]);
+    ];
+    
+    // Only include Reddit if user has access
+    if (hasRedditAccess) {
+      promises.unshift(fetchSentimentData(timeRange, signal));
+    }
+    
+    // Fetch data from available sources in parallel
+    const results = await Promise.allSettled(promises);
     
     // Extract successful results
-    const reddit = redditData.status === 'fulfilled' ? redditData.value : [];
-    const yahoo = yahooData.status === 'fulfilled' ? yahooData.value : [];
-    const finviz = finvizData.status === 'fulfilled' ? finvizData.value : [];
+    let reddit: SentimentData[] = [];
+    let yahoo: SentimentData[] = [];
+    let finviz: SentimentData[] = [];
+    
+    let resultIndex = 0;
+    if (hasRedditAccess) {
+      const redditResult = results[resultIndex];
+      reddit = redditResult.status === 'fulfilled' ? redditResult.value : [];
+      resultIndex++;
+    }
+    const yahooResult = results[resultIndex];
+    yahoo = yahooResult.status === 'fulfilled' ? yahooResult.value : [];
+    const finvizResult = results[resultIndex + 1];
+    finviz = finvizResult.status === 'fulfilled' ? finvizResult.value : [];
     
     console.log(`Source data: Reddit=${reddit.length}, Yahoo=${yahoo.length}, FinViz=${finviz.length}`);
     

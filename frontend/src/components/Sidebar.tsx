@@ -30,7 +30,7 @@ const Sidebar: React.FC = () => {
         
         <NavLink to="/sentiment" className={({isActive}) => `flex items-center space-x-3 px-3 py-2 rounded-lg ${isActive ? `${activeItemBg} ${activeItemText} font-medium` : `${textColor} ${hoverBg} ${hoverText} transition-colors`}`}>
           <BarChart2 size={20} />
-          <span>Sentiment Analysis</span>
+          <span>Sentiment Scraper</span>
         </NavLink>
         
         <NavLink to="/sec-filings" className={({isActive}) => `flex items-center space-x-3 px-3 py-2 rounded-lg ${isActive ? `${activeItemBg} ${activeItemText} font-medium` : `${textColor} ${hoverBg} ${hoverText} transition-colors`}`}>

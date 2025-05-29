@@ -23,13 +23,15 @@ interface SentimentChartProps {
   isLoading?: boolean;
   loadingProgress?: number;
   loadingStage?: string;
+  hasRedditAccess?: boolean;
 }
 
 const SentimentChart: React.FC<SentimentChartProps> = ({ 
   data, 
   isLoading = false, 
   loadingProgress = 0,
-  loadingStage = 'Generating chart...' 
+  loadingStage = 'Generating chart...',
+  hasRedditAccess = true
 }) => {
   // Get theme context
   const { theme } = useTheme();
@@ -82,11 +84,31 @@ const SentimentChart: React.FC<SentimentChartProps> = ({
     }
 
     // Calculate percentages (only for the three main sources)
-    const percentages = {
+    let percentages = {
       reddit: Math.round((sourceCounts.reddit / total) * 100),
       finviz: Math.round((sourceCounts.finviz / total) * 100),
       yahoo: Math.round((sourceCounts.yahoo / total) * 100)
     };
+
+    // Override Reddit percentage for free users
+    if (!hasRedditAccess) {
+      const redditPercentage = percentages.reddit;
+      percentages.reddit = 0;
+      
+      // Redistribute Reddit percentage to other sources
+      if (redditPercentage > 0) {
+        const nonRedditTotal = percentages.finviz + percentages.yahoo;
+        if (nonRedditTotal > 0) {
+          const redistributionRatio = (100 - percentages.reddit) / nonRedditTotal;
+          percentages.finviz = Math.round(percentages.finviz * redistributionRatio);
+          percentages.yahoo = Math.round(percentages.yahoo * redistributionRatio);
+        } else {
+          // If no other sources, default distribution
+          percentages.finviz = 60;
+          percentages.yahoo = 40;
+        }
+      }
+    }
 
     console.log('Final calculated percentages:', percentages);
     return percentages;
@@ -269,9 +291,18 @@ const SentimentChart: React.FC<SentimentChartProps> = ({
       </div>
       <div className="text-xs flex flex-wrap items-center justify-between gap-3 text-neutral-500 dark:text-neutral-400">
         <div className="flex items-center space-x-2">
-          <span className="flex items-center space-x-1 bg-stone-100 dark:bg-gray-700 rounded-full px-2 py-0.5">
-            <MessageSquare size={12} className="text-orange-500" />
-            <span>{sourcePercentages.reddit}%</span>
+          <span className={`flex items-center space-x-1 rounded-full px-2 py-0.5 ${
+            hasRedditAccess 
+              ? 'bg-stone-100 dark:bg-gray-700' 
+              : 'bg-gray-200 dark:bg-gray-800 opacity-50'
+          }`}>
+            <MessageSquare size={12} className={hasRedditAccess ? "text-orange-500" : "text-gray-400"} />
+            <span className={hasRedditAccess ? "" : "text-gray-400"}>
+              {sourcePercentages.reddit}%
+            </span>
+            {!hasRedditAccess && (
+              <span className="text-xs text-gray-400" title="Pro feature">🔒</span>
+            )}
           </span>
           <span className="flex items-center space-x-1 bg-stone-100 dark:bg-gray-700 rounded-full px-2 py-0.5">
             <TrendingUp size={12} className="text-amber-500" />

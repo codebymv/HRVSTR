@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { TimeRange } from '../../types';
 import { clearSecCache, fetchSecDataParallel } from '../../services/api';
-import { RefreshCw, Loader2 } from 'lucide-react';
+import { RefreshCw, Loader2, Crown, Lock } from 'lucide-react';
 import ProgressBar from '../ProgressBar';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useTier } from '../../contexts/TierContext';
+import { useTierLimits } from '../../hooks/useTierLimits';
 import InsiderTradesTab from './InsiderTradesTab.tsx';
 import InstitutionalHoldingsTab from './InstitutionalHoldingsTab.tsx';
+import TierLimitDialog from '../UI/TierLimitDialog';
 
 interface SECFilingsDashboardProps {
   onLoadingProgressChange?: (progress: number, stage: string) => void;
@@ -15,6 +18,8 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
   onLoadingProgressChange 
 }) => {
   const { theme } = useTheme();
+  const { tierInfo } = useTier();
+  const { showTierLimitDialog, tierLimitDialog, closeTierLimitDialog } = useTierLimits();
   const isLight = theme === 'light';
   
   // Theme specific styling
@@ -27,6 +32,10 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
   const textColor = isLight ? 'text-stone-900' : 'text-white';
   const subTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
   
+  // Tier access logic
+  const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
+  const hasInstitutionalAccess = currentTier !== 'free'; // Pro+ feature
+  
   // Shared state between tabs
   const [timeRange, setTimeRange] = useState<TimeRange>(() => {
     try {
@@ -37,7 +46,12 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
   });
   const [activeTab, setActiveTab] = useState<'insider' | 'institutional'>(() => {
     try {
-      return (localStorage.getItem('secFilings_activeTab') as 'insider' | 'institutional') || 'insider';
+      const saved = localStorage.getItem('secFilings_activeTab') as 'insider' | 'institutional';
+      // If user doesn't have institutional access and saved tab is institutional, default to insider
+      if (!hasInstitutionalAccess && saved === 'institutional') {
+        return 'insider';
+      }
+      return saved || 'insider';
     } catch (e) {
       return 'insider';
     }
@@ -331,100 +345,181 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     }
   };
   
-  return (
-    <div className="flex flex-col h-full">
-      <div className={`flex flex-col md:flex-row justify-between md:items-center gap-4 mb-4 ${cardBg} rounded-lg p-4 border ${cardBorder}`}>
-        <div>
-          <h1 className={`text-xl font-bold ${textColor}`}>SEC Filings</h1>
-          <p className={`text-sm ${subTextColor}`}>Track insider trading and institutional holdings</p>
+  // Handle tab switching with tier restrictions
+  const handleTabChange = (tab: 'insider' | 'institutional') => {
+    if (tab === 'institutional' && !hasInstitutionalAccess) {
+      // Show tier limit dialog for institutional holdings
+      showTierLimitDialog(
+        'Institutional Holdings',
+        'Institutional holdings analysis is a Pro feature. Upgrade to access comprehensive 13F filing data and institutional investment tracking.',
+        'Unlock institutional holdings, advanced SEC analysis, and comprehensive regulatory filing insights with HRVSTR Pro.',
+        'general'
+      );
+      return;
+    }
+    setActiveTab(tab);
+  };
+
+  // Institutional Holdings Upgrade Card Component for free users
+  const InstitutionalUpgradeCard: React.FC = () => {
+    const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-800';
+    const borderColor = isLight ? 'border-stone-400' : 'border-gray-700';
+    const gradientFrom = isLight ? 'from-blue-500' : 'from-blue-600';
+    const gradientTo = isLight ? 'to-purple-600' : 'to-purple-700';
+    const buttonBg = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
+    
+    return (
+      <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} text-center h-full flex flex-col justify-center`}>
+        <div className={`w-16 h-16 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-full flex items-center justify-center mx-auto mb-4`}>
+          <Lock className="w-8 h-8 text-white" />
         </div>
         
-        <div className="flex items-center gap-2">
-          {/* Time range selector */}
-          <select
-            value={timeRange}
-            onChange={(e) => handleTimeRangeChange(e.target.value as TimeRange)}
-            className={`py-1 px-2 rounded text-sm ${cardBg} ${textColor} border ${cardBorder}`}
-            disabled={loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading}
-          >
-            <option value="1d">1 Day</option>
-            <option value="1w">1 Week</option>
-            <option value="1m">1 Month</option>
-            <option value="3m">3 Months</option>
-          </select>
+        <h3 className={`text-xl font-bold ${textColor} mb-2`}>
+          Institutional Holdings Analysis
+        </h3>
+        
+        <p className={`${subTextColor} mb-4 max-w-md mx-auto`}>
+          Access comprehensive 13F filing data, institutional ownership trends, and smart money tracking to enhance your investment research.
+        </p>
+        
+        <div className={`${isLight ? 'bg-stone-200' : 'bg-gray-900'} rounded-lg p-4 mb-6`}>
+          <h4 className={`font-semibold ${textColor} mb-2`}>Pro Features Include:</h4>
+          <ul className={`text-sm ${subTextColor} space-y-1 text-left max-w-xs mx-auto`}>
+            <li>• 13F institutional filing analysis</li>
+            <li>• Institutional ownership tracking</li>
+            <li>• Smart money position monitoring</li>
+            <li>• Quarterly holding change alerts</li>
+            <li>• Advanced filtering & sorting</li>
+          </ul>
+        </div>
+        
+        <button
+          onClick={() => showTierLimitDialog(
+            'Institutional Holdings',
+            'Institutional holdings analysis is a Pro feature. Upgrade to access comprehensive 13F filing data and institutional investment tracking.',
+            'Unlock institutional holdings, advanced SEC analysis, and comprehensive regulatory filing insights with HRVSTR Pro.',
+            'general'
+          )}
+          className={`${buttonBg} text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center mx-auto`}
+        >
+          <Crown className="w-4 h-4 mr-2" />
+          Upgrade to Pro
+        </button>
+      </div>
+    );
+  };
+
+  return (
+    <>
+      <div className="flex flex-col h-full">
+        <div className={`flex flex-col md:flex-row justify-between md:items-center gap-4 mb-4 ${cardBg} rounded-lg p-4 border ${cardBorder}`}>
+          <div>
+            <h1 className={`text-xl font-bold ${textColor}`}>SEC Filings</h1>
+            <p className={`text-sm ${subTextColor}`}>Track insider trading and institutional holdings</p>
+          </div>
           
-          {/* Refresh button - now combines cache clearing and data refresh */}
+          <div className="flex items-center gap-2">
+            {/* Time range selector */}
+            <select
+              value={timeRange}
+              onChange={(e) => handleTimeRangeChange(e.target.value as TimeRange)}
+              className={`py-1 px-2 rounded text-sm ${cardBg} ${textColor} border ${cardBorder}`}
+              disabled={loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading}
+            >
+              <option value="1d">1 Day</option>
+              <option value="1w">1 Week</option>
+              <option value="1m">1 Month</option>
+              <option value="3m">3 Months</option>
+            </select>
+            
+            {/* Refresh button - now combines cache clearing and data refresh */}
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing || loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading}
+              className={`p-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white ${(isRefreshing || loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading) ? 'opacity-50' : ''}`}
+              title="Refresh SEC data"
+            >
+              {(isRefreshing || loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading) ? (
+                <Loader2 size={18} className="text-white animate-spin" />
+              ) : (
+                <RefreshCw size={18} className="text-white" />
+              )}
+            </button>
+          </div>
+        </div>
+        
+        {/* Tabs */}
+        <div className="mb-4 flex w-full">
           <button
-            onClick={handleRefresh}
-            disabled={isRefreshing || loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading}
-            className={`p-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white ${(isRefreshing || loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading) ? 'opacity-50' : ''}`}
-            title="Refresh SEC data"
+            className={`py-2 px-4 rounded-t-lg font-medium text-sm flex-1 text-center ${
+              activeTab === 'insider' ? `${tabActiveBg} ${tabActiveText}` : `${tabInactiveBg} ${tabInactiveText}`
+            }`}
+            onClick={() => handleTabChange('insider')}
           >
-            {(isRefreshing || loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading) ? (
-              <Loader2 size={18} className="text-white animate-spin" />
-            ) : (
-              <RefreshCw size={18} className="text-white" />
+            Insider Trading
+          </button>
+          <button
+            className={`py-2 px-4 rounded-t-lg font-medium text-sm flex-1 text-center relative ${
+              activeTab === 'institutional' ? `${tabActiveBg} ${tabActiveText}` : `${tabInactiveBg} ${tabInactiveText}`
+            } ${!hasInstitutionalAccess ? 'opacity-75' : ''}`}
+            onClick={() => handleTabChange('institutional')}
+          >
+            Institutional Holdings
+            {!hasInstitutionalAccess && (
+              <Lock className="w-4 h-4 inline-block ml-1" />
             )}
           </button>
         </div>
-      </div>
-      
-      {/* Tabs */}
-      <div className="mb-4 flex w-full">
-        <button
-          className={`py-2 px-4 rounded-t-lg font-medium text-sm flex-1 text-center ${
-            activeTab === 'insider' ? `${tabActiveBg} ${tabActiveText}` : `${tabInactiveBg} ${tabInactiveText}`
-          }`}
-          onClick={() => setActiveTab('insider')}
-        >
-          Insider Trading
-        </button>
-        <button
-          className={`py-2 px-4 rounded-t-lg font-medium text-sm flex-1 text-center ${
-            activeTab === 'institutional' ? `${tabActiveBg} ${tabActiveText}` : `${tabInactiveBg} ${tabInactiveText}`
-          }`}
-          onClick={() => setActiveTab('institutional')}
-        >
-          Institutional Holdings
-        </button>
-      </div>
-      
-      {/* Loading progress bar - shown only when active tab is loading */}
-      {(activeTab === 'insider' && loadingState.insiderTrades.isLoading) || (activeTab === 'institutional' && loadingState.institutionalHoldings.isLoading) ? (
-        <div className={`${cardBg} rounded-lg p-4 mb-4 border ${cardBorder}`}>
-          <div className="flex flex-col items-center">
-            <p className={`text-sm font-medium ${textColor} mb-2`}>{loadingStage}</p>
-            <div className="w-full max-w-lg mb-2">
-              <ProgressBar progress={loadingProgress} />
+        
+        {/* Loading progress bar - shown only when active tab is loading */}
+        {(activeTab === 'insider' && loadingState.insiderTrades.isLoading) || (activeTab === 'institutional' && loadingState.institutionalHoldings.isLoading && hasInstitutionalAccess) ? (
+          <div className={`${cardBg} rounded-lg p-4 mb-4 border ${cardBorder}`}>
+            <div className="flex flex-col items-center">
+              <p className={`text-sm font-medium ${textColor} mb-2`}>{loadingStage}</p>
+              <div className="w-full max-w-lg mb-2">
+                <ProgressBar progress={loadingProgress} />
+              </div>
+              <p className="text-xs text-blue-400">{loadingProgress}% complete</p>
             </div>
-            <p className="text-xs text-blue-400">{loadingProgress}% complete</p>
           </div>
+        ) : null}
+        
+        {/* Active tab content */}
+        <div className="flex-1">
+          {activeTab === 'insider' ? (
+            <InsiderTradesTab
+              timeRange={timeRange}
+              isLoading={loadingState.insiderTrades.isLoading}
+              onLoadingChange={handleInsiderTradesLoading}
+              forceReload={loadingState.insiderTrades.needsRefresh}
+              initialData={insiderTradesData}
+              error={errors.insiderTrades}
+            />
+          ) : activeTab === 'institutional' && hasInstitutionalAccess ? (
+            <InstitutionalHoldingsTab
+              timeRange={timeRange}
+              isLoading={loadingState.institutionalHoldings.isLoading}
+              onLoadingChange={handleInstitutionalHoldingsLoading}
+              forceReload={loadingState.institutionalHoldings.needsRefresh}
+              initialData={institutionalHoldingsData}
+              error={errors.institutionalHoldings}
+            />
+          ) : (
+            <InstitutionalUpgradeCard />
+          )}
         </div>
-      ) : null}
-      
-      {/* Active tab content */}
-      <div className="flex-1">
-        {activeTab === 'insider' ? (
-          <InsiderTradesTab
-            timeRange={timeRange}
-            isLoading={loadingState.insiderTrades.isLoading}
-            onLoadingChange={handleInsiderTradesLoading}
-            forceReload={loadingState.insiderTrades.needsRefresh}
-            initialData={insiderTradesData}
-            error={errors.insiderTrades}
-          />
-        ) : (
-          <InstitutionalHoldingsTab
-            timeRange={timeRange}
-            isLoading={loadingState.institutionalHoldings.isLoading}
-            onLoadingChange={handleInstitutionalHoldingsLoading}
-            forceReload={loadingState.institutionalHoldings.needsRefresh}
-            initialData={institutionalHoldingsData}
-            error={errors.institutionalHoldings}
-          />
-        )}
       </div>
-    </div>
+
+      <TierLimitDialog
+        isOpen={tierLimitDialog.isOpen}
+        onClose={closeTierLimitDialog}
+        featureName={tierLimitDialog.featureName}
+        message={tierLimitDialog.message}
+        upgradeMessage={tierLimitDialog.upgradeMessage}
+        currentTier={tierInfo?.tier || 'Free'}
+        context={tierLimitDialog.context}
+      />
+    </>
   );
 };
 

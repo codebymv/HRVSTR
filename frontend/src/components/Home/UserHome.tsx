@@ -22,8 +22,11 @@ import {
   Building
 } from 'lucide-react';
 import AddTickerModal from '../Watchlist/AddTickerModal';
+import ConfirmationDialog from '../UI/ConfirmationDialog';
+import TierLimitDialog from '../UI/TierLimitDialog';
 import { formatEventRelativeTime, getRelativeTimeBadgeStyle } from '../../utils/timeUtils';
 import { useTier } from '../../contexts/TierContext';
+import { useTierLimits } from '../../hooks/useTierLimits';
 
 interface WatchlistItem {
   id: string;
@@ -55,6 +58,7 @@ const UserHome: React.FC = () => {
   const { theme } = useTheme();
   const { user } = useAuth();
   const { tierInfo } = useTier();
+  const { showTierLimitDialog, tierLimitDialog, closeTierLimitDialog } = useTierLimits();
   
   // State for watchlist data, loading, and error
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
@@ -75,6 +79,11 @@ const UserHome: React.FC = () => {
   const [refreshingData, setRefreshingData] = useState(false);
   const [rateLimitActive, setRateLimitActive] = useState(false);
   const [isAddingTicker, setIsAddingTicker] = useState(false);
+
+  // Confirmation dialog state
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [tickerToRemove, setTickerToRemove] = useState<{ symbol: string; name: string } | null>(null);
+  const [isRemovingTicker, setIsRemovingTicker] = useState(false);
 
   // Add refs to track if requests are in progress to prevent duplicate calls
   const fetchingWatchlist = useRef(false);
@@ -569,36 +578,129 @@ const UserHome: React.FC = () => {
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       // Add ticker to watchlist
-      await axios.post(`${apiUrl}/api/stocks/watchlist`, { symbol }, {
-        headers: {
-          Authorization: `Bearer ${user?.token}`
-        }
-      });
-      
-      // After adding, trigger a data refresh for the entire watchlist
-      // This will fetch events and price data for the new ticker
-      await axios.post(`${apiUrl}/api/stocks/refresh-watchlist-data`, {}, {
+      const response = await axios.post(`${apiUrl}/api/stocks/watchlist`, { symbol }, {
         headers: {
           Authorization: `Bearer ${user?.token}`
         }
       });
 
-      // Clear cache and force refresh data for frontend display
+      // Check for tier limit response
+      if (response.status === 202 && response.data.tierLimitReached) {
+        console.log('Tier limit reached during watchlist add, showing tier limit dialog');
+        
+        // Check if this was an Alpha Vantage limit (external API limit)
+        if (response.data.alphaVantageLimit) {
+          showTierLimitDialog(
+            'Real-time Price Data',
+            `You've reached the daily limit for real-time price updates (25/day for Free tier). Your stock was added to the watchlist but without current pricing.`,
+            'Upgrade to Pro for unlimited real-time price updates, advanced analytics, and priority data access.',
+            'watchlist'
+          );
+        } else {
+          // Internal tier limit reached
+          showTierLimitDialog(
+            'Watchlist Price Updates',
+            `You've reached the daily price update limit (25/day for Free tier). The stock was added but current pricing is unavailable today.`,
+            'Upgrade to Pro for unlimited price updates, real-time data, and advanced portfolio tracking.',
+            'watchlist'
+          );
+        }
+        return; // Don't continue with UI updates
+      }
+      
+      // Clear cache first to ensure fresh data
       dataCache.current.watchlist.timestamp = 0;
       dataCache.current.activity.timestamp = 0;
       dataCache.current.events.timestamp = 0;
-      await fetchWatchlist(true);
-      await fetchRecentActivity(true);
-      await fetchUpcomingEvents(true);
 
-    } catch (error) {
+      // Try to trigger backend data refresh, but don't let it block the UI update
+      try {
+        await axios.post(`${apiUrl}/api/stocks/refresh-watchlist-data`, {}, {
+          headers: {
+            Authorization: `Bearer ${user?.token}`
+          }
+        });
+      } catch (refreshError) {
+        console.warn('Backend refresh failed, but continuing with frontend update:', refreshError);
+        // Don't throw - we'll still update the frontend
+      }
+
+      // Always update the frontend regardless of backend refresh success
+      await Promise.all([
+        fetchWatchlist(true),
+        fetchRecentActivity(true),
+        fetchUpcomingEvents(true)
+      ]);
+
+    } catch (error: any) {
       console.error('Error adding ticker:', error);
+      
+      // Check for tier limit error responses
+      if (error.response?.status === 202 && error.response?.data?.tierLimitReached) {
+        console.log('Tier limit reached, showing tier limit dialog');
+        
+        // Check if this was an Alpha Vantage limit
+        if (error.response.data.alphaVantageLimit) {
+          showTierLimitDialog(
+            'Real-time Price Data',
+            `You've reached the daily limit for real-time price updates (25/day for Free tier). Your stock was added to the watchlist but without current pricing.`,
+            'Upgrade to Pro for unlimited real-time price updates, advanced analytics, and priority data access.',
+            'watchlist'
+          );
+        } else {
+          showTierLimitDialog(
+            'Watchlist Price Updates', 
+            `You've reached the daily price update limit (25/day for Free tier). The stock was added but current pricing is unavailable today.`,
+            'Upgrade to Pro for unlimited price updates, real-time data, and advanced portfolio tracking.',
+            'watchlist'
+          );
+        }
+        return;
+      }
+      
+      // Check for other tier limit types (402 status)
+      if (error.response?.status === 402 && error.response?.data?.error === 'tier_limit') {
+        const tierLimitType = error.response.data.tierLimitType;
+        const usage = error.response.data.usage;
+        
+        if (tierLimitType === 'search') {
+          showTierLimitDialog(
+            'Stock Search Limit',
+            `You've reached the daily search limit (${usage?.current || 25}/${usage?.limit || 25} for Free tier). Try again tomorrow or upgrade for unlimited searches.`,
+            'Upgrade to Pro for unlimited stock searches, real-time data, and advanced market analysis tools.',
+            'watchlist'
+          );
+        } else if (tierLimitType === 'price_updates') {
+          showTierLimitDialog(
+            'Price Update Limit',
+            `You've reached the daily price update limit (${usage?.current || 25}/${usage?.limit || 25} for Free tier). Stocks can still be added but pricing will be unavailable.`,
+            'Upgrade to Pro for unlimited price updates and real-time market data access.',
+            'watchlist'
+          );
+        } else {
+          // Generic tier limit message
+          showTierLimitDialog(
+            'Daily Limit Reached',
+            `You've reached your daily limit for this feature (Free tier: ${usage?.current || 25}/${usage?.limit || 25}). Upgrade for unlimited access.`,
+            'Upgrade to Pro for unlimited access to all features and real-time data.',
+            'watchlist'
+          );
+        }
+        return;
+      }
+      
+      // If the actual ticker addition failed, show an error or handle appropriately
+      if (error.response?.status !== 200) {
+        // Handle ticker addition failure
+        console.error('Failed to add ticker to watchlist');
+      }
     } finally {
       setIsAddingTicker(false);
     }
   };
 
   const handleRemoveTicker = async (symbol: string) => {
+    setIsRemovingTicker(true);
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       await axios.delete(`${apiUrl}/api/stocks/watchlist`, {
@@ -617,6 +719,9 @@ const UserHome: React.FC = () => {
       fetchUpcomingEvents(true);
     } catch (error) {
       console.error('Error removing ticker:', error);
+    } finally {
+      setIsRemovingTicker(false);
+      setTickerToRemove(null);
     }
   };
 
@@ -777,7 +882,10 @@ const UserHome: React.FC = () => {
                           </div>
                           <button
                             className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                            onClick={() => handleRemoveTicker(item.symbol)}
+                            onClick={() => {
+                              setTickerToRemove({ symbol: item.symbol, name: item.company_name });
+                              setShowConfirmDialog(true);
+                            }}
                             title="Remove from watchlist"
                           >
                             <Trash2 size={16} />
@@ -829,7 +937,10 @@ const UserHome: React.FC = () => {
                           <div className="flex justify-center">
                             <button
                               className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                              onClick={() => handleRemoveTicker(item.symbol)}
+                              onClick={() => {
+                                setTickerToRemove({ symbol: item.symbol, name: item.company_name });
+                                setShowConfirmDialog(true);
+                              }}
                               title="Remove from watchlist"
                             >
                               <Trash2 size={16} />
@@ -995,6 +1106,36 @@ const UserHome: React.FC = () => {
         onClose={() => setIsAddTickerModalOpen(false)}
         onAdd={handleAddTicker}
         isAdding={isAddingTicker}
+      />
+
+      <ConfirmationDialog
+        isOpen={showConfirmDialog}
+        onClose={() => {
+          setShowConfirmDialog(false);
+          setTickerToRemove(null);
+        }}
+        onConfirm={() => {
+          if (tickerToRemove) {
+            handleRemoveTicker(tickerToRemove.symbol);
+          }
+          setShowConfirmDialog(false);
+        }}
+        title="Remove from Watchlist"
+        message={`Are you sure you want to remove ${tickerToRemove?.symbol} (${tickerToRemove?.name}) from your watchlist?`}
+        confirmText="Remove"
+        cancelText="Cancel"
+        isDestructive={true}
+        isLoading={isRemovingTicker}
+      />
+
+      <TierLimitDialog
+        isOpen={tierLimitDialog.isOpen}
+        onClose={closeTierLimitDialog}
+        featureName={tierLimitDialog.featureName}
+        message={tierLimitDialog.message}
+        upgradeMessage={tierLimitDialog.upgradeMessage}
+        currentTier={tierInfo?.tier || 'Free'}
+        context={tierLimitDialog.context || 'watchlist'}
       />
     </div>
   );

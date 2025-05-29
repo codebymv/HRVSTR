@@ -91,7 +91,7 @@ function useAbortableRequests(): UseAbortableRequests {
   return requestManagerRef.current;
 }
 
-export function useSentimentData(timeRange: TimeRange): SentimentDataHookReturn {
+export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean = true): SentimentDataHookReturn {
   const requestManager = useAbortableRequests();
   
   // Cache expiration time - 5 minutes
@@ -217,17 +217,17 @@ export function useSentimentData(timeRange: TimeRange): SentimentDataHookReturn 
       try {
         // Step 1: Fetch aggregated market sentiment from all sources (Reddit timeline + Yahoo + FinViz)
         if (allSentimentsRef.current.length === 0 || Date.now() - cacheTimestampRef.current > CACHE_EXPIRY) {
-          updateProgress(15, 'Downloading sentiment timeline from all sources...');
+          updateProgress(15, hasRedditAccess ? 'Downloading sentiment timeline from all sources...' : 'Downloading sentiment timeline (FinViz + Yahoo)...');
           const sentimentSignal = requestManager.getSignal(REQUEST_KEYS.sentimentData);
           
-          let sentimentData = await fetchAggregatedMarketSentiment('3m', sentimentSignal);
-          logger.log(`Aggregated market sentiment: ${sentimentData.length} data points from all sources`);
+          let sentimentData = await fetchAggregatedMarketSentiment('3m', sentimentSignal, hasRedditAccess);
+          logger.log(`Aggregated market sentiment: ${sentimentData.length} data points from ${hasRedditAccess ? 'all sources' : 'FinViz + Yahoo only'}`);
           
           if (sentimentData.length <= 1) {
             logger.log('Initial fetch returned minimal data, trying alternate timeframes...');
             try {
               const sentimentSignal2 = requestManager.getSignal(REQUEST_KEYS.sentimentData + '-alt');
-              const alternateData = await fetchAggregatedMarketSentiment('1m', sentimentSignal2);
+              const alternateData = await fetchAggregatedMarketSentiment('1m', sentimentSignal2, hasRedditAccess);
               if (alternateData.length > sentimentData.length) {
                 logger.log(`Found more data with alternate timeframe: ${alternateData.length} points`);
                 sentimentData = alternateData;
@@ -251,30 +251,39 @@ export function useSentimentData(timeRange: TimeRange): SentimentDataHookReturn 
       }
       
       try {
-        // Step 2: Fetch Reddit posts with pagination
-        if (cachedRedditPostsRef.current.length === 0 || Date.now() - cacheTimestampRef.current > CACHE_EXPIRY) {
-          updateProgress(30, 'Fetching Reddit posts...');
-          const postsSignal = requestManager.getSignal(REQUEST_KEYS.redditPosts);
-          
-          try {
-            const posts = await fetchRedditPosts(postsSignal);
-            cachedRedditPostsRef.current = posts;
-            setCachedRedditPosts(posts);
-            setRedditPosts(posts.slice(0, POSTS_PER_PAGE));
-            setHasMorePosts(posts.length > POSTS_PER_PAGE);
+        // Step 2: Fetch Reddit posts with pagination (only for Pro+ users)
+        if (hasRedditAccess) {
+          if (cachedRedditPostsRef.current.length === 0 || Date.now() - cacheTimestampRef.current > CACHE_EXPIRY) {
+            updateProgress(30, 'Fetching Reddit posts...');
+            const postsSignal = requestManager.getSignal(REQUEST_KEYS.redditPosts);
+            
+            try {
+              const posts = await fetchRedditPosts(postsSignal);
+              cachedRedditPostsRef.current = posts;
+              setCachedRedditPosts(posts);
+              setRedditPosts(posts.slice(0, POSTS_PER_PAGE));
+              setHasMorePosts(posts.length > POSTS_PER_PAGE);
+              setRedditPage(1);
+            } catch (error: any) {
+              logger.error('Error fetching Reddit posts:', error);
+              setErrors(prev => ({
+                ...prev,
+                posts: error.message || 'Failed to fetch Reddit posts'
+              }));
+            }
+          } else {
+            setRedditPosts(cachedRedditPostsRef.current.slice(0, POSTS_PER_PAGE));
+            setHasMorePosts(cachedRedditPostsRef.current.length > POSTS_PER_PAGE);
             setRedditPage(1);
-          } catch (error: any) {
-            logger.error('Error fetching Reddit posts:', error);
-            setErrors(prev => ({
-              ...prev,
-              posts: error.message || 'Failed to fetch Reddit posts'
-            }));
           }
         } else {
-          setRedditPosts(cachedRedditPostsRef.current.slice(0, POSTS_PER_PAGE));
-          setHasMorePosts(cachedRedditPostsRef.current.length > POSTS_PER_PAGE);
+          // Free tier: set empty Reddit posts and no loading
+          setRedditPosts([]);
+          setHasMorePosts(false);
           setRedditPage(1);
+          updateProgress(30, 'Skipping Reddit posts (Pro feature)...');
         }
+        updateLoadingState({ posts: false });
       } catch (error: unknown) {
         if (error instanceof DOMException && error.name === 'AbortError') return;
         logger.error('Reddit posts error:', error);
@@ -293,18 +302,38 @@ export function useSentimentData(timeRange: TimeRange): SentimentDataHookReturn 
       }
       
       try {
-        // Step 3: Fetch Reddit ticker sentiment data
-        let redditTickerData: SentimentData[] = allTickerSentimentsRef.current;
+        // Step 3: Fetch ticker sentiment data (Reddit for Pro+ users, FinViz/Yahoo for all)
+        let tickerSentimentData: SentimentData[] = allTickerSentimentsRef.current;
         if (allTickerSentimentsRef.current.length === 0) {
-          updateProgress(45, `Fetching ${timeRange} ticker sentiment data...`);
-          const tickerSignal = requestManager.getSignal(REQUEST_KEYS.tickerSentiment);
-          redditTickerData = await fetchTickerSentiments(timeRange, tickerSignal);
-          allTickerSentimentsRef.current = redditTickerData;
-          setAllTickerSentiments(redditTickerData);
+          if (hasRedditAccess) {
+            updateProgress(45, `Fetching ${timeRange} ticker sentiment data...`);
+            const tickerSignal = requestManager.getSignal(REQUEST_KEYS.tickerSentiment);
+            tickerSentimentData = await fetchTickerSentiments(timeRange, tickerSignal);
+            allTickerSentimentsRef.current = tickerSentimentData;
+            setAllTickerSentiments(tickerSentimentData);
+          } else {
+            // For free users, skip Reddit ticker sentiment and just use default tickers for FinViz/Yahoo
+            updateProgress(45, 'Preparing market sentiment data (Pro feature: Reddit ticker sentiment)...');
+            // Create a basic set of popular tickers for FinViz/Yahoo sentiment
+            const defaultTickers = ['SPY', 'QQQ', 'MSFT', 'AAPL', 'NVDA', 'TSLA', 'GOOGL', 'AMZN'];
+            tickerSentimentData = defaultTickers.map(ticker => ({
+              ticker,
+              score: 0.5, // Neutral baseline
+              sentiment: 'neutral' as const,
+              source: 'finviz' as const, // Use finviz as the base source
+              timestamp: new Date().toISOString(),
+              confidence: 0,
+              postCount: 0,
+              commentCount: 0,
+              upvotes: 0
+            }));
+            allTickerSentimentsRef.current = tickerSentimentData;
+            setAllTickerSentiments(tickerSentimentData);
+          }
         }
         
-        if (redditTickerData.length > 0) {
-          const diverseSentiments = ensureTickerDiversity(redditTickerData, 10);
+        if (tickerSentimentData.length > 0) {
+          const diverseSentiments = ensureTickerDiversity(tickerSentimentData, 10);
           setTopSentiments(diverseSentiments);
           
           const tickersToFetch = diverseSentiments.map(item => item.ticker);
@@ -331,8 +360,12 @@ export function useSentimentData(timeRange: TimeRange): SentimentDataHookReturn 
             logger.error('Yahoo Finance data error:', yahooError);
           }
           
-          // Merge sentiment data from all three sources
-          const mergedData = mergeSentimentData(diverseSentiments, finvizData, yahooData);
+          // Merge sentiment data from available sources (exclude Reddit for free users)
+          const sourcesToMerge = hasRedditAccess ? 
+            [diverseSentiments, finvizData, yahooData] : 
+            [finvizData, yahooData]; // Exclude Reddit data for free users
+          
+          const mergedData = mergeSentimentData(...sourcesToMerge.filter(data => data.length > 0));
           const aggregatedData = aggregateByTicker(mergedData);
           const finalSentiments = ensureTickerDiversity(aggregatedData, 8);
           setCombinedSentiments(finalSentiments);
@@ -459,6 +492,10 @@ export function useSentimentData(timeRange: TimeRange): SentimentDataHookReturn 
 
     updateLoadingState({ posts: true });
 
+    // Add a minimum loading duration for better UX
+    const minimumLoadingTime = 500; // 500ms minimum loading time
+    const startTime = Date.now();
+
     try {
       const nextPage = redditPage + 1;
       const startIndex = (nextPage - 1) * POSTS_PER_PAGE;
@@ -493,15 +530,30 @@ export function useSentimentData(timeRange: TimeRange): SentimentDataHookReturn 
       // Get the next page of filtered posts
       const newPosts = filteredPosts.slice(startIndex, endIndex);
       
-      if (newPosts.length > 0) {
-        setRedditPosts(prev => [...prev, ...newPosts]);
-        setRedditPage(nextPage);
-        setHasMorePosts(endIndex < filteredPosts.length);
-      } else {
-        setHasMorePosts(false);
-      }
-    } finally {
-      updateLoadingState({ posts: false });
+      // Ensure minimum loading time has passed before updating state
+      const elapsedTime = Date.now() - startTime;
+      const remainingTime = Math.max(0, minimumLoadingTime - elapsedTime);
+      
+      setTimeout(() => {
+        if (newPosts.length > 0) {
+          setRedditPosts(prev => [...prev, ...newPosts]);
+          setRedditPage(nextPage);
+          setHasMorePosts(endIndex < filteredPosts.length);
+        } else {
+          setHasMorePosts(false);
+        }
+        
+        updateLoadingState({ posts: false });
+      }, remainingTime);
+      
+    } catch (error) {
+      // In case of error, still respect minimum loading time
+      const elapsedTime = Date.now() - startTime;
+      const remainingTime = Math.max(0, minimumLoadingTime - elapsedTime);
+      
+      setTimeout(() => {
+        updateLoadingState({ posts: false });
+      }, remainingTime);
     }
   }, [redditPage, hasMorePosts, loading.posts, cachedRedditPosts, timeRange, updateLoadingState]);
   
