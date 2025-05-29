@@ -7,12 +7,18 @@ import HelpPage from './Help/HelpPage';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { 
   SECFilingsPage,
-  SettingsPage,
   EarningsMonitorPage,
 } from '../pages';
 import { ProtectedRoute } from './ProtectedRoute';
 import Home from './Home/Home';
 import UserHome from './Home/UserHome';
+import SettingsLayout from './Settings/SettingsLayout';
+import UsagePage from './Settings/tabs/UsagePage';
+import ApiKeysPage from './Settings/tabs/ApiKeysPage';
+import DataSourcesPage from './Settings/tabs/DataSourcesPage';
+import TiersPage from './Settings/tabs/TiersPage';
+import ProfilePage from './Settings/tabs/ProfilePage';
+import PreferencesPage from './Settings/tabs/PreferencesPage';
 import { useAuth } from '../contexts/AuthContext';
 
 // Component for unauthorized access
@@ -70,9 +76,19 @@ const AppContent = () => {
             } />
             <Route path="/settings" element={
               <ProtectedRoute>
-                <SettingsPage />
+                <SettingsLayout />
               </ProtectedRoute>
-            } />
+            }>
+              {/* Nested settings routes */}
+              <Route index element={<Navigate to="/settings/usage" replace />} />
+              <Route path="usage" element={<UsagePage />} />
+              <Route path="api-keys" element={<ApiKeysPage />} />
+              <Route path="data-sources" element={<DataSourcesPage />} />
+              <Route path="profile" element={<ProfilePage />} />
+              <Route path="notifications" element={<div className="p-8"><h1 className="text-2xl">Notifications - Coming Soon</h1></div>} />
+              <Route path="preferences" element={<PreferencesPage />} />
+              <Route path="tiers" element={<TiersPage />} />
+            </Route>
             
             {/* Additional routes */}
             <Route path="/unauthorized" element={<UnauthorizedPage />} />

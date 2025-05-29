@@ -1,0 +1,245 @@
+import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { 
+  Coins, 
+  Users, 
+  ArrowRight, 
+  HelpCircle, 
+  Crown, 
+  Zap, 
+  Building, 
+  Star, 
+  Check,
+  RefreshCw,
+  Plus 
+} from 'lucide-react';
+import { useTheme } from '../../contexts/ThemeContext';
+import { useTier } from '../../contexts/TierContext';
+
+const TierManagement: React.FC = () => {
+  const { theme } = useTheme();
+  const { tierInfo, loading, error, addCredits } = useTier();
+  const navigate = useNavigate();
+  const [addingCredits, setAddingCredits] = useState(false);
+
+  const isLight = theme === 'light';
+  
+  // Theme-specific styling
+  const textColor = isLight ? 'text-stone-700' : 'text-white';
+  const secondaryTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
+  const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-900';
+  const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
+  const buttonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
+
+  const handleAddCredits = async (amount: number) => {
+    setAddingCredits(true);
+    try {
+      const success = await addCredits(amount);
+      if (success) {
+        console.log(`Successfully added ${amount} credits!`);
+      }
+    } finally {
+      setAddingCredits(false);
+    }
+  };
+
+  const getTierIcon = (tier: string) => {
+    switch (tier) {
+      case 'free': return <Star className="w-5 h-5" />;
+      case 'pro': return <Crown className="w-5 h-5" />;
+      case 'elite': return <Zap className="w-5 h-5" />;
+      case 'institutional': return <Building className="w-5 h-5" />;
+      default: return <Star className="w-5 h-5" />;
+    }
+  };
+
+  const getTierColor = (tier: string) => {
+    switch (tier) {
+      case 'free': return 'text-gray-500';
+      case 'pro': return 'text-blue-500';
+      case 'elite': return 'text-purple-500';
+      case 'institutional': return 'text-emerald-500';
+      default: return 'text-gray-500';
+    }
+  };
+
+  const getProgressColor = (remaining: number, total: number) => {
+    const percentage = (remaining / total) * 100;
+    if (percentage < 10) return 'bg-red-500';
+    if (percentage < 25) return 'bg-yellow-500';
+    return 'bg-green-500';
+  };
+
+  if (loading) {
+    return (
+      <div className={`${cardBgColor} rounded-lg p-6 mb-8 border ${borderColor}`}>
+        <div className="flex items-center justify-center py-8">
+          <RefreshCw className="w-6 h-6 animate-spin text-blue-500 mr-2" />
+          <span className={textColor}>Loading tier information...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !tierInfo) {
+    return (
+      <div className={`${cardBgColor} rounded-lg p-6 mb-8 border ${borderColor}`}>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center">
+            <h2 className={`text-xl font-semibold ${textColor} flex items-center`}>
+              <Coins className="w-6 h-6 mr-2 text-yellow-500" />
+              Tier & Usage
+            </h2>
+            <Link to="/help/getting-started" className="ml-2 text-blue-500 hover:text-blue-700">
+              <HelpCircle size={18} />
+            </Link>
+          </div>
+        </div>
+        <div className="text-center py-4">
+          <p className={`${secondaryTextColor} mb-4`}>
+            {error || 'Unable to load tier information. Please sign in to view your subscription details.'}
+          </p>
+          <button
+            onClick={() => navigate('/')}
+            className={`${buttonBgColor} text-white px-4 py-2 rounded-lg font-medium transition-colors`}
+          >
+            Go to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const creditsUsed = tierInfo.credits.monthly - tierInfo.credits.remaining;
+  const usagePercentage = (creditsUsed / tierInfo.credits.monthly) * 100;
+  const resetDate = new Date(tierInfo.credits.resetDate).toLocaleDateString();
+
+  return (
+    <div className={`${cardBgColor} rounded-lg p-6 mb-8 border ${borderColor}`}>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center">
+          <h2 className={`text-xl font-semibold ${textColor} flex items-center`}>
+            <Coins className="w-6 h-6 mr-2 text-yellow-500" />
+            Tier & Usage
+          </h2>
+          <Link to="/help/getting-started" className="ml-2 text-blue-500 hover:text-blue-700">
+            <HelpCircle size={18} />
+          </Link>
+          <button
+            onClick={() => navigate('/help')}
+            className="ml-3 text-sm text-blue-500 hover:text-blue-600 flex items-center"
+          >
+            See Pricing & Credits help
+            <ArrowRight className="w-4 h-4 ml-1" />
+          </button>
+        </div>
+      </div>
+
+      {/* Current Tier Info */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center">
+            <div className={`${getTierColor(tierInfo.tier)} mr-3`}>
+              {getTierIcon(tierInfo.tier)}
+            </div>
+            <div>
+              <h3 className={`text-lg font-semibold ${textColor} capitalize`}>
+                {tierInfo.tier} Plan
+              </h3>
+              <p className={`text-sm ${secondaryTextColor}`}>
+                {tierInfo.credits.daysUntilReset} days until reset ({resetDate})
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Credits Usage */}
+      <div className="space-y-6">
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <h4 className={`font-medium ${textColor}`}>Monthly Credits</h4>
+            <span className={`text-2xl font-bold ${textColor}`}>
+              {tierInfo.credits.remaining.toLocaleString()} <span className="text-sm font-normal">left</span>
+            </span>
+          </div>
+          <div className="flex items-center text-sm mb-2">
+            <span className={secondaryTextColor}>
+              {creditsUsed.toLocaleString()} / {tierInfo.credits.monthly.toLocaleString()} used
+            </span>
+            <span className={`ml-auto ${secondaryTextColor}`}>
+              Resets in {tierInfo.credits.daysUntilReset} days
+            </span>
+          </div>
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-1">
+            <div 
+              className={`h-2 rounded-full ${getProgressColor(tierInfo.credits.remaining, tierInfo.credits.monthly)}`}
+              style={{ width: `${Math.min(usagePercentage, 100)}%` }}
+            />
+          </div>
+          <p className={`text-xs ${secondaryTextColor}`}>
+            Credit cost varies by operation: Basic sentiment (1), Reddit sentiment (3), SEC filings (2)
+          </p>
+        </div>
+
+        {/* Watchlist Usage */}
+        {tierInfo.usage?.watchlist && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className={`font-medium ${textColor}`}>Watchlist</h4>
+              <span className={`text-lg font-bold ${textColor}`}>
+                {tierInfo.usage.watchlist.current} / {tierInfo.usage.watchlist.limit === -1 ? '∞' : tierInfo.usage.watchlist.limit}
+              </span>
+            </div>
+            {tierInfo.usage.watchlist.limit !== -1 && (
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-1">
+                <div 
+                  className="bg-blue-500 h-2 rounded-full"
+                  style={{ width: `${(tierInfo.usage.watchlist.current / tierInfo.usage.watchlist.limit) * 100}%` }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Feature Access */}
+        <div>
+          <h4 className={`font-medium ${textColor} mb-3`}>Available Features</h4>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {tierInfo.features.map((feature) => (
+              <div key={feature} className="flex items-center text-sm">
+                <Check className="w-4 h-4 text-green-500 mr-2" />
+                <span className={textColor}>{feature}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <button 
+              onClick={() => handleAddCredits(100)}
+              disabled={addingCredits}
+              className={`${buttonBgColor} text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center disabled:opacity-50`}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              {addingCredits ? 'Processing...' : 'Purchase More Credits'}
+            </button>
+
+            <button
+              onClick={() => navigate('/')}
+              className={`text-sm ${secondaryTextColor} hover:${textColor} flex items-center transition-colors`}
+            >
+              <Users className="w-4 h-4 mr-2" />
+              View Pricing Plans
+              <ArrowRight className="w-4 h-4 ml-1" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default TierManagement; 

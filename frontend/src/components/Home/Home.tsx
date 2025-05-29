@@ -9,6 +9,7 @@ import {
   WatchlistPreview, 
   ActivityPreview 
 } from './PreviewComponents';
+import PricingSection from '../Pricing/PricingSection';
 
 const Home: React.FC = () => {
   const { theme } = useTheme();
@@ -159,6 +160,11 @@ const Home: React.FC = () => {
           </div>
 
 
+        </div>
+
+        {/* Pricing Section */}
+        <div className="mt-20">
+          <PricingSection />
         </div>
 
         {/* Progress Section */}

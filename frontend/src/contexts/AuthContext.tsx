@@ -333,6 +333,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       localStorage.setItem('auth_token', newToken);
       localStorage.setItem('token_expiry', expiryTime.toString());
+      
+      // Check for post-signin redirect intent
+      const redirectPath = localStorage.getItem('post_signin_redirect');
+      if (redirectPath) {
+        localStorage.removeItem('post_signin_redirect');
+        // Use a small delay to ensure auth state updates complete
+        setTimeout(() => {
+          window.location.href = redirectPath;
+        }, 100);
+      }
     } catch (storageError) {
       console.error('Error saving auth data to localStorage:', storageError);
     }

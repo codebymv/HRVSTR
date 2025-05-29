@@ -36,6 +36,7 @@ const eventsRoutes = require('./routes/events');
 const stocksRouter = require('./routes/stocks');
 const settingsRoutes = require('./routes/settings');
 const docsRoutes = require('./routes/docs');
+const subscriptionRoutes = require('./routes/subscription');
 
 // Create Express app
 const app = express();
@@ -151,6 +152,16 @@ app.get('/', (req, res) => {
       '/api/settings/key-status',
       '/api/settings/update-keys',
       '/api/settings/keys',
+      '/api/subscription/tier-info',
+      '/api/subscription/available-tiers',
+      '/api/subscription/simulate-upgrade',
+      '/api/subscription/add-credits',
+      '/api/subscription/usage-stats',
+      '/api/watchlist',
+      '/api/auth',
+      '/api/activity',
+      '/api/events',
+      '/api/stocks',
       '/health'
     ]
   });
@@ -170,6 +181,7 @@ app.use('/api/events', eventsRoutes);
 app.use('/api/stocks', stocksRouter);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/docs', docsRoutes);
+app.use('/api/subscription', subscriptionRoutes);
 
 // Serve static files from the frontend build directory in production
 if (process.env.NODE_ENV === 'production') {

@@ -1,11 +1,21 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Create tier enum type
+CREATE TYPE user_tier_enum AS ENUM ('free', 'pro', 'elite', 'institutional');
+
 -- Users table
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email VARCHAR(255) UNIQUE NOT NULL,
     name VARCHAR(255) NOT NULL,
+    tier user_tier_enum NOT NULL DEFAULT 'free',
+    credits_remaining INTEGER NOT NULL DEFAULT 50,
+    credits_monthly_limit INTEGER NOT NULL DEFAULT 50,
+    credits_reset_date TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP + INTERVAL '1 month'),
+    subscription_status VARCHAR(50) DEFAULT 'active',
+    stripe_customer_id VARCHAR(255),
+    stripe_subscription_id VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

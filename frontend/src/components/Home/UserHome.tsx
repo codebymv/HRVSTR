@@ -16,10 +16,14 @@ import {
   Calendar,
   RefreshCw,
   Loader2,
-  Trash2
+  Trash2,
+  Crown,
+  Zap,
+  Building
 } from 'lucide-react';
 import AddTickerModal from '../Watchlist/AddTickerModal';
 import { formatEventRelativeTime, getRelativeTimeBadgeStyle } from '../../utils/timeUtils';
+import { useTier } from '../../contexts/TierContext';
 
 interface WatchlistItem {
   id: string;
@@ -50,6 +54,7 @@ const UserHome: React.FC = () => {
   const navigate = useNavigate();
   const { theme } = useTheme();
   const { user } = useAuth();
+  const { tierInfo } = useTier();
   
   // State for watchlist data, loading, and error
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
@@ -115,6 +120,41 @@ const UserHome: React.FC = () => {
   // Add icon filter for theme switching
   const iconFilter = isLight ? 'invert(1) brightness(0)' : 'none';
 
+  // Helper function to get user tier information with icon and color
+  const getUserTierInfo = () => {
+    // Use TierContext tierInfo instead of hardcoded user data
+    const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
+    
+    const tierData = {
+      free: {
+        name: 'HRVSTR Free',
+        icon: <Star className="w-4 h-4" />,
+        iconColor: 'text-gray-400',
+        textColor: 'text-gray-400'
+      },
+      pro: {
+        name: 'HRVSTR Pro',
+        icon: <Crown className="w-4 h-4" />,
+        iconColor: 'text-blue-500',
+        textColor: 'text-blue-400'
+      },
+      elite: {
+        name: 'HRVSTR Elite',
+        icon: <Zap className="w-4 h-4" />,
+        iconColor: 'text-purple-500',
+        textColor: 'text-purple-400'
+      },
+      institutional: {
+        name: 'HRVSTR Institutional',
+        icon: <Building className="w-4 h-4" />,
+        iconColor: 'text-green-500',
+        textColor: 'text-green-400'
+      }
+    };
+
+    return tierData[currentTier as keyof typeof tierData] || tierData.free;
+  };
+
   // Fetch watchlist data from the backend with rate limiting protection
   const fetchWatchlist = useCallback(async (forceRefresh = false) => {
     if (!user?.token) {
@@ -164,6 +204,19 @@ const UserHome: React.FC = () => {
         } else if (response.data.data && Array.isArray(response.data.data)) {
           // Handle wrapped response like { data: [...] }
           watchlistData = response.data.data;
+        } else if (response.data.data && response.data.data.stocks && Array.isArray(response.data.data.stocks)) {
+          // Handle new tier-aware response like { data: { stocks: [...], limits: {...} } }
+          watchlistData = response.data.data.stocks;
+          // Store tier limits if available for future use
+          if (response.data.data.limits) {
+            sessionStorage.setItem('watchlist_limits', JSON.stringify(response.data.data.limits));
+          }
+        } else if (response.data.stocks && Array.isArray(response.data.stocks)) {
+          // Handle direct stocks response like { stocks: [...], limits: {...} }
+          watchlistData = response.data.stocks;
+          if (response.data.limits) {
+            sessionStorage.setItem('watchlist_limits', JSON.stringify(response.data.limits));
+          }
         } else if (response.data.watchlist && Array.isArray(response.data.watchlist)) {
           // Handle response like { watchlist: [...] }
           watchlistData = response.data.watchlist;
@@ -620,13 +673,9 @@ const UserHome: React.FC = () => {
               />
               {/* Gold Star Badge */}
               <div className="absolute -top-1 -right-1">
-                <svg 
-                  className="w-5 h-5 text-yellow-400" 
-                  fill="currentColor" 
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                </svg>
+                <div className={`w-5 h-5 flex items-center justify-center ${getUserTierInfo().iconColor}`}>
+                  {getUserTierInfo().icon}
+                </div>
               </div>
             </div>
           </div>
@@ -637,10 +686,15 @@ const UserHome: React.FC = () => {
               {user?.name}!
             </span>
           </h1>
-          <p className={`${secondaryTextColor} mt-2`}>
-            Membership: <span className={`font-semibold ${membershipTextColor}`}>Tier 1 HRVSTR!</span>
-            </p>
-          </div>
+          <p className={`${secondaryTextColor} mt-2 flex items-center`}>
+            Tier: 
+            <span className={`font-semibold ml-2 flex items-center`}>
+              <span className={getUserTierInfo().textColor}>
+                {getUserTierInfo().name}
+              </span>
+            </span>
+          </p>
+        </div>
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
@@ -698,7 +752,12 @@ const UserHome: React.FC = () => {
               </div>
             </div>
             <div className="space-y-4 overflow-y-auto h-[26rem] sm:h-72">
-              {loadingWatchlist && <p className={secondaryTextColor}>Loading watchlist...</p>}
+              {loadingWatchlist && (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className={`w-6 h-6 animate-spin ${secondaryTextColor}`} />
+                  <span className={`ml-2 ${secondaryTextColor}`}>Loading watchlist...</span>
+                </div>
+              )}
               {watchlistError && <p className="text-red-500">Error: {watchlistError}</p>}
               {!loadingWatchlist && !watchlistError && watchlist.length === 0 && (
                 <p className={secondaryTextColor}>Your watchlist is empty.</p>
@@ -724,14 +783,16 @@ const UserHome: React.FC = () => {
                             <Trash2 size={16} />
                           </button>
                         </div>
-                        <div className="flex items-center justify-center space-x-4">
-                          <div className="text-center">
+                        <div className="flex items-center">
+                          <div className="flex-1 pl-6">
                             <div className={`text-sm ${secondaryTextColor} mb-1`}>Current Price</div>
                             <div className={`text-xl font-bold ${textColor}`}>
                               {formatPrice(item.last_price)}
                             </div>
-                            <div className={`text-sm ${secondaryTextColor} mt-2 mb-1`}>Change</div>
-                            <div className={`text-sm font-medium ${getPriceChangeColor(item.price_change)}`}>
+                          </div>
+                          <div className="flex-shrink-0 text-right pr-4">
+                            <div className={`text-sm ${secondaryTextColor} mb-1`}>Change</div>
+                            <div className={`text-lg font-medium ${getPriceChangeColor(item.price_change)}`}>
                               {formatPriceChange(item.price_change)}
                             </div>
                           </div>
@@ -795,7 +856,12 @@ const UserHome: React.FC = () => {
               </h2>
             </div>
             <div className="space-y-4 overflow-y-auto h-72">
-              {loadingActivity && <p className={secondaryTextColor}>Loading recent activity...</p>}
+              {loadingActivity && (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className={`w-6 h-6 animate-spin ${secondaryTextColor}`} />
+                  <span className={`ml-2 ${secondaryTextColor}`}>Loading recent activity...</span>
+                </div>
+              )}
               {activityError && <p className="text-red-500">Error: {activityError}</p>}
               {!loadingActivity && !activityError && recentActivity.length === 0 && (
                 <p className={secondaryTextColor}>No recent activity.</p>
@@ -829,7 +895,12 @@ const UserHome: React.FC = () => {
               </h2>
             </div>
             <div className="space-y-4">
-              {loadingEvents && <p className={secondaryTextColor}>Loading upcoming events...</p>}
+              {loadingEvents && (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className={`w-6 h-6 animate-spin ${secondaryTextColor}`} />
+                  <span className={`ml-2 ${secondaryTextColor}`}>Loading upcoming events...</span>
+                </div>
+              )}
               {eventsError && <p className="text-red-500">Error: {eventsError}</p>}
               {!loadingEvents && !eventsError && upcomingEvents.length === 0 && (
                 <p className={secondaryTextColor}>No upcoming events.</p>

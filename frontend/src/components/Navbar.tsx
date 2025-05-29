@@ -1,6 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
 // Import all icons but comment out unused ones for future use
-import { Menu, Home, BarChart2, ListChecks, TrendingUp, Settings, HelpCircle, X } from 'lucide-react';
+import { 
+  Menu, 
+  Home, 
+  BarChart2, 
+  ListChecks, 
+  TrendingUp, 
+  Settings, 
+  HelpCircle, 
+  X, 
+  ChevronDown, 
+  ChevronRight,
+  User,
+  Bell,
+  Cog,
+  CreditCard,
+  Key,
+  Database,
+  Monitor
+} from 'lucide-react';
 // import { Bell, Search, User, Sun, Moon } from 'lucide-react'; // Commented out for now
 import { useLocation } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
@@ -9,11 +27,19 @@ import { useAuth } from '../contexts/AuthContext';
 
 const Navbar: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isSettingsExpanded, setIsSettingsExpanded] = useState(false);
   const { theme } = useTheme();
   const location = useLocation();
   const { isAuthenticated } = useAuth();
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  
+  // Auto-expand settings if we're on a settings page
+  useEffect(() => {
+    if (location.pathname.startsWith('/settings')) {
+      setIsSettingsExpanded(true);
+    }
+  }, [location.pathname]);
   
   // Handle clicks outside the menu
   useEffect(() => {
@@ -54,9 +80,27 @@ const Navbar: React.FC = () => {
   const textColor = isLight ? 'text-stone-800' : 'text-gray-300';
   const activeTextColor = isLight ? 'text-stone-900' : 'text-white';
   const activeBgColor = isLight ? 'bg-stone-400' : 'bg-gray-800';
+  const secondaryTextColor = isLight ? 'text-stone-600' : 'text-gray-500';
 
   // Add logo filter for theme switching
   const logoFilter = isLight ? 'invert(1) brightness(0)' : 'none';
+
+  // Settings sub-items
+  const settingsItems = [
+    { path: '/settings/usage', label: 'Usage', icon: BarChart2 },
+    { path: '/settings/tiers', label: 'Tiers', icon: CreditCard },
+    { path: '/settings/api-keys', label: 'API Keys', icon: Key },
+    { path: '/settings/data-sources', label: 'Data Sources', icon: Database },
+    { path: '/settings/interface', label: 'Interface', icon: Monitor },
+    { path: '/settings/profile', label: 'Profile', icon: User },
+    { path: '/settings/notifications', label: 'Notifications', icon: Bell },
+    { path: '/settings/preferences', label: 'Preferences', icon: Cog },
+  ];
+
+  const handleMenuItemClick = () => {
+    setIsMenuOpen(false);
+    setIsSettingsExpanded(false);
+  };
 
   return (
     <header className={`${bgColor} border-b ${borderColor} sticky top-0 z-50`}>
@@ -132,7 +176,7 @@ const Navbar: React.FC = () => {
       {isAuthenticated && isMenuOpen && (
         <div 
           ref={menuRef}
-          className={`lg:hidden ${bgColor} p-4 border-t ${borderColor} fixed w-full z-50`}
+          className={`lg:hidden ${bgColor} p-4 border-t ${borderColor} fixed w-full z-50 max-h-screen overflow-y-auto`}
           aria-label="Mobile navigation">
           {/* Close button */}
           <div className="flex justify-end mb-2">
@@ -150,7 +194,7 @@ const Navbar: React.FC = () => {
             <a 
               href="/"
               className={`flex items-center space-x-3 py-2 px-3 ${location.pathname === '/' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
-              onClick={() => setIsMenuOpen(false)}
+              onClick={handleMenuItemClick}
             >
               <Home size={20} />
               <span>Home</span>
@@ -159,7 +203,7 @@ const Navbar: React.FC = () => {
             <a 
               href="/sentiment"
               className={`flex items-center space-x-3 py-2 px-3 ${location.pathname === '/sentiment' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
-              onClick={() => setIsMenuOpen(false)}
+              onClick={handleMenuItemClick}
             >
               <BarChart2 size={20} />
               <span>Sentiment</span>
@@ -168,7 +212,7 @@ const Navbar: React.FC = () => {
             <a 
               href="/sec-filings"
               className={`flex items-center space-x-3 py-2 px-3 ${location.pathname === '/sec-filings' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
-              onClick={() => setIsMenuOpen(false)}
+              onClick={handleMenuItemClick}
             >
               <ListChecks size={20} />
               <span>SEC Filings</span>
@@ -177,25 +221,60 @@ const Navbar: React.FC = () => {
             <a 
               href="/earnings"
               className={`flex items-center space-x-3 py-2 px-3 ${location.pathname === '/earnings' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
-              onClick={() => setIsMenuOpen(false)}
+              onClick={handleMenuItemClick}
             >
               <TrendingUp size={20} />
               <span>Earnings</span>
             </a>
             
-            <a 
-              href="/settings"
-              className={`flex items-center space-x-3 py-2 px-3 ${location.pathname === '/settings' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
-              onClick={() => setIsMenuOpen(false)}
-            >
-              <Settings size={20} />
-              <span>Settings</span>
-            </a>
+            {/* Settings with expandable dropdown */}
+            <div>
+              <button
+                onClick={() => setIsSettingsExpanded(!isSettingsExpanded)}
+                className={`w-full flex items-center justify-between space-x-3 py-2 px-3 ${location.pathname.startsWith('/settings') ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
+              >
+                <div className="flex items-center space-x-3">
+                  <Settings size={20} />
+                  <span>Settings</span>
+                </div>
+                {isSettingsExpanded ? (
+                  <ChevronDown size={16} />
+                ) : (
+                  <ChevronRight size={16} />
+                )}
+              </button>
+              
+              {/* Settings submenu */}
+              {isSettingsExpanded && (
+                <div className="ml-6 mt-1 space-y-1">
+                  {settingsItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = location.pathname === item.path;
+                    
+                    return (
+                      <a
+                        key={item.path}
+                        href={item.path}
+                        className={`flex items-center space-x-3 py-2 px-3 text-sm ${
+                          isActive 
+                            ? `${activeBgColor} ${activeTextColor}` 
+                            : `${secondaryTextColor} ${hoverBgColor}`
+                        } rounded-lg transition-colors`}
+                        onClick={handleMenuItemClick}
+                      >
+                        <Icon size={16} />
+                        <span>{item.label}</span>
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
             
             <a 
               href="/help"
               className={`flex items-center space-x-3 py-2 px-3 ${location.pathname === '/help' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
-              onClick={() => setIsMenuOpen(false)}
+              onClick={handleMenuItemClick}
             >
               <HelpCircle size={20} />
               <span>Help</span>
