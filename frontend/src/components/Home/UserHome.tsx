@@ -951,7 +951,7 @@ const UserHome: React.FC = () => {
             className={`${cardBgColor} p-4 rounded-lg border ${borderColor} hover:scale-105 transition-transform flex items-center space-x-3`}
           >
             <BarChart2 className="w-6 h-6 text-blue-500" />
-            <span className={textColor}>Sentiment Analysis</span>
+            <span className={textColor}>Sentiment Scraper</span>
           </button>
           <button 
             onClick={() => navigate('/sec-filings')}
