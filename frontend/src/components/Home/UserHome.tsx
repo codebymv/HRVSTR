@@ -145,30 +145,30 @@ const UserHome: React.FC = () => {
       free: {
         name: 'HRVSTR Free',
         icon: <Star className="w-5 h-5" />,
-        iconColor: 'text-gray-300',
-        textColor: 'text-gray-300',
-        bgColor: 'bg-gray-100 dark:bg-gray-800'
+        iconColor: isLight ? 'text-gray-600' : 'text-gray-300',
+        textColor: isLight ? 'text-gray-600' : 'text-gray-300',
+        bgColor: isLight ? 'bg-gray-200' : 'bg-gray-800'
       },
       pro: {
         name: 'HRVSTR Pro',
         icon: <Crown className="w-5 h-5" />,
-        iconColor: 'text-blue-400',
-        textColor: 'text-blue-400',
-        bgColor: 'bg-blue-100 dark:bg-blue-900'
+        iconColor: isLight ? 'text-blue-600' : 'text-blue-400',
+        textColor: isLight ? 'text-blue-600' : 'text-blue-400',
+        bgColor: isLight ? 'bg-blue-200' : 'bg-blue-900'
       },
       elite: {
         name: 'HRVSTR Elite',
         icon: <Zap className="w-5 h-5" />,
-        iconColor: 'text-purple-400',
-        textColor: 'text-purple-400',
-        bgColor: 'bg-purple-100 dark:bg-purple-900'
+        iconColor: isLight ? 'text-purple-600' : 'text-purple-400',
+        textColor: isLight ? 'text-purple-600' : 'text-purple-400',
+        bgColor: isLight ? 'bg-purple-200' : 'bg-purple-900'
       },
       institutional: {
         name: 'HRVSTR Institutional',
         icon: <Building className="w-5 h-5" />,
-        iconColor: 'text-emerald-400',
-        textColor: 'text-emerald-400',
-        bgColor: 'bg-emerald-100 dark:bg-emerald-900'
+        iconColor: isLight ? 'text-emerald-600' : 'text-emerald-400',
+        textColor: isLight ? 'text-emerald-600' : 'text-emerald-400',
+        bgColor: isLight ? 'bg-emerald-200' : 'bg-emerald-900'
       }
     };
 
