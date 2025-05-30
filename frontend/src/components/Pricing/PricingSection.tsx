@@ -93,26 +93,27 @@ const PricingSection: React.FC<PricingSectionProps> = ({
         'Priority data processing'
       ]
     },
-    {
-      name: 'Institutional',
-      price: '$199',
-      period: 'month',
-      description: 'For teams & businesses',
-      icon: <Building className="w-5 h-5" />,
-      gradient: 'from-emerald-400 to-emerald-600',
-      features: [
-        'Unlimited watchlist',
-        '10,000 scrape credits/month',
-        'All premium data sources',
-        'Bulk data operations',
-        'Extended historical data',
-        'Advanced usage monitoring',
-        'Priority data processing',
-        'Extended data retention',
-        'Team collaboration features',
-        'White-label options'
-      ]
-    }
+    // TODO: Re-enable for post-1.0 release
+    // {
+    //   name: 'Institutional',
+    //   price: '$199',
+    //   period: 'month',
+    //   description: 'For teams & businesses',
+    //   icon: <Building className="w-5 h-5" />,
+    //   gradient: 'from-emerald-400 to-emerald-600',
+    //   features: [
+    //     'Unlimited watchlist',
+    //     '10,000 scrape credits/month',
+    //     'All premium data sources',
+    //     'Bulk data operations',
+    //     'Extended historical data',
+    //     'Advanced usage monitoring',
+    //     'Priority data processing',
+    //     'Extended data retention',
+    //     'Team collaboration features',
+    //     'White-label options'
+    //   ]
+    // }
   ];
 
   const handlePurchaseClick = (tierName: string) => {
@@ -150,7 +151,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
       )}
 
       {/* Pricing Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6">
         {tiers.map((tier, index) => (
           <div
             key={index}

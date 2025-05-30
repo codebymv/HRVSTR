@@ -301,13 +301,11 @@ const SentimentDashboard: React.FC = () => {
     <div className={`flex-1 ${isLight ? 'bg-stone-200' : 'bg-gray-950'} pb-8`}>
       <div className="container mx-auto p-4 lg:p-6 max-w-7xl">
         {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-          <div>
+        <div className="flex flex-col gap-4 mb-6">
+          {/* Title row with refresh button */}
+          <div className="flex justify-between items-center">
             <h1 className={`text-2xl font-bold ${textColor}`}>Sentiment Scraper</h1>
-            <p className={`${mutedTextColor} mt-1`}>Track real-time sentiment across social platforms</p>
-          </div>
-          
-          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            
             <button 
               className={`${isLight ? 'bg-blue-500' : 'bg-blue-600'} hover:${isLight ? 'bg-blue-600' : 'bg-blue-700'} rounded-full p-2 transition-colors ${isDataLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
               onClick={refreshData}
@@ -321,6 +319,9 @@ const SentimentDashboard: React.FC = () => {
               )}
             </button>
           </div>
+          
+          {/* Description row */}
+          <p className={`${mutedTextColor}`}>Track real-time sentiment across social platforms</p>
         </div>
         
         <div className="flex flex-col xl:flex-row gap-6">

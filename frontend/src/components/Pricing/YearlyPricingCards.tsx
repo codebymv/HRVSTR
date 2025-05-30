@@ -31,19 +31,20 @@ const YearlyPricingCards: React.FC<YearlyPricingCardsProps> = ({ onPurchaseClick
       icon: <Zap className="w-5 h-5" />,
       gradient: 'from-purple-400 to-purple-600',
       savings: '17%'
-    },
-    {
-      name: 'Institutional',
-      monthlyPrice: 199,
-      yearlyPrice: 1990, // ~165.83/month (17% savings)
-      icon: <Building className="w-5 h-5" />,
-      gradient: 'from-emerald-400 to-emerald-600',
-      savings: '17%'
     }
+    // TODO: Re-enable for post-1.0 release
+    // {
+    //   name: 'Institutional',
+    //   monthlyPrice: 199,
+    //   yearlyPrice: 1990, // ~165.83/month (17% savings)
+    //   icon: <Building className="w-5 h-5" />,
+    //   gradient: 'from-emerald-400 to-emerald-600',
+    //   savings: '17%'
+    // }
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
       {yearlyTiers.map((tier, index) => (
         <div
           key={index}
