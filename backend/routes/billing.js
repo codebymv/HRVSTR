@@ -194,7 +194,7 @@ router.post('/customer-portal', authenticateToken, async (req, res) => {
 // Create Stripe Checkout Session
 router.post('/create-checkout-session', authenticateToken, async (req, res) => {
   try {
-    const { priceId, mode = 'subscription', successUrl, cancelUrl } = req.body;
+    const { priceId, mode = 'subscription', successUrl, cancelUrl, quantity = 1 } = req.body;
     const userId = req.user.id;
 
     if (!priceId) {
@@ -233,14 +233,16 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
       line_items: [
         {
           price: priceId,
-          quantity: 1,
+          quantity: quantity,
         }
       ],
-      success_url: successUrl || `${process.env.FRONTEND_URL}/settings/billing?success=true`,
-      cancel_url: cancelUrl || `${process.env.FRONTEND_URL}/settings/tiers?cancelled=true`,
+      success_url: successUrl || `${process.env.FRONTEND_URL}/settings/usage?success=true`,
+      cancel_url: cancelUrl || `${process.env.FRONTEND_URL}/settings/usage?cancelled=true`,
       metadata: {
         userId: userId,
-        priceId: priceId
+        priceId: priceId,
+        quantity: quantity.toString(),
+        purchaseType: mode === 'payment' ? 'credits' : 'subscription'
       },
       subscription_data: mode === 'subscription' ? {
         metadata: {
@@ -387,6 +389,16 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
   try {
     switch (event.type) {
+      case 'checkout.session.completed':
+        const session = event.data.object;
+        console.log('✅ Checkout session completed:', session.id);
+        
+        // Handle credit purchases
+        if (session.metadata?.purchaseType === 'credits') {
+          await handleCreditPurchase(session);
+        }
+        break;
+
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
         const subscription = event.data.object;
@@ -420,5 +432,55 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
   res.json({ received: true });
 });
+
+// Helper function to handle credit purchases
+async function handleCreditPurchase(session) {
+  const { pool } = require('../config/data-sources');
+  
+  try {
+    const userId = session.metadata.userId;
+    const priceId = session.metadata.priceId;
+    
+    // Map price IDs to credit amounts
+    const CREDIT_BUNDLES = {
+      // User's specific price ID for 250 credits
+      'price_1RUNOmRxBJaRlFvtFDsOkRGL': 250,
+      // Fallback for testing/development
+      'price_250_credits_bundle': 250,
+    };
+    
+    const creditsToAdd = CREDIT_BUNDLES[priceId];
+    
+    if (!creditsToAdd) {
+      console.error(`❌ Unknown price ID for credit purchase: ${priceId}`);
+      return;
+    }
+    
+    console.log(`💳 Adding ${creditsToAdd} credits to user ${userId} (Price ID: ${priceId})`);
+    
+    // Add credits to user's account
+    await pool.query(
+      'UPDATE users SET credits_remaining = credits_remaining + $1 WHERE id = $2',
+      [creditsToAdd, userId]
+    );
+
+    // Log the credit addition
+    await pool.query(
+      `INSERT INTO activities (user_id, activity_type, title, description)
+       VALUES ($1, $2, $3, $4)`,
+      [
+        userId,
+        'credits_purchased',
+        `Purchased ${creditsToAdd} Credits`,
+        `${creditsToAdd} credits purchased via Stripe (Session: ${session.id})`
+      ]
+    );
+    
+    console.log(`✅ Successfully added ${creditsToAdd} credits to user ${userId}`);
+  } catch (error) {
+    console.error('Error adding credits:', error);
+    // You might want to send an alert or email here for failed credit additions
+  }
+}
 
 module.exports = router; 

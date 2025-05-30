@@ -34,10 +34,35 @@ const TierManagement: React.FC = () => {
   const handleAddCredits = async (amount: number) => {
     setAddingCredits(true);
     try {
-      const success = await addCredits(amount);
-      if (success) {
-        console.log(`Successfully added ${amount} credits!`);
+      // Use the specific price ID for 250 credits bundle
+      const priceId = 'price_1RUNOmRxBJaRlFvtFDsOkRGL';
+      
+      // Create Stripe checkout session for credit purchase
+      const response = await fetch('/api/billing/create-checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
+        body: JSON.stringify({
+          priceId: priceId,
+          mode: 'payment', // One-time payment, not subscription
+          quantity: 1,
+          successUrl: `${window.location.origin}/settings/usage?credits_purchased=true`,
+          cancelUrl: `${window.location.origin}/settings/usage?purchase_cancelled=true`
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.url) {
+        // Redirect to Stripe Checkout
+        window.location.href = data.url;
+      } else {
+        console.error('Failed to create checkout session:', data.error);
       }
+    } catch (error) {
+      console.error('Error creating checkout session:', error);
     } finally {
       setAddingCredits(false);
     }
@@ -216,27 +241,50 @@ const TierManagement: React.FC = () => {
         </div>
 
         {/* Quick Actions */}
-        <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <button 
-              onClick={() => handleAddCredits(100)}
-              disabled={addingCredits}
-              className={`${buttonBgColor} text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center disabled:opacity-50`}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              {addingCredits ? 'Processing...' : 'Purchase More Credits'}
-            </button>
-
-            <button
-              onClick={() => navigate('/')}
-              className={`text-sm ${secondaryTextColor} hover:${textColor} flex items-center transition-colors`}
-            >
-              <Users className="w-4 h-4 mr-2" />
-              View Pricing Plans
-              <ArrowRight className="w-4 h-4 ml-1" />
-            </button>
+        {tierInfo.tier !== 'free' && (
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+            <h4 className={`font-medium ${textColor} mb-3`}>Purchase Additional Credits</h4>
+            <div className="flex justify-center mb-4">
+              <button 
+                onClick={() => handleAddCredits(250)}
+                disabled={addingCredits}
+                className={`${buttonBgColor} text-white px-8 py-3 rounded-lg font-medium transition-colors flex items-center disabled:opacity-50 text-base shadow-lg hover:shadow-xl`}
+              >
+                <Plus className="w-5 h-5 mr-3" />
+                {addingCredits ? 'Processing...' : '250 Credits for $10.00'}
+              </button>
+            </div>
+            
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <button
+                onClick={() => navigate('/')}
+                className={`text-sm ${secondaryTextColor} hover:${textColor} flex items-center transition-colors`}
+              >
+                <Users className="w-4 h-4 mr-2" />
+                View Pricing Plans
+                <ArrowRight className="w-4 h-4 ml-1" />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Free tier upgrade prompt */}
+        {tierInfo.tier === 'free' && (
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="text-center">
+              <p className={`text-sm ${secondaryTextColor} mb-3`}>
+                Need more credits? Upgrade to a paid plan for higher credit limits, add-on packs, and additional features.
+              </p>
+              <button
+                onClick={() => navigate('/')}
+                className={`${buttonBgColor} text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center mx-auto`}
+              >
+                <Crown className="w-4 h-4 mr-2" />
+                Upgrade Plan
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

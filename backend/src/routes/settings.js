@@ -109,7 +109,7 @@ router.get('/key-status', authenticateToken, async (req, res) => {
       const userKey = userApiKeys[keyName] && userApiKeys[keyName].trim();
       const envKey = keyName === 'reddit_client_id' ? process.env.REDDIT_CLIENT_ID :
                     keyName === 'reddit_client_secret' ? process.env.REDDIT_CLIENT_SECRET :
-                    keyName === 'alpha_vantage_key' ? process.env.ALPHA_VANTAGE_KEY :
+                    keyName === 'alpha_vantage_key' ? process.env.ALPHA_VANTAGE_API_KEY :
                     keyName === 'finviz_key' ? process.env.FINVIZ_KEY :
                     keyName === 'sec_key' ? process.env.SEC_KEY : null;
       
@@ -125,7 +125,7 @@ router.get('/key-status', authenticateToken, async (req, res) => {
     
     res.json({
       success: true,
-      keys: keyStatus,
+      keyStatus,
       dataSources: dataSourceStatus
     });
   } catch (error) {

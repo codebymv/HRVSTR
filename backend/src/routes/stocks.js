@@ -4,6 +4,7 @@ const axios = require('axios');
 const { pool } = require('../config/data-sources');
 const authenticateToken = require('../middleware/authMiddleware');
 const { FinancialCalendarService } = require('../services/financialCalendar');
+const { getEffectiveApiKey } = require('../utils/userApiKeys');
 
 const financialCalendarService = new FinancialCalendarService();
 
@@ -17,93 +18,89 @@ const TIER_LIMITS = {
 
 // Helper function to check and increment API usage
 const checkAndIncrementUsage = async (userId, usageType, tier) => {
-  console.log(`[TIER_DEBUG] checkAndIncrementUsage called with:`, { userId, usageType, tier });
-  
-  const limit = TIER_LIMITS[tier]?.[usageType];
-  console.log(`[TIER_DEBUG] Tier limits for ${tier}:`, TIER_LIMITS[tier]);
-  console.log(`[TIER_DEBUG] Limit for ${usageType}:`, limit);
-  
-  // If no limit for this tier, allow unlimited usage
-  if (limit === null || limit === undefined) {
-    console.log(`[TIER_DEBUG] No limit for tier ${tier}, allowing unlimited usage`);
-    return { allowed: true, current: 0, limit: null };
-  }
-
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
-  console.log(`[TIER_DEBUG] Checking usage for date: ${today}`);
-  
   try {
-    // Get or create usage record for today
-    console.log(`[TIER_DEBUG] Querying database for existing usage...`);
-    const usageResult = await pool.query(
-      'SELECT * FROM api_usage WHERE user_id = $1 AND usage_date = $2',
-      [userId, today]
-    );
+    const limit = TIER_LIMITS[tier]?.[usageType];
+    
+    // If limit is null/undefined, user has unlimited access
+    if (limit === null || limit === undefined) {
+      console.log(`[TIER_LIMIT] User ${userId} has unlimited ${usageType} (tier: ${tier})`);
+      return { allowed: true, current: 0, limit: null };
+    }
 
-    console.log(`[TIER_DEBUG] Usage query result:`, usageResult.rows);
+    // Get current date for daily reset
+    const today = new Date().toISOString().split('T')[0];
+
+    // Check current usage
+    const usageResult = await pool.query(
+      'SELECT count FROM api_usage WHERE user_id = $1 AND usage_type = $2 AND date = $3',
+      [userId, usageType, today]
+    );
 
     let currentUsage = 0;
     if (usageResult.rows.length > 0) {
-      currentUsage = usageResult.rows[0][usageType] || 0;
-      console.log(`[TIER_DEBUG] Found existing usage record. Current ${usageType}: ${currentUsage}`);
-    } else {
-      console.log(`[TIER_DEBUG] No existing usage record found for today`);
+      currentUsage = usageResult.rows[0].count;
     }
 
-    // Check if over limit
+    // Check if user has exceeded limit
     if (currentUsage >= limit) {
-      console.log(`[TIER_LIMIT] User ${userId} hit ${usageType} limit: ${currentUsage}/${limit}`);
+      console.log(`[TIER_LIMIT] User ${userId} ${usageType} limit exceeded: ${currentUsage}/${limit}`);
       return { allowed: false, current: currentUsage, limit };
     }
 
     // Increment usage
-    if (usageResult.rows.length > 0) {
-      console.log(`[TIER_DEBUG] Updating existing usage record...`);
-      const updateQuery = `UPDATE api_usage SET ${usageType} = ${usageType} + 1 WHERE user_id = $1 AND usage_date = $2`;
-      console.log(`[TIER_DEBUG] Update query: ${updateQuery}`);
-      await pool.query(updateQuery, [userId, today]);
-    } else {
-      console.log(`[TIER_DEBUG] Creating new usage record...`);
-      const insertQuery = `INSERT INTO api_usage (user_id, usage_date, ${usageType}) VALUES ($1, $2, 1)`;
-      console.log(`[TIER_DEBUG] Insert query: ${insertQuery}`);
-      await pool.query(insertQuery, [userId, today]);
-    }
+    await pool.query(
+      `INSERT INTO api_usage (user_id, usage_type, date, count) 
+       VALUES ($1, $2, $3, 1)
+       ON CONFLICT (user_id, usage_type, date) 
+       DO UPDATE SET count = api_usage.count + 1`,
+      [userId, usageType, today]
+    );
 
-    console.log(`[TIER_LIMIT] User ${userId} ${usageType}: ${currentUsage + 1}/${limit}`);
-    return { allowed: true, current: currentUsage + 1, limit };
+    const newUsage = currentUsage + 1;
+    console.log(`[TIER_LIMIT] User ${userId} ${usageType}: ${newUsage}/${limit}`);
+    
+    return { allowed: true, current: newUsage, limit };
   } catch (error) {
-    console.error(`[TIER_DEBUG] Error checking API usage:`, error);
-    // On error, allow the request but log it
-    return { allowed: true, current: 0, limit };
+    console.error('Error checking API usage:', error);
+    // In case of error, allow the request but log it
+    return { allowed: true, current: 0, limit: null };
   }
 };
 
-// Helper function to clean up old activities for a user
-const cleanupOldActivities = async (userId, maxActivities = 100) => {
+// Clean up old activities to keep table size manageable
+const cleanupOldActivities = async (userId) => {
   try {
-    // Get count of current activities for user
-    const countResult = await pool.query(
-      'SELECT COUNT(*) FROM activities WHERE user_id = $1',
+    // Keep only the most recent 100 activities per user
+    await pool.query(
+      `DELETE FROM activities 
+       WHERE user_id = $1 
+       AND id NOT IN (
+         SELECT id FROM activities 
+         WHERE user_id = $1 
+         ORDER BY created_at DESC 
+         LIMIT 100
+       )`,
       [userId]
     );
-    
-    const currentCount = parseInt(countResult.rows[0].count);
-    
-    if (currentCount > maxActivities) {
-      // Delete oldest activities beyond the limit
-      const deleteCount = currentCount - maxActivities;
-      await pool.query(
-        'DELETE FROM activities WHERE user_id = $1 AND id IN (SELECT id FROM activities WHERE user_id = $1 ORDER BY created_at ASC LIMIT $2)',
-        [userId, deleteCount]
-      );
-      
-      console.log(`Cleaned up ${deleteCount} old activities for user ${userId}. Total activities now: ${maxActivities}`);
-    }
   } catch (error) {
     console.error('Error cleaning up old activities:', error);
-    // Don't throw error to avoid breaking the main operation
   }
 };
+
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const cleanupOldUsageData = async () => {
+  try {
+    // Delete usage data older than 7 days
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    await pool.query('DELETE FROM api_usage WHERE date < $1', [sevenDaysAgo]);
+  } catch (error) {
+    console.error('Error cleaning up old usage data:', error);
+  }
+};
+
+// Clean up old usage data periodically
+setInterval(cleanupOldUsageData, 24 * 60 * 60 * 1000); // Once per day
 
 // Search stocks
 router.get('/search', authenticateToken, async (req, res) => {
@@ -146,16 +143,27 @@ router.get('/search', authenticateToken, async (req, res) => {
       });
     }
 
+    // Get user-specific API key
+    const alphaVantageKey = await getEffectiveApiKey(userId, 'alpha_vantage');
+    if (!alphaVantageKey) {
+      console.log(`[SEARCH] No Alpha Vantage API key found for user ${userId}`);
+      return res.status(503).json({ 
+        message: 'Alpha Vantage API key not configured. Please add your API key in settings.',
+        error: 'api_key_missing',
+        needsApiKey: true
+      });
+    }
+
     // If not found in database, try Alpha Vantage
     console.log(`[SEARCH] No database results, calling Alpha Vantage for: "${query}" (Usage: ${usageCheck.current}/${usageCheck.limit || '∞'})`);
-    console.log(`[SEARCH] Alpha Vantage API Key present: ${!!process.env.ALPHA_VANTAGE_API_KEY}`);
+    console.log(`[SEARCH] Using user's Alpha Vantage API key: ${alphaVantageKey ? 'Present' : 'Missing'}`);
     
     const startTime = Date.now();
     const response = await axios.get('https://www.alphavantage.co/query', {
       params: {
         function: 'SYMBOL_SEARCH',
         keywords: query,
-        apikey: process.env.ALPHA_VANTAGE_API_KEY
+        apikey: alphaVantageKey
       },
       timeout: 10000 // 10 second timeout
     });
@@ -223,44 +231,36 @@ router.get('/search', authenticateToken, async (req, res) => {
           'INSERT INTO companies (symbol, company_name) VALUES ($1, $2) ON CONFLICT (symbol) DO UPDATE SET company_name = $2',
           [result.symbol, result.name]
         );
-        console.log(`[SEARCH] Stored: ${result.symbol} - ${result.name}`);
       } catch (dbError) {
         console.error(`[SEARCH] Error storing ${result.symbol}:`, dbError.message);
       }
     }
 
-    console.log(`[SEARCH] Returning ${formattedResults.length} Alpha Vantage results for "${query}"`);
+    console.log(`[SEARCH] Successfully returned ${formattedResults.length} results for "${query}"`);
     res.json(formattedResults);
   } catch (error) {
-    console.error(`[SEARCH] Error searching for "${query}":`, error);
+    console.error('[SEARCH] Error searching stocks:', error);
     
-    // More specific error handling
+    if (error.response) {
+      console.error('[SEARCH] Alpha Vantage error response:', {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: error.response.data,
+        headers: error.response.headers
+      });
+    }
+    
     if (error.code === 'ECONNABORTED') {
       return res.status(504).json({ 
         message: 'Search request timed out. Please try again.',
-        error: 'Request timeout'
-      });
-    }
-    
-    if (error.response) {
-      console.error(`[SEARCH] Alpha Vantage HTTP error: ${error.response.status}`, error.response.data);
-      return res.status(502).json({ 
-        message: 'Search service error. Please try again.',
-        error: `Alpha Vantage HTTP ${error.response.status}`
-      });
-    }
-    
-    if (error.request) {
-      console.error(`[SEARCH] Network error - no response received`);
-      return res.status(503).json({ 
-        message: 'Search service unavailable. Please check your connection.',
-        error: 'Network error'
+        error: 'timeout'
       });
     }
     
     res.status(500).json({ 
-      message: 'Error searching stocks', 
-      error: error.message 
+      message: 'Error searching stocks',
+      error: error.message,
+      details: 'Internal server error during search'
     });
   }
 });
@@ -289,12 +289,22 @@ router.post('/watchlist', authenticateToken, async (req, res) => {
     );
 
     if (companyResult.rows.length === 0) {
+      // Get user-specific API key
+      const alphaVantageKey = await getEffectiveApiKey(userId, 'alpha_vantage');
+      if (!alphaVantageKey) {
+        return res.status(503).json({ 
+          message: 'Alpha Vantage API key not configured. Please add your API key in settings.',
+          error: 'api_key_missing',
+          needsApiKey: true
+        });
+      }
+
       // If not in database, fetch from Alpha Vantage
       const overviewResponse = await axios.get('https://www.alphavantage.co/query', {
         params: {
           function: 'OVERVIEW',
           symbol,
-          apikey: process.env.ALPHA_VANTAGE_API_KEY
+          apikey: alphaVantageKey
         }
       });
 
@@ -331,12 +341,27 @@ router.post('/watchlist', authenticateToken, async (req, res) => {
       });
     }
 
+    // Get user-specific API key for price data
+    const alphaVantageKey = await getEffectiveApiKey(userId, 'alpha_vantage');
+    if (!alphaVantageKey) {
+      // Add stock without price data
+      await pool.query(
+        'INSERT INTO watchlist (user_id, symbol, company_name, last_price, price_change) VALUES ($1, $2, $3, NULL, NULL) ON CONFLICT (user_id, symbol) DO UPDATE SET company_name = $3',
+        [userId, symbol, companyName]
+      );
+      
+      return res.status(202).json({ 
+        message: 'Stock added to watchlist. Price data unavailable - Alpha Vantage API key not configured.',
+        needsApiKey: true
+      });
+    }
+
     // Fetch latest price data
     const priceResponse = await axios.get('https://www.alphavantage.co/query', {
       params: {
         function: 'GLOBAL_QUOTE',
         symbol,
-        apikey: process.env.ALPHA_VANTAGE_API_KEY
+        apikey: alphaVantageKey
       }
     });
 
@@ -469,8 +494,11 @@ router.get('/watchlist', authenticateToken, async (req, res) => {
 router.post('/refresh-watchlist-data', authenticateToken, async (req, res) => {
   const userId = req.user.id;
   try {
+    // Create a new instance of FinancialCalendarService with user ID for user-specific API keys
+    const userFinancialCalendarService = new FinancialCalendarService(userId);
+    
     // This will trigger fetching earnings, dividends, news, and overview for watchlist
-    await financialCalendarService.updateEventsForWatchlist(userId);
+    await userFinancialCalendarService.updateEventsForWatchlist(userId);
     res.status(200).json({ message: 'Watchlist data refresh triggered successfully' });
   } catch (error) {
     console.error('Error refreshing watchlist data:', error);

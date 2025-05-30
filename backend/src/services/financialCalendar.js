@@ -1,36 +1,65 @@
 const axios = require('axios');
 const { pool } = require('../config/data-sources');
+const { getEffectiveApiKey } = require('../utils/userApiKeys');
 
 class FinancialCalendarService {
-  constructor() {
-    this.apiKey = process.env.ALPHA_VANTAGE_API_KEY || '';
+  constructor(userId = null, userApiKey = null) {
+    this.userId = userId;
+    this.userApiKey = userApiKey;
     this.baseUrl = 'https://www.alphavantage.co/query';
     
-    if (!this.apiKey) {
-      console.warn('⚠️ Alpha Vantage API key not found - financial calendar features will be limited');
-      this.isConfigured = false;
-    } else {
+    // If a user API key is provided directly, use it
+    if (userApiKey) {
+      this.apiKey = userApiKey;
       this.isConfigured = true;
+    } else {
+      // Fall back to environment variable for backward compatibility
+      this.apiKey = process.env.ALPHA_VANTAGE_API_KEY || '';
+      this.isConfigured = !!this.apiKey;
+    }
+    
+    if (!this.isConfigured) {
+      console.warn('⚠️ Alpha Vantage API key not found - financial calendar features will be limited');
     }
   }
 
+  // Get the effective API key for the current user
+  async getApiKey() {
+    if (this.userApiKey) {
+      return this.userApiKey;
+    }
+    
+    if (this.userId) {
+      const effectiveKey = await getEffectiveApiKey(this.userId, 'alpha_vantage');
+      if (effectiveKey) {
+        this.apiKey = effectiveKey;
+        this.isConfigured = true;
+        return effectiveKey;
+      }
+    }
+    
+    return this.apiKey;
+  }
+
   // Check if the service is properly configured
-  isAvailable() {
-    return this.isConfigured;
+  async isAvailable() {
+    const apiKey = await this.getApiKey();
+    return !!apiKey;
   }
 
   async fetchEarningsCalendar(symbol) {
-    if (!this.isAvailable()) {
+    if (!(await this.isAvailable())) {
       console.log('Alpha Vantage not configured - skipping earnings calendar fetch');
       return [];
     }
 
     try {
+      const apiKey = await this.getApiKey();
       const response = await axios.get(this.baseUrl, {
         params: {
           function: 'EARNINGS_CALENDAR',
           symbol,
-          apikey: this.apiKey
+          apikey: apiKey
         },
         responseType: 'text'
       });
@@ -55,17 +84,18 @@ class FinancialCalendarService {
   }
 
   async fetchDividendCalendar(symbol) {
-    if (!this.isAvailable()) {
+    if (!(await this.isAvailable())) {
       console.log('Alpha Vantage not configured - skipping dividend calendar fetch');
       return [];
     }
 
     try {
+      const apiKey = await this.getApiKey();
       const response = await axios.get(this.baseUrl, {
         params: {
           function: 'TIME_SERIES_DAILY_ADJUSTED',
           symbol,
-          apikey: this.apiKey
+          apikey: apiKey
         }
       });
 
@@ -79,17 +109,18 @@ class FinancialCalendarService {
   }
 
   async fetchNewsAndSentiment(symbol) {
-    if (!this.isAvailable()) {
+    if (!(await this.isAvailable())) {
       console.log('Alpha Vantage not configured - skipping news and sentiment fetch');
       return;
     }
 
     try {
+      const apiKey = await this.getApiKey();
       const response = await axios.get(this.baseUrl, {
         params: {
           function: 'NEWS_SENTIMENT',
           tickers: symbol,
-          apikey: this.apiKey
+          apikey: apiKey
         }
       });
 
@@ -102,17 +133,18 @@ class FinancialCalendarService {
   }
 
   async fetchCompanyOverview(symbol) {
-    if (!this.isAvailable()) {
+    if (!(await this.isAvailable())) {
       console.log('Alpha Vantage not configured - skipping company overview fetch');
       return;
     }
 
     try {
+      const apiKey = await this.getApiKey();
       const response = await axios.get(this.baseUrl, {
         params: {
           function: 'OVERVIEW',
           symbol,
-          apikey: this.apiKey
+          apikey: apiKey
         }
       });
 

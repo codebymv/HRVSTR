@@ -258,8 +258,8 @@ const Home: React.FC = () => {
               {/* Overall Progress */}
               <div>
                 <div className="flex justify-between items-center mb-2">
-                  <span className={`text-lg font-medium ${textColor}`}>v 0.7.5</span>
-                  <span className={`text-lg font-bold ${textColor}`}>1.0 Stable Release</span>
+                  <span className={`text-lg font-medium ${textColor}`}>v0.7.5</span>
+                  <span className={`text-lg font-bold ${textColor}`}>v1.0 Stable Release</span>
                 </div>
                 <div className={`w-full bg-gray-300 rounded-full h-3 ${isLight ? 'bg-stone-400' : 'bg-gray-700'}`}>
                   <div className="bg-gradient-to-r from-teal-400 to-blue-500 h-3 rounded-full transition-all duration-500" style={{ width: '77%' }}></div>

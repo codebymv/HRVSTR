@@ -226,7 +226,7 @@ const TiersPage: React.FC = () => {
           <h3 className={`text-lg font-semibold ${textColor} mb-4`}>
             Plan Benefits & Information
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div>
               <h4 className={`font-medium ${textColor} mb-2`}>Credit Usage</h4>
               <ul className={`text-sm ${secondaryTextColor} space-y-1`}>
@@ -252,18 +252,17 @@ const TiersPage: React.FC = () => {
                 <li>• Paid tiers: Advanced filtering</li>
               </ul>
             </div>
-          </div>
-          
-          <div className="mt-6 pt-4 border-t border-gray-700">
-            <h4 className={`font-medium ${textColor} mb-2`}>Billing Information</h4>
-            <ul className={`text-sm ${secondaryTextColor} space-y-1`}>
-              <li>• All plans include automatic renewal</li>
-              <li>• Cancel anytime with immediate effect</li>
-              <li>• Unused credits don't roll over monthly</li>
-              <li>• Upgrades take effect immediately</li>
-              <li>• Secure payment processing via Stripe</li>
-              <li>• 30-day money-back guarantee on first purchase</li>
-            </ul>
+            <div>
+              <h4 className={`font-medium ${textColor} mb-2`}>Billing Information</h4>
+              <ul className={`text-sm ${secondaryTextColor} space-y-1`}>
+                <li>• All plans include automatic renewal</li>
+                <li>• Cancel anytime with immediate effect</li>
+                <li>• Unused credits don't roll over monthly</li>
+                <li>• Upgrades take effect immediately</li>
+                <li>• Secure payment processing via Stripe</li>
+                <li>• 30-day money-back guarantee on first purchase</li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>

@@ -458,13 +458,13 @@ const BillingPage: React.FC = () => {
                   <CreditCard className="w-5 h-5 mr-2" />
                   Payment Methods
                 </h2>
-                <button
+                {/* <button
                   onClick={openCustomerPortal}
                   className={`${buttonBgColor} text-white px-3 py-1 rounded text-sm font-medium flex items-center transition-colors`}
                 >
                   <Plus className="w-4 h-4 mr-1" />
                   Add Method
-                </button>
+                </button> */}
               </div>
 
               {paymentMethods.length === 0 ? (
