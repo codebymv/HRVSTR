@@ -35,22 +35,22 @@ function validateYahooData(data: any): SentimentData[] {
       throw new Error('Missing required field: ticker');
     }
 
-    // Default to neutral if no score is provided
-    const rawScore = item.score !== undefined ? Number(item.score) : 0.5;
-    const normalizedScore = Math.min(1, Math.max(0, isNaN(rawScore) ? 0.5 : rawScore));
+    // Parse and validate score - should be in -1 to 1 range (not 0 to 1)
+    const rawScore = item.score !== undefined ? Number(item.score) : 0;
+    const normalizedScore = isNaN(rawScore) ? 0 : Math.min(1, Math.max(-1, rawScore));
     
     // Determine sentiment based on score if not provided
     let sentiment = item.sentiment;
     if (!sentiment) {
-      if (normalizedScore >= 0.6) sentiment = 'bullish';
-      else if (normalizedScore <= 0.4) sentiment = 'bearish';
+      if (normalizedScore >= 0.1) sentiment = 'bullish';
+      else if (normalizedScore <= -0.1) sentiment = 'bearish';
       else sentiment = 'neutral';
     }
 
     // Normalize and validate data
     return {
       ticker: String(item.ticker).toUpperCase().trim(),
-      score: normalizedScore,
+      score: normalizedScore, // Correct range: -1 to 1
       sentiment,
       source: 'yahoo',
       timestamp: item.timestamp || new Date().toISOString(),

@@ -33,10 +33,14 @@ function validateFinvizData(data: any): SentimentData[] {
       throw new Error('Missing required field: ticker');
     }
 
+    // Parse and validate score - should be in -1 to 1 range (not 0 to 1)
+    const rawScore = Number(item.score);
+    const normalizedScore = isNaN(rawScore) ? 0 : Math.min(1, Math.max(-1, rawScore));
+
     // Normalize and validate data
     return {
       ticker: String(item.ticker).toUpperCase().trim(),
-      score: Math.min(1, Math.max(0, Number(item.score) || 0.5)), // Clamp between 0-1
+      score: normalizedScore, // Correct range: -1 to 1
       sentiment: item.sentiment || 'neutral',
       source: 'finviz',
       timestamp: item.timestamp || new Date().toISOString(),

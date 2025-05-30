@@ -1,12 +1,64 @@
 import React from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
-import { ArrowUpRight, ArrowDownRight, Minus, BarChart2, Percent } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Minus, TrendingUp, TrendingDown, Info } from 'lucide-react';
 import { SentimentData } from '../../types';
 import { getSentimentTextColor, getConfidenceColor } from './sentimentUtils';
 
 interface SentimentCardProps {
   data: SentimentData;
 }
+
+// Function to get sentiment strength description
+const getSentimentDescription = (score: number): string => {
+  const absScore = Math.abs(score);
+  const isPositive = score > 0;
+  
+  if (absScore >= 0.8) {
+    return isPositive ? 'Very Bullish' : 'Very Bearish';
+  } else if (absScore >= 0.5) {
+    return isPositive ? 'Bullish' : 'Bearish';
+  } else if (absScore >= 0.15) {
+    return isPositive ? 'Slightly Bullish' : 'Slightly Bearish';
+  } else {
+    return 'Neutral';
+  }
+};
+
+// Function to get sentiment color
+const getSentimentColor = (score: number): string => {
+  if (score > 0.15) return 'text-green-500';
+  if (score < -0.15) return 'text-red-500';
+  return 'text-yellow-500';
+};
+
+// Function to get sentiment icon
+const getSentimentIcon = (score: number) => {
+  if (score > 0.15) return <TrendingUp size={24} className="text-green-500" />;
+  if (score < -0.15) return <TrendingDown size={24} className="text-red-500" />;
+  return <Minus size={24} className="text-yellow-500" />;
+};
+
+// Function to get data summary text
+const getDataSummary = (source: string, postCount: number, commentCount: number, newsCount: number): string => {
+  if (source === 'reddit') {
+    const total = postCount + commentCount;
+    return `${total} discussions`;
+  } else if (source === 'finviz' || source === 'yahoo') {
+    return `${newsCount} news articles`;
+  } else if (source === 'combined') {
+    const discussions = postCount + commentCount;
+    const news = newsCount;
+    if (discussions > 0 && news > 0) {
+      return `${discussions} discussions, ${news} articles`;
+    } else if (discussions > 0) {
+      return `${discussions} discussions`;
+    } else if (news > 0) {
+      return `${news} articles`;
+    }
+    return 'No data';
+  }
+  return 'Live data';
+};
 
 const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
   const {
@@ -18,250 +70,132 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
     price,
     changePercent,
     newsCount = 0,
-    // Remove unused analystRating variable
-    confidence, // No default - will calculate if not provided
-    strength = Math.round(Math.abs(score * 100)), // Calculate strength as percentage of score
-    volume = 0, // Discussion volume
-    momentum = 0, // Sentiment momentum (change)
+    confidence,
+    strength = Math.round(Math.abs(score * 100)),
+    volume = 0,
+    momentum = 0,
   } = data;
-  
-  // No fallback logic - only use the confidence provided by the backend
-  // If confidence is not provided, we'll show it as "N/A" in the UI
   
   // Get theme context
   const { theme } = useTheme();
   const isLight = theme === 'light';
   
   // Theme-specific styling
-  const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-800';
-  const borderColor = isLight ? 'border-stone-400' : 'border-gray-700';
-  const headingTextColor = isLight ? 'text-stone-800' : 'text-white';
-  const subTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
+  const cardBgColor = isLight ? 'bg-white' : 'bg-gray-800';
+  const borderColor = isLight ? 'border-gray-200' : 'border-gray-700';
+  const headingTextColor = isLight ? 'text-gray-900' : 'text-white';
+  const subTextColor = isLight ? 'text-gray-600' : 'text-gray-400';
+  const badgeBgColor = isLight ? 'bg-gray-100' : 'bg-gray-700';
   
-  const scoreTextColor = getSentimentTextColor(score);
-  // Use strength value if available, otherwise calculate from score
-  // For -1 to 1 range, convert to percentage properly
+  const sentimentDescription = getSentimentDescription(score);
+  const sentimentColor = getSentimentColor(score);
   const scoreValue = strength !== undefined && strength > 0 
     ? strength.toString() 
-    : Math.round(Math.abs(score) * 100).toString(); // Convert -1 to 1 range to 0-100 percentage
+    : Math.round(Math.abs(score) * 100).toString();
   
-  // Add detailed debug log to see what data is received by the component
-  console.log(`🔍 CARD (${ticker}):`, { 
-    confidence: confidence, 
-    confidenceType: typeof confidence, 
-    score: score,
-    hasConfidence: confidence !== undefined,
-    sentiment: data.sentiment,
-    scoreThreshold: score > 0.15 ? 'BULLISH (>0.15)' : score < -0.15 ? 'BEARISH (<-0.15)' : 'NEUTRAL (±0.15)',
-    strengthPercent: scoreValue,
-    source: source,
-    debug: data.debug || 'No debug info',
-    entireData: JSON.stringify(data)
-  });
-  
-  // Only use confidence directly from the backend - no fallbacks
-  // Explicitly check for null, undefined, and NaN cases
   const hasValidConfidence = confidence !== undefined && confidence !== null && !isNaN(Number(confidence));
-  const confidenceColor = hasValidConfidence ? getConfidenceColor(confidence) : 'text-gray-400';
+  const dataSummary = getDataSummary(source, postCount, commentCount, newsCount);
   
   return (
-    <div className={`${cardBgColor} rounded-lg p-5 hover:shadow-lg transition-shadow border ${borderColor}`}>
-      <div className="flex justify-between items-start mb-4">
-        <div>
-          <h3 className={`text-xl font-bold ${headingTextColor}`}>{ticker}</h3>
-          <div className="flex items-center mt-1">
-            {score > 0.1 ? (
-              <ArrowUpRight size={20} className="text-green-500" />
-            ) : score < -0.1 ? (
-              <ArrowDownRight size={20} className="text-red-500" />
-            ) : (
-              <Minus size={20} className="text-yellow-500" />
-            )}
-            <span className={`ml-1 text-sm font-medium capitalize ${scoreTextColor}`}>
-              {score > 0.1 ? 'bullish' : score < -0.1 ? 'bearish' : 'neutral'}
-            </span>
-            
-            {/* Confidence indicator - only show if provided by backend */}
-            {hasValidConfidence ? (
-              <div className="ml-2 flex items-center" title={`Confidence: ${confidence}%`}>
-                <Percent size={14} className={confidenceColor} />
-                <span className={`ml-1 text-xs ${confidenceColor}`}>{confidence}%</span>
-              </div>
-            ) : (
-              <div className="ml-2 flex items-center" title="No confidence data available">
-                <Percent size={14} className="text-gray-400" />
-                <span className="ml-1 text-xs text-gray-400">N/A</span>
-              </div>
-            )}
+    <div className={`${cardBgColor} rounded-xl p-6 hover:shadow-lg transition-all duration-200 border ${borderColor} shadow-sm`}>
+      {/* Header with ticker and sentiment */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center space-x-3">
+          <h3 className={`text-2xl font-bold ${headingTextColor}`}>{ticker}</h3>
+          {getSentimentIcon(score)}
+        </div>
+        <div className="text-right">
+          <div className={`text-sm font-medium ${subTextColor} mb-1`}>Market Sentiment</div>
+          <div className={`text-3xl font-bold ${sentimentColor}`}>
+            {scoreValue}%
           </div>
         </div>
-        <div className={`text-2xl font-bold ${scoreTextColor}`}>
-          {scoreValue}%
+      </div>
+
+      {/* Sentiment description - prominent display */}
+      <div className="mb-4">
+        <div className={`inline-flex items-center px-3 py-2 rounded-full text-sm font-semibold ${badgeBgColor}`}>
+          <span className={sentimentColor}>{sentimentDescription}</span>
+          {hasValidConfidence && (
+            <span className={`ml-2 ${subTextColor}`}>
+              • {confidence}% confidence
+            </span>
+          )}
         </div>
       </div>
-      
-      {/* Details section varies by data source */}
-      <div className="mt-4 flex justify-between text-sm">
-        <div className={subTextColor}>
-          {source === 'reddit' && (
-            <>
-              <span className="block">{postCount} posts</span>
-              <span className="block">{commentCount} comments</span>
-              
-              {/* Volume indicator if available */}
-              {volume > 0 && (
-                <div className="flex items-center mt-1" title="Discussion volume">
-                  <BarChart2 size={14} className={subTextColor} />
-                  <span className="ml-1">
-                    Volume: {volume}/10
-                  </span>
-                </div>
-              )}
-            </>
-          )}
-          {source === 'finviz' && (
-            <>
-              {/* Only show price if it's a valid number */}
-              {price !== undefined && price !== null && !isNaN(Number(price)) ? (
-                <span className="block">
-                  ${Number(price).toFixed(2)}
-                  {changePercent !== undefined && changePercent !== null && !isNaN(Number(changePercent)) && (
-                    <span className="inline-flex items-center ml-1">
-                      {Number(changePercent) >= 0 ? (
-                        <ArrowUpRight size={14} className="text-green-500" />
-                      ) : (
-                        <ArrowDownRight size={14} className="text-red-500" />
-                      )}
-                      {Math.abs(Number(changePercent)).toFixed(2)}%
-                    </span>
-                  )}
-                </span>
-              ) : null}
-              {newsCount !== undefined && <span className="block">{newsCount} news articles</span>}
-              
-              {/* Volume indicator if available */}
-              {volume > 0 && (
-                <div className="flex items-center mt-1" title="News volume">
-                  <BarChart2 size={14} className={subTextColor} />
-                  <span className="ml-1">
-                    Volume: {volume}/10
-                  </span>
-                </div>
-              )}
-            </>
-          )}
-          {source === 'yahoo' && (
-            <>
-              {/* Only show price if it's a valid number */}
-              {price !== undefined && price !== null && !isNaN(Number(price)) ? (
-                <span className="block">
-                  ${Number(price).toFixed(2)}
-                  {changePercent !== undefined && changePercent !== null && !isNaN(Number(changePercent)) && (
-                    <span className="inline-flex items-center ml-1">
-                      {Number(changePercent) >= 0 ? (
-                        <ArrowUpRight size={14} className="text-green-500" />
-                      ) : (
-                        <ArrowDownRight size={14} className="text-red-500" />
-                      )}
-                      {Math.abs(Number(changePercent)).toFixed(2)}%
-                    </span>
-                  )}
-                </span>
-              ) : null}
-              {newsCount !== undefined && <span className="block">{newsCount} news articles</span>}
-              
-              {/* Volume indicator if available */}
-              {volume > 0 && (
-                <div className="flex items-center mt-1" title="News volume">
-                  <BarChart2 size={14} className={subTextColor} />
-                  <span className="ml-1">
-                    Volume: {volume}/10
-                  </span>
-                </div>
-              )}
-            </>
-          )}
-          {source === 'combined' && (
-            <>
-              <span className="block">{postCount} posts</span>
-              <span className="block">{commentCount} comments</span>
-              {newsCount > 0 && <span className="block">{newsCount} news articles</span>}
-              
-              {/* Price information if available */}
-              {price != null && !isNaN(price as unknown as number) && (
-                <span className="block">
-                  ${(price as number).toFixed(2)}
-                  {changePercent != null && !isNaN(changePercent as unknown as number) && (
-                    <span className="inline-flex items-center ml-1">
-                      {changePercent >= 0 ? (
-                        <ArrowUpRight size={14} className="text-green-500" />
-                      ) : (
-                        <ArrowDownRight size={14} className="text-red-500" />
-                      )}
-                      {Math.abs(changePercent as number).toFixed(2)}%
-                    </span>
-                  )}
-                </span>
-              )}
-              
-              {/* Volume indicator if available */}
-              {volume > 0 && (
-                <div className="flex items-center mt-1" title="Discussion volume">
-                  <BarChart2 size={14} className={subTextColor} />
-                  <span className="ml-1">
-                    Volume: {volume}/10
-                  </span>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="h-2 w-2 rounded-full bg-green-500"></div>
-          <span className={`${subTextColor} text-xs`}>Live</span>
-        </div>
-      </div>
-      
-      {/* Progress bar with confidence indicator */}
-      <div className="mt-5">
-        <div className={`h-2 ${isLight ? 'bg-stone-400' : 'bg-gray-700'} rounded-full overflow-hidden relative`}>
-          <div 
-            className={`h-full ${
-              score > 0.1 ? 'bg-green-500' : score < -0.1 ? 'bg-red-500' : 'bg-yellow-500'
-            }`}
-            style={{ width: `${Math.min(100, parseInt(scoreValue))}%` }}
-          ></div>
-          
-          {/* Confidence overlay - semi-transparent overlay showing confidence level */}
-          {confidence ? (
-            <div 
-              className="absolute top-0 left-0 h-full bg-white opacity-30"
-              style={{ width: `${100 - confidence}%` }}
-            ></div>
-          ) : (
-            <div 
-              className="absolute top-0 left-0 h-full bg-white opacity-30"
-              style={{ width: '50%' }} // Default 50% overlay when no confidence available
-            ></div>
-          )}
-        </div>
-        
-        {/* Momentum indicator if available */}
-        {momentum !== 0 && (
-          <div className="flex justify-end mt-1">
-            <div className="flex items-center">
-              {momentum > 0 ? (
-                <ArrowUpRight size={14} className="text-green-500" />
-              ) : (
-                <ArrowDownRight size={14} className="text-red-500" />
-              )}
-              <span className={`text-xs ${momentum > 0 ? 'text-green-500' : 'text-red-500'}`}>
-                {Math.abs(momentum).toFixed(1)}%
+
+      {/* Price information if available */}
+      {price !== undefined && price !== null && !isNaN(Number(price)) && (
+        <div className="mb-4 p-3 rounded-lg bg-opacity-50" style={{backgroundColor: isLight ? '#f8f9fa' : '#374151'}}>
+          <div className="flex items-center justify-between">
+            <span className={`text-sm ${subTextColor}`}>Current Price</span>
+            <div className="text-right">
+              <span className={`text-lg font-semibold ${headingTextColor}`}>
+                ${Number(price).toFixed(2)}
               </span>
+              {changePercent !== undefined && changePercent !== null && !isNaN(Number(changePercent)) && (
+                <div className="flex items-center justify-end mt-1">
+                  {Number(changePercent) >= 0 ? (
+                    <ArrowUpRight size={16} className="text-green-500" />
+                  ) : (
+                    <ArrowDownRight size={16} className="text-red-500" />
+                  )}
+                  <span className={`text-sm font-medium ml-1 ${Number(changePercent) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                    {Math.abs(Number(changePercent)).toFixed(2)}%
+                  </span>
+                </div>
+              )}
             </div>
           </div>
-        )}
+        </div>
+      )}
+
+      {/* Data source and summary */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <div className="h-2 w-2 rounded-full bg-green-500"></div>
+          <span className={`text-sm ${subTextColor}`}>Live • {dataSummary}</span>
+        </div>
+        
+        {/* Info tooltip for technical users */}
+        <div className="group relative">
+          <Info size={16} className={`${subTextColor} hover:${headingTextColor} cursor-help`} />
+          <div className="absolute bottom-full right-0 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+            Score: {score.toFixed(3)} • Source: {source}
+            {hasValidConfidence && ` • Confidence: ${confidence}%`}
+          </div>
+        </div>
       </div>
+
+      {/* Simplified progress indicator */}
+      <div className="mt-4">
+        <div className={`h-2 ${isLight ? 'bg-gray-200' : 'bg-gray-700'} rounded-full overflow-hidden`}>
+          <div 
+            className={`h-full transition-all duration-500 ${
+              score > 0.15 ? 'bg-green-500' : score < -0.15 ? 'bg-red-500' : 'bg-yellow-500'
+            }`}
+            style={{ width: `${Math.min(100, Math.max(5, parseInt(scoreValue)))}%` }}
+          ></div>
+        </div>
+      </div>
+
+      {/* Momentum indicator if significant */}
+      {Math.abs(momentum) > 0.1 && (
+        <div className="mt-3 flex items-center justify-center">
+          <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium ${
+            momentum > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+          }`}>
+            {momentum > 0 ? (
+              <ArrowUpRight size={12} />
+            ) : (
+              <ArrowDownRight size={12} />
+            )}
+            <span>
+              {momentum > 0 ? 'Trending up' : 'Trending down'} {Math.abs(momentum).toFixed(1)}%
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
