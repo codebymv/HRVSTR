@@ -6,6 +6,7 @@ import { ensureTickerDiversity } from '../services/tickerUtils';
 import { generateChartData } from '../services/chartUtils';
 import { fetchFinvizSentiment } from '../services/finvizClient';
 import { fetchYahooSentiment } from '../services/yahooFinanceClient';
+import { useTier } from '../contexts/TierContext';
 
 // Simple logger with environment check
 const isDev = process.env.NODE_ENV === 'development';
@@ -91,8 +92,29 @@ function useAbortableRequests(): UseAbortableRequests {
   return requestManagerRef.current;
 }
 
-export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean = true): SentimentDataHookReturn {
+// Define tier limits for ticker requests (must match backend)
+const TIER_TICKER_LIMITS = {
+  free: 3,
+  pro: 10,
+  elite: 50,
+  institutional: 100
+} as const;
+
+// Helper function to chunk tickers based on tier limits
+function chunkTickersByTier(tickers: string[], tier: string): string[][] {
+  const limit = TIER_TICKER_LIMITS[tier as keyof typeof TIER_TICKER_LIMITS] || TIER_TICKER_LIMITS.free;
+  const chunks: string[][] = [];
+  
+  for (let i = 0; i < tickers.length; i += limit) {
+    chunks.push(tickers.slice(i, i + limit));
+  }
+  
+  return chunks;
+}
+
+export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean = true, apiKeysReady: boolean = true): SentimentDataHookReturn {
   const requestManager = useAbortableRequests();
+  const { tierInfo } = useTier();
   
   // Cache expiration time - 5 minutes
   const CACHE_EXPIRY = 5 * 60 * 1000;
@@ -304,32 +326,53 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
       try {
         // Step 3: Fetch ticker sentiment data (Reddit for Pro+ users, FinViz/Yahoo for all)
         let tickerSentimentData: SentimentData[] = allTickerSentimentsRef.current;
-        if (allTickerSentimentsRef.current.length === 0) {
-          if (hasRedditAccess) {
-            updateProgress(45, `Fetching ${timeRange} ticker sentiment data...`);
-            const tickerSignal = requestManager.getSignal(REQUEST_KEYS.tickerSentiment);
-            tickerSentimentData = await fetchTickerSentiments(timeRange, tickerSignal);
-            allTickerSentimentsRef.current = tickerSentimentData;
-            setAllTickerSentiments(tickerSentimentData);
-          } else {
-            // For free users, skip Reddit ticker sentiment and just use default tickers for FinViz/Yahoo
-            updateProgress(45, 'Preparing market sentiment data (Pro feature: Reddit ticker sentiment)...');
-            // Create a basic set of popular tickers for FinViz/Yahoo sentiment
-            const defaultTickers = ['SPY', 'QQQ', 'MSFT', 'AAPL', 'NVDA', 'TSLA', 'GOOGL', 'AMZN'];
-            tickerSentimentData = defaultTickers.map(ticker => ({
-              ticker,
-              score: 0.5, // Neutral baseline
-              sentiment: 'neutral' as const,
-              source: 'finviz' as const, // Use finviz as the base source
-              timestamp: new Date().toISOString(),
-              confidence: 0,
-              postCount: 0,
-              commentCount: 0,
-              upvotes: 0
-            }));
-            allTickerSentimentsRef.current = tickerSentimentData;
-            setAllTickerSentiments(tickerSentimentData);
-          }
+        
+        // Check if we need to fetch Reddit ticker sentiment data
+        const hasRealRedditData = allTickerSentimentsRef.current.length > 0 && 
+          allTickerSentimentsRef.current.some(item => item.source === 'reddit');
+        const needsRedditData = hasRedditAccess && !hasRealRedditData;
+        const needsDefaultData = !hasRedditAccess && allTickerSentimentsRef.current.length === 0;
+        
+        console.log('[REDDIT TICKER DEBUG] Data check:', {
+          currentDataLength: allTickerSentimentsRef.current.length,
+          hasRedditAccess,
+          hasRealRedditData,
+          needsRedditData,
+          needsDefaultData,
+          firstItemSource: allTickerSentimentsRef.current[0]?.source || 'none'
+        });
+        
+        if (needsRedditData) {
+          console.log('[REDDIT TICKER DEBUG] Fetching Reddit ticker sentiment data...');
+          updateProgress(45, `Fetching ${timeRange} Reddit ticker sentiment data...`);
+          const tickerSignal = requestManager.getSignal(REQUEST_KEYS.tickerSentiment);
+          tickerSentimentData = await fetchTickerSentiments(timeRange, tickerSignal);
+          allTickerSentimentsRef.current = tickerSentimentData;
+          setAllTickerSentiments(tickerSentimentData);
+        } else if (needsDefaultData) {
+          console.log('[REDDIT TICKER DEBUG] Creating default ticker data for free user...');
+          // For free users, skip Reddit ticker sentiment and just use default tickers for FinViz/Yahoo
+          updateProgress(45, 'Preparing market sentiment data (Pro feature: Reddit ticker sentiment)...');
+          // Create a basic set of popular tickers for FinViz/Yahoo sentiment
+          const defaultTickers = ['SPY', 'QQQ', 'MSFT', 'AAPL', 'NVDA', 'TSLA', 'GOOGL', 'AMZN'];
+          tickerSentimentData = defaultTickers.map(ticker => ({
+            ticker,
+            score: 0.5, // Neutral baseline
+            sentiment: 'neutral' as const,
+            source: 'finviz' as const, // Use finviz as the base source
+            timestamp: new Date().toISOString(),
+            confidence: 0,
+            postCount: 0,
+            commentCount: 0,
+            upvotes: 0
+          }));
+          allTickerSentimentsRef.current = tickerSentimentData;
+          setAllTickerSentiments(tickerSentimentData);
+        } else {
+          console.log('[REDDIT TICKER DEBUG] Using existing ticker sentiment data:', {
+            length: allTickerSentimentsRef.current.length,
+            sources: allTickerSentimentsRef.current.map(item => item.source)
+          });
         }
         
         if (tickerSentimentData.length > 0) {
@@ -337,38 +380,104 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
           setTopSentiments(diverseSentiments);
           
           const tickersToFetch = diverseSentiments.map(item => item.ticker);
+          const userTier = tierInfo?.tier || 'free';
           
-          // Fetch FinViz sentiment data
+          // Split tickers into chunks based on user's tier limits
+          const tickerChunks = chunkTickersByTier(tickersToFetch, userTier);
+          console.log(`[SENTIMENT DEBUG] Splitting ${tickersToFetch.length} tickers into ${tickerChunks.length} chunks for ${userTier} tier (max ${TIER_TICKER_LIMITS[userTier as keyof typeof TIER_TICKER_LIMITS] || 3} per request)`);
+          
+          // Fetch FinViz sentiment data in chunks
           let finvizData: SentimentData[] = [];
           try {
             updateProgress(60, 'Fetching FinViz sentiment data...');
             const finvizSignal = requestManager.getSignal(REQUEST_KEYS.finviz);
-            finvizData = await fetchFinvizSentiment(tickersToFetch, finvizSignal);
+            
+            // Process chunks sequentially to respect rate limits
+            for (let i = 0; i < tickerChunks.length; i++) {
+              const chunk = tickerChunks[i];
+              console.log(`[SENTIMENT DEBUG] Fetching FinViz chunk ${i + 1}/${tickerChunks.length}: ${chunk.join(',')}`);
+              
+              const chunkData = await fetchFinvizSentiment(chunk, finvizSignal);
+              finvizData.push(...chunkData);
+              
+              // Add a small delay between chunks to be polite to the API
+              if (i < tickerChunks.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+              }
+            }
+            
             setFinvizSentiments(finvizData);
+            console.log(`[SENTIMENT DEBUG] Total FinViz data collected: ${finvizData.length} items`);
           } catch (finvizError) {
             logger.error('FinViz data error:', finvizError);
           }
           
-          // Fetch Yahoo Finance sentiment
+          // Fetch Yahoo Finance sentiment in chunks
           let yahooData: SentimentData[] = [];
           try {
             updateProgress(75, 'Fetching Yahoo Finance sentiment data...');
             const yahooSignal = requestManager.getSignal(REQUEST_KEYS.yahoo);
-            yahooData = await fetchYahooSentiment(tickersToFetch, yahooSignal);
+            
+            // Process chunks sequentially to respect rate limits
+            for (let i = 0; i < tickerChunks.length; i++) {
+              const chunk = tickerChunks[i];
+              console.log(`[SENTIMENT DEBUG] Fetching Yahoo chunk ${i + 1}/${tickerChunks.length}: ${chunk.join(',')}`);
+              
+              const chunkData = await fetchYahooSentiment(chunk, yahooSignal);
+              yahooData.push(...chunkData);
+              
+              // Add a small delay between chunks to be polite to the API
+              if (i < tickerChunks.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+              }
+            }
+            
             setYahooSentiments(yahooData);
+            console.log(`[SENTIMENT DEBUG] Total Yahoo data collected: ${yahooData.length} items`);
           } catch (yahooError) {
             logger.error('Yahoo Finance data error:', yahooError);
           }
           
-          // Merge sentiment data from available sources (exclude Reddit for free users)
-          const sourcesToMerge = hasRedditAccess ? 
+          // Merge sentiment data from available sources 
+          // Check if diverseSentiments contains real Reddit data (not fake default data)
+          const hasRealRedditData = diverseSentiments.length > 0 && 
+            diverseSentiments.some(item => item.source === 'reddit') && 
+            hasRedditAccess;
+            
+          const sourcesToMerge = hasRealRedditData ? 
             [diverseSentiments, finvizData, yahooData] : 
-            [finvizData, yahooData]; // Exclude Reddit data for free users
+            [finvizData, yahooData]; // Exclude fake default data and only use real FinViz/Yahoo data
+          
+          console.log('[SENTIMENT DEBUG] Sources to merge:', {
+            diverseSentiments: diverseSentiments.length,
+            finvizData: finvizData.length,
+            yahooData: yahooData.length,
+            hasRedditAccess,
+            hasRealRedditData,
+            diverseSentimentsSource: diverseSentiments[0]?.source || 'none'
+          });
           
           const mergedData = mergeSentimentData(...sourcesToMerge.filter(data => data.length > 0));
+          console.log('[SENTIMENT DEBUG] Merged data:', {
+            length: mergedData.length,
+            sample: mergedData[0]
+          });
+          
           const aggregatedData = aggregateByTicker(mergedData);
+          console.log('[SENTIMENT DEBUG] Aggregated data:', {
+            length: aggregatedData.length,
+            sample: aggregatedData[0],
+            type: typeof aggregatedData[0]
+          });
+          
           const finalSentiments = ensureTickerDiversity(aggregatedData, 8);
-          setCombinedSentiments(finalSentiments);
+          console.log('[SENTIMENT DEBUG] Final sentiments:', {
+            length: Array.isArray(finalSentiments) ? finalSentiments.length : 'not array',
+            sample: Array.isArray(finalSentiments) ? finalSentiments[0] : 'not array',
+            type: Array.isArray(finalSentiments) ? typeof finalSentiments[0] : 'not array'
+          });
+          
+          setCombinedSentiments(finalSentiments as SentimentData[]);
         }
         
         setLoading(prev => ({ ...prev, sentiment: false }));
@@ -470,10 +579,10 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
     } finally {
       loadingRef.current = false;
     }
-  }, [timeRange]); // Only timeRange should trigger a new loadData - refs are accessed directly
+  }, [timeRange, hasRedditAccess, apiKeysReady, requestManager, updateProgress, updateLoadingState]);
   
   const refreshData = useCallback(() => {
-    // Clear caches then reload
+    // Clear ALL caches then reload - including market timeline data
     allSentimentsRef.current = [];
     setAllSentiments([]);
     allTickerSentimentsRef.current = [];
@@ -482,6 +591,8 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
     setCachedRedditPosts([]);
     cacheTimestampRef.current = 0;
     setCacheTimestamp(0);
+    
+    // Force reload of data with current access level
     loadData();
   }, [loadData]);
   
@@ -557,9 +668,15 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
     }
   }, [redditPage, hasMorePosts, loading.posts, cachedRedditPosts, timeRange, updateLoadingState]);
   
-  // Effect to load data when timeRange changes
+  // Effect to load data when timeRange or Reddit access changes
   useEffect(() => {
-    logger.log(`Time range changed to: ${timeRange}, triggering data load`);
+    // Don't start loading until API key check is complete
+    if (!apiKeysReady) {
+      logger.log('Waiting for API key check to complete before loading data...');
+      return;
+    }
+    
+    logger.log(`Time range changed to: ${timeRange}, triggering data load (hasRedditAccess: ${hasRedditAccess})`);
     
     // Cancel all pending requests
     requestManager.abort();
@@ -572,7 +689,25 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [timeRange]); // Simplified dependencies - only timeRange should trigger a new loadData function
+  }, [timeRange, hasRedditAccess, apiKeysReady]); // Added apiKeysReady to dependencies
+  
+  // Effect to clear fake data when Reddit access changes
+  useEffect(() => {
+    // If the user gained Reddit access, clear any existing fake ticker data
+    // so that real Reddit ticker sentiment data gets fetched
+    if (hasRedditAccess && allTickerSentimentsRef.current.length > 0) {
+      const hasFakeData = allTickerSentimentsRef.current.some(item => 
+        item.source === 'finviz' && item.confidence === 0 && item.postCount === 0
+      );
+      
+      if (hasFakeData) {
+        console.log('[REDDIT TICKER DEBUG] Reddit access gained - clearing fake ticker data to fetch real Reddit data');
+        allTickerSentimentsRef.current = [];
+        setAllTickerSentiments([]);
+        // Don't need to call loadData() here as the previous useEffect will handle it
+      }
+    }
+  }, [hasRedditAccess]);
   
   // Effect to filter Reddit posts when cached posts or timeRange changes
   useEffect(() => {

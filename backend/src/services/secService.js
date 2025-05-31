@@ -54,13 +54,14 @@ async function getFilingDetails(accessionNumber) {
  * Enhanced wrapper for fetchInsiderTrades with error handling
  * @param {string} timeRange - Time range for the data
  * @param {number} limit - Maximum number of results
+ * @param {function} progressCallback - Optional callback function for progress updates
  * @returns {Promise<Array>} Array of insider trades
  */
-async function getInsiderTrades(timeRange = '1m', limit = 100) {
+async function getInsiderTrades(timeRange = '1m', limit = 100, progressCallback = null) {
   try {
     console.log(`[secService] Fetching insider trades for ${timeRange}, limit: ${limit}`);
     
-    const trades = await fetchInsiderTrades(timeRange, limit);
+    const trades = await fetchInsiderTrades(timeRange, limit, progressCallback);
     
     if (!trades || trades.length === 0) {
       console.warn(`[secService] No insider trades found for timeRange: ${timeRange}`);

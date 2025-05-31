@@ -14,7 +14,7 @@ export const DEFAULT_TICKERS = [
  * Function overloads to handle both string arrays and SentimentData arrays
  */
 export function ensureTickerDiversity(tickers: string[], minCount?: number): string[];
-export function ensureTickerDiversity(sentimentData: SentimentData[], minCount?: number): SentimentData[];
+export function ensureTickerDiversity(sentiments: SentimentData[], minCount?: number): SentimentData[];
 
 /**
  * Implementation of ensureTickerDiversity
@@ -26,8 +26,22 @@ export function ensureTickerDiversity(
   items: string[] | SentimentData[],
   minCount: number = 10
 ): string[] | SentimentData[] {  
+  console.log('[TICKER_UTILS DEBUG] ensureTickerDiversity called with:', {
+    length: items.length,
+    firstItemType: items.length > 0 ? typeof items[0] : 'empty',
+    firstItem: items.length > 0 ? items[0] : null,
+    minCount
+  });
+  
+  // Handle empty array case
+  if (items.length === 0) {
+    console.log('[TICKER_UTILS DEBUG] Empty array provided, returning default tickers');
+    return DEFAULT_TICKERS.slice(0, minCount);
+  }
+  
   // If we have SentimentData[], extract the tickers and maintain a map for lookup
-  if (items.length > 0 && typeof items[0] !== 'string') {
+  if (items.length > 0 && typeof items[0] === 'object' && 'ticker' in items[0]) {
+    console.log('[TICKER_UTILS DEBUG] Processing SentimentData array');
     const sentimentData = items as SentimentData[];
     const tickerMap = new Map<string, SentimentData>();
     
@@ -43,16 +57,16 @@ export function ensureTickerDiversity(
     const diverseTickers = ensureDiverseTickerStrings(uniqueTickers, minCount);
     
     // Map back to SentimentData objects, creating default objects for any default tickers that were added
-    return diverseTickers.map(ticker => {
+    const result = diverseTickers.map(ticker => {
       if (tickerMap.has(ticker)) {
         return tickerMap.get(ticker)!;
       } else {
         // Create a default SentimentData for added default tickers
         const defaultSentiment: SentimentData = {
           ticker,
-          score: 0.5, // Neutral score
+          score: 0, // Neutral score
           sentiment: 'neutral',
-          source: 'combined', // Use combined instead of 'default' which is not a valid source type
+          source: 'combined',
           timestamp: new Date().toISOString(),
           confidence: 50,
           postCount: 0,
@@ -61,10 +75,16 @@ export function ensureTickerDiversity(
         return defaultSentiment;
       }
     });
+    
+    console.log('[TICKER_UTILS DEBUG] Returning SentimentData array:', result.length);
+    return result;
   }
   
   // Handle simple string array case
-  return ensureDiverseTickerStrings(items as string[], minCount);
+  console.log('[TICKER_UTILS DEBUG] Processing string array');
+  const result = ensureDiverseTickerStrings(items as string[], minCount);
+  console.log('[TICKER_UTILS DEBUG] Returning string array:', result.length);
+  return result;
 }
 
 /**

@@ -1,23 +1,62 @@
+import axios from 'axios';
 import { SentimentData } from '../types';
 
-/**
- * Get the proxy URL for API requests
- * Uses Vite's import.meta.env for environment variables in development
- */
-function getProxyUrl(): string {
-  // For Vite/React apps, use import.meta.env
-  if (typeof import.meta !== 'undefined' && import.meta.env) {
-    return import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
-  }
-  
-  // Fallback for other environments
-  return 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+// Credit information interface
+interface CreditInfo {
+  used: number;
+  remaining: number;
+  operation: string;
+  tier: string;
 }
 
-// Maximum number of retry attempts for failed requests
-const MAX_RETRIES = 2;
-// Delay between retries in milliseconds
-const RETRY_DELAY = 1000;
+// Enhanced response interface
+interface FinvizResponse {
+  sentimentData: any[];
+  credits?: CreditInfo;
+}
+
+// Credit error interface
+interface CreditError {
+  error: string;
+  code: string;
+  required?: number;
+  remaining?: number;
+  tier?: string;
+  operation?: string;
+}
+
+/**
+ * Custom error class for credit-related issues
+ */
+export class InsufficientCreditsError extends Error {
+  public required: number;
+  public remaining: number;
+  public tier: string;
+  public operation: string;
+
+  constructor(creditError: CreditError) {
+    super(creditError.error);
+    this.name = 'InsufficientCreditsError';
+    this.required = creditError.required || 0;
+    this.remaining = creditError.remaining || 0;
+    this.tier = creditError.tier || 'unknown';
+    this.operation = creditError.operation || 'unknown';
+  }
+}
+
+/**
+ * Show credit usage notification to user
+ */
+const showCreditUsage = (creditInfo: CreditInfo) => {
+  console.log(`💳 Credits Used: ${creditInfo.used} | Remaining: ${creditInfo.remaining} | Tier: ${creditInfo.tier}`);
+  
+  // You can enhance this with toast notifications later
+  if (creditInfo.remaining <= 5) {
+    console.warn(`⚠️ Low credits warning: Only ${creditInfo.remaining} credits remaining!`);
+  }
+};
 
 /**
  * Validates and normalizes FinViz sentiment data
@@ -41,110 +80,119 @@ function validateFinvizData(data: any): SentimentData[] {
     return {
       ticker: String(item.ticker).toUpperCase().trim(),
       score: normalizedScore, // Correct range: -1 to 1
-      sentiment: item.sentiment || 'neutral',
-      source: 'finviz',
+      sentiment: item.sentiment || getSentimentFromScore(normalizedScore),
+      source: 'finviz' as const,
       timestamp: item.timestamp || new Date().toISOString(),
-      confidence: Math.min(100, Math.max(0, Number(item.confidence) || 50)), // Clamp between 0-100
+      confidence: Math.min(1, Math.max(0, Number(item.confidence) || 0)),
       postCount: Math.max(0, Number(item.postCount) || 0),
       commentCount: Math.max(0, Number(item.commentCount) || 0),
-      newsCount: Math.max(0, Number(item.newsCount) || 0),
-      price: item.price ? Number(item.price) : undefined,
-      changePercent: item.changePercent ? Number(item.changePercent) : undefined,
-      analystRating: item.analystRating,
-      // Add any additional FinViz specific fields here
-      ...(item.volume && { volume: Number(item.volume) }),
-      ...(item.marketCap && { marketCap: String(item.marketCap) })
+      upvotes: Math.max(0, Number(item.upvotes) || 0)
     };
   });
 }
 
 /**
- * Fetch sentiment data from FinViz with retry logic and error handling
+ * Determine sentiment from numerical score
  */
-async function fetchWithRetry(url: string, signal?: AbortSignal, retryCount = 0): Promise<Response> {
-  try {
-    const response = await fetch(url, { 
-      signal,
-      headers: {
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      }
-    });
-
-    if (!response.ok) {
-      // Don't retry on 4xx errors (except 429 - Too Many Requests)
-      if (response.status >= 400 && response.status < 500 && response.status !== 429) {
-        throw new Error(`FinViz API error: ${response.status} ${response.statusText}`);
-      }
-      
-      // If we have retries left, wait and try again
-      if (retryCount < MAX_RETRIES) {
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (retryCount + 1)));
-        return fetchWithRetry(url, signal, retryCount + 1);
-      }
-      
-      throw new Error(`FinViz API error after ${MAX_RETRIES} retries: ${response.status} ${response.statusText}`);
-    }
-    
-    return response;
-  } catch (error: unknown) {
-    if (retryCount < MAX_RETRIES) {
-      console.warn(`[FinViz] Attempt ${retryCount + 1} failed, retrying in ${RETRY_DELAY}ms...`);
-      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-      return fetchWithRetry(url, signal, retryCount + 1);
-    }
-    throw error;
-  }
+function getSentimentFromScore(score: number): 'bullish' | 'bearish' | 'neutral' {
+  if (score > 0.15) return 'bullish';
+  if (score < -0.15) return 'bearish';
+  return 'neutral';
 }
 
 /**
- * Fetch sentiment data scraped from FinViz headlines for the given tickers.
- * The backend proxy scrapes headlines and returns SentimentData[] with source = 'finviz'.
- * Includes retry logic, error handling, and data validation.
+ * Fetch sentiment data from FinViz API with credit handling
+ * @param tickers Array of ticker symbols
+ * @param signal AbortSignal for request cancellation
+ * @returns Promise<SentimentData[]>
  */
-export async function fetchFinvizSentiment(tickers: string[], signal?: AbortSignal): Promise<SentimentData[]> {
-  if (!Array.isArray(tickers) || tickers.length === 0) {
-    console.warn('No tickers provided to fetchFinvizSentiment');
-    return [];
-  }
-
-  // Clean and validate tickers
-  const validTickers = tickers
-    .filter(ticker => typeof ticker === 'string' && ticker.trim().length > 0)
-    .map(ticker => ticker.trim().toUpperCase());
-
-  if (validTickers.length === 0) {
-    console.warn('No valid tickers provided to fetchFinvizSentiment');
-    return [];
-  }
-
-  // Process in chunks to avoid URL length issues
-  const CHUNK_SIZE = 10;
-  const results: SentimentData[] = [];
-  
-  for (let i = 0; i < validTickers.length; i += CHUNK_SIZE) {
-    const chunk = validTickers.slice(i, i + CHUNK_SIZE);
-    const proxy = getProxyUrl();
-    const url = `${proxy}/api/finviz/ticker-sentiment?tickers=${chunk.join(',')}`;
+export async function fetchFinvizSentiment(
+  tickers: string[], 
+  signal?: AbortSignal
+): Promise<SentimentData[]> {
+  try {
+    console.log('FinViz API call starting for tickers:', tickers);
     
-    try {
-      const response = await fetchWithRetry(url, signal);
-      const data = await response.json();
-      
-      if (!data || !Array.isArray(data.sentimentData)) {
-        console.error('Invalid response format from FinViz API:', data);
-        continue;
-      }
-      
-      const validatedData = validateFinvizData(data.sentimentData);
-      results.push(...validatedData);
-    } catch (error) {
-      console.error(`Error fetching FinViz data for chunk ${i / CHUNK_SIZE + 1}:`, error);
-      // Continue with next chunk even if one fails
+    // Get auth token from localStorage
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      throw new Error('Authentication required. Please log in to access sentiment data.');
     }
+
+    const response = await axios.get<FinvizResponse>(`${API_BASE_URL}/api/finviz/ticker-sentiment`, {
+      params: { 
+        tickers: tickers.join(',')
+      },
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      signal,
+      timeout: 30000,
+    });
+
+    console.log('FinViz API Response:', response.data);
+
+    // Handle credit information
+    if (response.data.credits) {
+      showCreditUsage(response.data.credits);
+    }
+
+    // Extract sentiment data
+    const sentimentData = response.data.sentimentData || [];
+    
+    if (sentimentData.length === 0) {
+      console.warn('FinViz API returned no sentiment data');
+      return [];
+    }
+
+    const validatedData = validateFinvizData(sentimentData);
+    console.log('FinViz validated data:', validatedData.length, 'items');
+    
+    return validatedData;
+
+  } catch (error: any) {
+    // Handle different types of errors
+    if (error.name === 'AbortError' || signal?.aborted) {
+      console.log('FinViz request was aborted');
+      throw error;
+    }
+    
+    // Handle credit-related errors
+    if (error.response?.status === 402) {
+      const creditError = error.response.data as CreditError;
+      throw new InsufficientCreditsError(creditError);
+    }
+    
+    // Handle authentication errors
+    if (error.response?.status === 401) {
+      throw new Error('Authentication failed. Please log in again.');
+    }
+    
+    // Handle tier limit errors
+    if (error.response?.status === 400 && error.response.data?.code === 'TICKER_LIMIT_EXCEEDED') {
+      const limitError = error.response.data;
+      throw new Error(`Too many tickers requested. Your ${limitError.tier || 'current'} tier allows maximum ${limitError.limit} tickers per request. You requested ${limitError.requested}.`);
+    }
+    
+    // Handle rate limiting
+    if (error.response?.status === 429) {
+      throw new Error('Rate limit exceeded. Please try again in a few minutes.');
+    }
+
+    console.error('FinViz API Error:', error);
+    
+    // Check for network/timeout errors
+    if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+      throw new Error('FinViz service is currently slow to respond. Please try again.');
+    }
+    
+    if (error.code === 'ERR_NETWORK' || !error.response) {
+      throw new Error('Unable to connect to FinViz service. Please check your connection.');
+    }
+
+    // Fallback error message
+    const errorMessage = error.response?.data?.error || error.message || 'Failed to fetch FinViz sentiment data';
+    throw new Error(`FinViz Error: ${errorMessage}`);
   }
-  
-  console.log(`Fetched FinViz sentiment data for ${results.length} tickers`);
-  return results;
 }

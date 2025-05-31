@@ -18,30 +18,57 @@ import { getProxyUrl } from './apiService';
  */
 export const fetchTickerSentiments = async (timeRange: TimeRange = '1w', signal?: AbortSignal): Promise<SentimentData[]> => {
   try {
+    console.log(`[REDDIT API DEBUG] Starting fetchTickerSentiments call for timeRange: ${timeRange}`);
     const proxyUrl = getProxyUrl();
-    const response = await fetch(`${proxyUrl}/api/reddit/ticker-sentiment?timeRange=${timeRange}`, { signal });
+    const token = localStorage.getItem('auth_token');
+    
+    console.log(`[REDDIT API DEBUG] Using proxy URL: ${proxyUrl}`);
+    console.log(`[REDDIT API DEBUG] Using auth token: ${token ? 'Present' : 'Missing'}`);
+    
+    const headers: HeadersInit = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const url = `${proxyUrl}/api/sentiment/reddit/tickers?timeRange=${timeRange}`;
+    console.log(`[REDDIT API DEBUG] Making request to: ${url}`);
+
+    const response = await fetch(url, { 
+      signal,
+      headers
+    });
+
+    console.log(`[REDDIT API DEBUG] Response status: ${response.status}`);
+    console.log(`[REDDIT API DEBUG] Response headers:`, response.headers);
 
     if (!response.ok) {
-      throw new Error(`Proxy server returned error: ${response.status}`);
+      const errorText = await response.text();
+      console.error(`[REDDIT API ERROR] ${response.status}: ${errorText}`);
+      throw new Error(`Proxy server returned error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
+    console.log(`[REDDIT API DEBUG] Response data:`, data);
     
     // Check if sentimentData exists and is an array
     if (!data || !data.sentimentData || !Array.isArray(data.sentimentData)) {
-      console.warn('Unexpected response format from ticker sentiment API:', data);
+      console.warn('[REDDIT API WARNING] Unexpected response format from ticker sentiment API:', data);
       return []; // Return empty array instead of throwing
     }
     
+    console.log(`[REDDIT API DEBUG] Successfully received ${data.sentimentData.length} sentiment items`);
+    
     // Debug log to see what data is coming from the API
-    console.log('DEBUG - API Response Data:', data.sentimentData);
     data.sentimentData.forEach((item: {ticker: string, confidence?: number}) => {
-      console.log(`TICKER ${item.ticker} - confidence: ${item.confidence}, typeof: ${typeof item.confidence}`);
+      console.log(`[REDDIT API DEBUG] TICKER ${item.ticker} - confidence: ${item.confidence}, typeof: ${typeof item.confidence}`);
     });
     
     return data.sentimentData as SentimentData[];
   } catch (error) {
-    console.error('Ticker sentiment API error:', error);
+    console.error('[REDDIT API ERROR] Ticker sentiment API error:', error);
+    console.error('[REDDIT API ERROR] Error type:', typeof error);
+    console.error('[REDDIT API ERROR] Error message:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('[REDDIT API ERROR] Error stack:', error instanceof Error ? error.stack : 'No stack');
     return []; // Return empty array instead of throwing
   }
 };
@@ -56,7 +83,20 @@ export const fetchSentimentData = async (timeRange: TimeRange = '1w', signal?: A
     const proxyUrl = getProxyUrl();
     console.log(`Using proxy URL: ${proxyUrl}`);
     
-    const response = await fetch(`${proxyUrl}/api/sentiment/reddit/market?timeRange=${timeRange}`, { signal });
+    // Add authentication header like the ticker sentiment function does
+    const token = localStorage.getItem('auth_token');
+    const headers: HeadersInit = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      console.log(`[REDDIT MARKET DEBUG] Using auth token for market sentiment`);
+    } else {
+      console.warn(`[REDDIT MARKET DEBUG] No auth token found for market sentiment`);
+    }
+    
+    const response = await fetch(`${proxyUrl}/api/sentiment/reddit/market?timeRange=${timeRange}`, { 
+      signal,
+      headers
+    });
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -186,7 +226,17 @@ export const fetchRedditPosts = async (signal?: AbortSignal): Promise<RedditPost
       console.warn('Client-side Reddit fetch failed, trying proxy API directly:', clientError);
       // If the client-side fetch fails, try the direct proxy API
       const proxyUrl = getProxyUrl();
-      const response = await fetch(`${proxyUrl}/api/reddit/subreddit/wallstreetbets?limit=25`, { signal });
+      const token = localStorage.getItem('auth_token');
+      
+      const headers: HeadersInit = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch(`${proxyUrl}/api/reddit/subreddit/wallstreetbets?limit=25`, { 
+        signal,
+        headers
+      });
       
       if (!response.ok) {
         throw new Error(`Proxy server returned error: ${response.status}`);
@@ -444,7 +494,19 @@ export const clearSecCache = async (signal?: AbortSignal): Promise<{success: boo
 export const fetchYahooMarketSentiment = async (signal?: AbortSignal): Promise<SentimentData[]> => {
   try {
     const proxyUrl = getProxyUrl();
-    const response = await fetch(`${proxyUrl}/api/sentiment/yahoo/market`, { signal });
+    const token = localStorage.getItem('auth_token');
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json'
+    };
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    const response = await fetch(`${proxyUrl}/api/sentiment/yahoo/market`, { 
+      signal,
+      headers
+    });
     
     if (!response.ok) {
       throw new Error(`Yahoo market sentiment API returned error: ${response.status}`);
@@ -472,8 +534,21 @@ export const fetchFinvizMarketSentiment = async (signal?: AbortSignal): Promise<
   try {
     const proxyUrl = getProxyUrl();
     // Use major market ETFs to represent overall market sentiment
-    const marketTickers = 'SPY,QQQ,IWM,VIX';
-    const response = await fetch(`${proxyUrl}/api/finviz/ticker-sentiment?tickers=${marketTickers}`, { signal });
+    // Note: Free tier allows max 3 tickers, so we use SPY,QQQ,IWM (removed VIX)
+    const marketTickers = 'SPY,QQQ,IWM';
+    const token = localStorage.getItem('auth_token');
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json'
+    };
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    const response = await fetch(`${proxyUrl}/api/finviz/ticker-sentiment?tickers=${marketTickers}`, { 
+      signal,
+      headers
+    });
     
     if (!response.ok) {
       throw new Error(`FinViz market sentiment API returned error: ${response.status}`);
@@ -661,6 +736,74 @@ export const fetchSecDataParallel = async (timeRange: TimeRange = '1m', refresh:
     console.error('Parallel SEC data API error:', error);
     throw new Error(error instanceof Error ? error.message : 'Failed to fetch SEC data');
   }
+};
+
+/**
+ * Stream insider trades with real-time progress updates using Server-Sent Events
+ */
+export const streamInsiderTrades = (
+  timeRange: TimeRange = '1m', 
+  refresh: boolean = false,
+  onProgress: (progressData: {
+    stage: string;
+    progress: number;
+    total: number;
+    current: number;
+    error?: string;
+    data?: any;
+    completed?: boolean;
+    timestamp: string;
+  }) => void,
+  onComplete: (data: any) => void,
+  onError: (error: string) => void,
+  signal?: AbortSignal
+): EventSource => {
+  const proxyUrl = getProxyUrl();
+  const refreshParam = refresh ? '&refresh=true' : '';
+  const streamUrl = `${proxyUrl}/api/sec/insider-trades/stream?timeRange=${timeRange}${refreshParam}`;
+  
+  console.log('Starting SSE stream for insider trades:', streamUrl);
+  
+  const eventSource = new EventSource(streamUrl);
+  
+  eventSource.onmessage = (event) => {
+    try {
+      const progressData = JSON.parse(event.data);
+      console.log('SSE Progress:', progressData);
+      
+      // Call progress callback
+      onProgress(progressData);
+      
+      // If this is the completion event, call onComplete and close
+      if (progressData.completed) {
+        if (progressData.error) {
+          onError(progressData.error);
+        } else if (progressData.data) {
+          onComplete(progressData.data);
+        }
+        eventSource.close();
+      }
+    } catch (error) {
+      console.error('Error parsing SSE data:', error);
+      onError('Error parsing server response');
+      eventSource.close();
+    }
+  };
+  
+  eventSource.onerror = (error) => {
+    console.error('SSE Error:', error);
+    onError('Connection error during streaming');
+    eventSource.close();
+  };
+  
+  // Handle abort signal
+  if (signal) {
+    signal.addEventListener('abort', () => {
+      eventSource.close();
+    });
+  }
+  
+  return eventSource;
 };
 
 // Helper function for cleaning insider names (extracted for reuse)

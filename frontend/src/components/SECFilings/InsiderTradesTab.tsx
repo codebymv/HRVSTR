@@ -201,50 +201,117 @@ const InsiderTradesTab: React.FC<InsiderTradesTabProps> = ({
   
   // Load data from API
   const loadData = async (refresh: boolean = false) => {
-    console.log(`Loading insider trades for time range: ${timeRange}, refresh: ${refresh}`);
+    console.log(`🔄 INSIDER TAB: Loading insider trades for time range: ${timeRange}, refresh: ${refresh}`);
     
     setError(null);
     onLoadingChange(true, 0, 'Initializing insider trades data...');
     
-    // Total steps in loading process
-    const totalSteps = 5;
-    
-    // Helper function to update progress
-    const updateProgress = (step: number, stage: string) => {
-      const progressPercentage = Math.round((step / totalSteps) * 100);
-      console.log(`Insider trades loading progress: ${progressPercentage}%, Stage: ${stage}`);
-      onLoadingChange(true, progressPercentage, stage);
-    };
-    
     try {
-      // Step 1: Fetch insider trades with refresh parameter
-      updateProgress(1, 'Fetching insider trades data...');
-      const trades = await fetchInsiderTrades(timeRange, refresh);
-      console.log(`Received ${trades.length} insider trades from API`);
-      
-      // Log a sample trade to help with debugging
-      if (trades.length > 0) {
-        console.log('Sample insider trade:', JSON.stringify(trades[0], null, 2));
-      }
-      
-      // Update state with trades
-      setInsiderTrades(trades);
-      
-      // Step 2: Analyze insider trades for abnormal activity if we have data
-      updateProgress(2, 'Analyzing insider trading patterns...');
-      if (trades.length > 0) {
-        detectAbnormalActivity(trades);
+      // If refresh is requested, use streaming API for real-time progress
+      if (refresh) {
+        console.log('🌊 INSIDER TAB: Using streaming API for real-time progress updates');
+        
+        const { streamInsiderTrades } = await import('../../services/api');
+        
+        let streamCompleted = false;
+        
+        // Set up SSE stream for real-time progress
+        const eventSource = streamInsiderTrades(
+          timeRange,
+          true, // refresh = true
+          // Progress callback
+          (progressData) => {
+            console.log('🌊 INSIDER TAB: Stream progress:', progressData);
+            // Don't update loading if stream has already completed
+            if (!streamCompleted) {
+              onLoadingChange(true, progressData.progress, progressData.stage);
+            }
+          },
+          // Complete callback
+          (data) => {
+            console.log('🌊 INSIDER TAB: Stream completed with data:', data);
+            streamCompleted = true;
+            
+            const trades = data.insiderTrades || [];
+            setInsiderTrades(trades);
+            
+            // Analyze for abnormal activity
+            if (trades.length > 0) {
+              detectAbnormalActivity(trades);
+            }
+            
+            console.log(`🌊 INSIDER TAB: Calling onLoadingChange with ${trades.length} trades`);
+            onLoadingChange(false, 100, 'Insider trades loaded successfully', trades, null);
+          },
+          // Error callback
+          (error) => {
+            console.error('🌊 INSIDER TAB: Stream error:', error);
+            streamCompleted = true;
+            setError(error);
+            onLoadingChange(false, 0, 'Error loading insider trades', [], error);
+          }
+        );
+        
+        // Set up a timeout to ensure the stream doesn't hang indefinitely
+        const streamTimeout = setTimeout(() => {
+          if (!streamCompleted) {
+            console.warn('🌊 INSIDER TAB: Stream timeout reached, closing SSE connection');
+            streamCompleted = true;
+            eventSource.close();
+            setError('Request timeout - please try again');
+            onLoadingChange(false, 0, 'Request timeout', [], 'Request timeout - please try again');
+          }
+        }, 60000); // 60 second timeout
+        
+        // Clean up function
+        return () => {
+          clearTimeout(streamTimeout);
+          if (!streamCompleted) {
+            eventSource.close();
+          }
+        };
       } else {
-        console.warn('No insider trades data available for analysis');
+        // Use regular API for non-refresh requests
+        console.log('📡 INSIDER TAB: Using regular API for non-refresh request');
+        const totalSteps = 5;
+        
+        // Helper function to update progress
+        const updateProgress = (step: number, stage: string) => {
+          const progressPercentage = Math.round((step / totalSteps) * 100);
+          console.log(`📡 INSIDER TAB: Insider trades loading progress: ${progressPercentage}%, Stage: ${stage}`);
+          onLoadingChange(true, progressPercentage, stage);
+        };
+
+        // Step 1: Fetch insider trades with refresh parameter
+        updateProgress(1, 'Fetching insider trades data...');
+        const trades = await fetchInsiderTrades(timeRange, refresh);
+        console.log(`📡 INSIDER TAB: Received ${trades.length} insider trades from API`);
+        
+        // Log a sample trade to help with debugging
+        if (trades.length > 0) {
+          console.log('📡 INSIDER TAB: Sample insider trade:', JSON.stringify(trades[0], null, 2));
+        }
+        
+        // Update state with trades
+        setInsiderTrades(trades);
+        
+        // Step 2: Analyze insider trades for abnormal activity if we have data
+        updateProgress(2, 'Analyzing insider trading patterns...');
+        if (trades.length > 0) {
+          detectAbnormalActivity(trades);
+        } else {
+          console.warn('📡 INSIDER TAB: No insider trades data available for analysis');
+        }
+        
+        // Final steps
+        updateProgress(5, 'Finalizing insider trades display...');
+        setTimeout(() => {
+          console.log(`📡 INSIDER TAB: Calling onLoadingChange with ${trades.length} trades (regular API)`);
+          onLoadingChange(false, 100, 'Insider trades loaded successfully', trades, null);
+        }, 300);
       }
-      
-      // Final steps
-      updateProgress(5, 'Finalizing insider trades display...');
-      setTimeout(() => {
-        onLoadingChange(false, 100, 'Insider trades loaded successfully', trades, null);
-      }, 300);
     } catch (error) {
-      console.error('Insider trades error:', error);
+      console.error('❌ INSIDER TAB: Insider trades error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch insider trades data';
       setError(errorMessage);
       onLoadingChange(false, 0, 'Error loading insider trades', [], errorMessage);
@@ -358,30 +425,50 @@ const InsiderTradesTab: React.FC<InsiderTradesTabProps> = ({
     const currentParams = { timeRange, forceReload };
     const paramsChanged = JSON.stringify(currentParams) !== JSON.stringify(lastLoadParamsRef.current);
     
+    console.log(`🔄 INSIDER TAB: useEffect triggered`, {
+      isLoading,
+      isLoadingRef: isLoadingRef.current,
+      paramsChanged,
+      forceReload,
+      timeRange,
+      initialDataLength: initialData.length,
+      currentParams,
+      lastParams: lastLoadParamsRef.current
+    });
+    
     // Only load if:
     // 1. We're supposed to be loading AND haven't started yet
     // 2. OR the parameters have changed (timeRange or forceReload)
-    if ((isLoading && !isLoadingRef.current) || (paramsChanged && forceReload)) {
+    // 3. OR forceReload is explicitly requested (manual refresh)
+    if ((isLoading && !isLoadingRef.current) || (paramsChanged && forceReload) || (forceReload && !isLoadingRef.current)) {
+      console.log(`🔄 INSIDER TAB: Conditions met, starting loading process`);
+      
       // Mark that we've started the loading process
       isLoadingRef.current = true;
       lastLoadParamsRef.current = currentParams;
       
       // Determine if we should use cached data or fetch fresh
+      // Never use cache if forceReload is requested (manual refresh)
       const hasValidCache = initialData && initialData.length > 0 && !forceReload;
       
-      if (hasValidCache) {
-        console.log('Using cached insider trades data, no API call needed');
+      if (hasValidCache && !forceReload) {
+        console.log('📋 INSIDER TAB: Using cached insider trades data, no API call needed');
         // Process cached data for abnormal activity detection
         detectAbnormalActivity(initialData as InsiderTrade[]);
         // Notify parent that loading is complete
         onLoadingChange(false, 100, 'Insider trades loaded from cache', initialData, null);
       } else {
-        console.log(`Loading fresh insider trades data: timeRange=${timeRange}, forceReload=${forceReload}`);
+        console.log(`🔄 INSIDER TAB: Loading fresh insider trades data: timeRange=${timeRange}, forceReload=${forceReload}`);
         loadData(forceReload);
       }
     } else if (!isLoading && !forceReload) {
+      console.log(`🔄 INSIDER TAB: Resetting loading ref (not loading and not forcing reload)`);
       // Reset the ref when loading is complete
       isLoadingRef.current = false;
+    } else {
+      console.log(`🔄 INSIDER TAB: No action taken`, {
+        reason: !isLoading ? 'not loading' : isLoadingRef.current ? 'already started' : paramsChanged ? 'params changed but not force reload' : 'unknown'
+      });
     }
   }, [timeRange, isLoading, forceReload, initialData.length, onLoadingChange]);
   

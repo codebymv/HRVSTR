@@ -21,6 +21,13 @@ const validateSecInstitutional = validateDataSource('sec_institutional');
 router.get('/insider-trades', validateSecInsider, secController.getInsiderTrades);
 
 /**
+ * @route GET /api/sec/insider-trades/stream
+ * @desc Stream insider trades data with real-time progress updates using SSE
+ * @access Public - Available to all tiers
+ */
+router.get('/insider-trades/stream', validateSecInsider, secController.streamInsiderTrades);
+
+/**
  * @route GET /api/sec/insider-trades/:ticker
  * @desc Get insider trades data for a specific ticker
  * @access Public - Available to all tiers

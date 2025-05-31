@@ -16,7 +16,8 @@ const aggregatedSentimentService = require('../services/aggregatedSentimentServi
 async function getRedditTickerSentiment(req, res, next) {
   try {
     const { timeRange = '1w' } = req.query;
-    const result = await redditSentimentService.getRedditTickerSentiment(timeRange);
+    const userId = req.user?.id; // Get user ID from authenticated request
+    const result = await redditSentimentService.getRedditTickerSentiment(timeRange, userId);
     res.json(result);
   } catch (error) {
     console.error('Error fetching Reddit ticker sentiment:', error.message);
@@ -33,7 +34,8 @@ async function getRedditTickerSentiment(req, res, next) {
 async function getRedditMarketSentiment(req, res, next) {
   try {
     const { timeRange = '1w' } = req.query;
-    const result = await redditSentimentService.getRedditMarketSentiment(timeRange);
+    const userId = req.user?.id; // Get user ID from authenticated request
+    const result = await redditSentimentService.getRedditMarketSentiment(timeRange, userId);
     res.json(result);
   } catch (error) {
     console.error('Error fetching Reddit market sentiment:', error.message);

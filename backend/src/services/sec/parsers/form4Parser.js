@@ -20,10 +20,21 @@ const { getCompanyForInsider } = require('../utils/parsingUtils');
  * 
  * @param {string} xmlData - Raw XML data from SEC EDGAR RSS feed
  * @param {number} limit - Maximum number of entries to parse
+ * @param {function} progressCallback - Optional callback function for progress updates
  * @returns {Promise<Array>} - Array of parsed insider trading objects
  */
-async function parseForm4Data(xmlData, limit) {
+async function parseForm4Data(xmlData, limit, progressCallback = null) {
   try {
+    // Emit initial progress
+    if (progressCallback) {
+      progressCallback({ 
+        stage: 'Initializing Form 4 processing...', 
+        progress: 0, 
+        total: limit, 
+        current: 0 
+      });
+    }
+
     // First try to parse with xml2js for more reliable XML parsing
     try {
       const parser = new xml2js.Parser({ explicitArray: false });
@@ -31,7 +42,7 @@ async function parseForm4Data(xmlData, limit) {
       
       if (result && result.feed && result.feed.entry) {
         const entries = Array.isArray(result.feed.entry) ? result.feed.entry : [result.feed.entry];
-        return await processXmlEntries(entries, limit);
+        return await processXmlEntries(entries, limit, progressCallback);
       }
     } catch (xmlError) {
       console.error('XML parsing failed, falling back to cheerio:', xmlError.message);
@@ -41,13 +52,34 @@ async function parseForm4Data(xmlData, limit) {
     const $ = cheerio.load(xmlData, { xmlMode: true });
     const entries = $('entry');
     const trades = [];
+    const totalEntries = Math.min(entries.length, limit);
 
-    for (let i = 0; i < Math.min(entries.length, limit); i++) {
+    if (progressCallback) {
+      progressCallback({ 
+        stage: 'Starting Form 4 filing analysis...', 
+        progress: 5, 
+        total: totalEntries, 
+        current: 0 
+      });
+    }
+
+    for (let i = 0; i < totalEntries; i++) {
       const entry = entries.eq(i);
       const title = entry.find('title').text();
       const summary = entry.find('summary').text();
       const updated = entry.find('updated').text();
       const link = entry.find('link').attr('href');
+      
+      // Emit progress for each filing
+      if (progressCallback) {
+        const progressPercent = Math.round(((i + 1) / totalEntries) * 85) + 10; // 10-95% range
+        progressCallback({ 
+          stage: `Processing Form 4 filing #${i + 1}: ${title.substring(0, 50)}...`, 
+          progress: progressPercent, 
+          total: totalEntries, 
+          current: i + 1 
+        });
+      }
       
       // More flexible Form 4 detection
       // Accept entries with '4 -', 'Form 4', '- Form 4', or just '4' in title
@@ -182,9 +214,32 @@ async function parseForm4Data(xmlData, limit) {
         url: link
       });
     }
+
+    // Emit completion progress
+    if (progressCallback) {
+      progressCallback({ 
+        stage: 'Form 4 processing completed', 
+        progress: 100, 
+        total: totalEntries, 
+        current: totalEntries 
+      });
+    }
+
     return trades;
   } catch (err) {
     console.error('[form4Parser] Error parsing Form 4 feed:', err.message);
+    
+    // Emit error progress
+    if (progressCallback) {
+      progressCallback({ 
+        stage: 'Error processing Form 4 filings', 
+        progress: 0, 
+        total: 0, 
+        current: 0,
+        error: err.message 
+      });
+    }
+    
     // Return empty array instead of throwing to prevent server crash
     return [];
   }
@@ -194,9 +249,10 @@ async function parseForm4Data(xmlData, limit) {
  * Process XML entries from xml2js parser
  * @param {Array} entries - Array of entry objects from xml2js
  * @param {number} limit - Maximum number of entries to process
+ * @param {function} progressCallback - Optional callback function for progress updates
  * @returns {Promise<Array>} - Array of parsed insider trading objects
  */
-async function processXmlEntries(entries, limit) {
+async function processXmlEntries(entries, limit, progressCallback = null) {
   const trades = [];
   
   for (let i = 0; i < Math.min(entries.length, limit); i++) {
@@ -205,6 +261,17 @@ async function processXmlEntries(entries, limit) {
     const summary = entry.summary;
     const updated = entry.updated;
     const link = entry.link && entry.link.$ ? entry.link.$.href : '';
+    
+    // Emit progress for each filing
+    if (progressCallback) {
+      const progressPercent = Math.round(((i + 1) / limit) * 85) + 10; // 10-95% range
+      progressCallback({ 
+        stage: `Processing Form 4 filing #${i + 1}: ${title.substring(0, 50)}...`, 
+        progress: progressPercent, 
+        total: limit, 
+        current: i + 1 
+      });
+    }
     
     // More flexible Form 4 detection
     if (!title.match(/\b4\b|Form 4|4 -/i)) {

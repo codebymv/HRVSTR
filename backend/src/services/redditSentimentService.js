@@ -23,11 +23,15 @@ function selectTtl(range) {
  * @returns {Object} Sentiment analysis result
  */
 function analyzeTickerSentiment(ticker, posts) {
+  console.log(`[REDDIT SENTIMENT DEBUG] Analyzing sentiment for ${ticker} with ${posts.length} total posts`);
+  
   const tickerRegex = new RegExp(`\\b${ticker}\\b`, 'i');
   const relevantPosts = posts.filter(post => 
     tickerRegex.test(post.data.title) || 
     tickerRegex.test(post.data.selftext)
   );
+
+  console.log(`[REDDIT SENTIMENT DEBUG] Found ${relevantPosts.length} relevant posts for ${ticker}`);
 
   const sentimentScores = [];
   const sentimentConfidences = [];
@@ -51,6 +55,8 @@ function analyzeTickerSentiment(ticker, posts) {
   const avgScore = relevantPosts.length > 0 ? totalScore / relevantPosts.length : 0;
   const avgConfidence = relevantPosts.length > 0 ? Math.round(totalConfidence / relevantPosts.length) : 0;
   
+  console.log(`[REDDIT SENTIMENT DEBUG] ${ticker}: avgScore=${avgScore}, avgConfidence=${avgConfidence}, posts=${relevantPosts.length}`);
+  
   // Use the enhanced formatSentimentData function with proper confidence
   return sentimentUtils.formatSentimentData(
     ticker,
@@ -64,32 +70,41 @@ function analyzeTickerSentiment(ticker, posts) {
   );
 }
 
-async function getRedditTickerSentiment(timeRange = '1w') {
+async function getRedditTickerSentiment(timeRange = '1w', userId = null) {
   const ttl = selectTtl(timeRange);
-  const cacheKey = `reddit-ticker-sentiment-${timeRange}`;
+  const cacheKey = `reddit-ticker-sentiment-${timeRange}-${userId || 'system'}`;
 
   return cacheManager.getOrFetch(cacheKey, 'reddit-sentiment', async () => {
-    console.log(`Fetching real Reddit ticker sentiment data for ${timeRange}`);
+    console.log(`[REDDIT SENTIMENT DEBUG] Fetching real Reddit ticker sentiment data for ${timeRange} (user: ${userId || 'system'})`);
     
     try {
       // Fetch posts from relevant subreddits
       const subreddits = ['stocks', 'wallstreetbets', 'investing', 'StockMarket'];
       const allPosts = [];
       
+      console.log(`[REDDIT SENTIMENT DEBUG] Starting to fetch from ${subreddits.length} subreddits...`);
+      
       // Fetch posts from each subreddit in parallel
       await Promise.all(subreddits.map(async subreddit => {
         try {
+          console.log(`[REDDIT SENTIMENT DEBUG] Fetching posts from r/${subreddit}...`);
           const posts = await redditUtils.fetchSubredditPosts(subreddit, { 
             limit: 50, 
-            time: timeRange === '1d' ? 'day' : 'week' 
+            time: timeRange === '1d' ? 'day' : 'week',
+            userId: userId
           });
+          console.log(`[REDDIT SENTIMENT DEBUG] Fetched ${posts.length} posts from r/${subreddit}`);
           allPosts.push(...posts);
         } catch (error) {
-          console.error(`Error fetching posts from r/${subreddit}:`, error.message);
+          console.error(`[REDDIT SENTIMENT ERROR] Error fetching posts from r/${subreddit}:`, error.message);
+          console.error(`[REDDIT SENTIMENT ERROR] Full error:`, error);
         }
       }));
       
+      console.log(`[REDDIT SENTIMENT DEBUG] Total posts collected: ${allPosts.length}`);
+      
       if (allPosts.length === 0) {
+        console.error('[REDDIT SENTIMENT ERROR] No posts found in any subreddit - this might indicate API authentication issues');
         throw new Error('No posts found in any subreddit');
       }
       
@@ -97,18 +112,25 @@ async function getRedditTickerSentiment(timeRange = '1w') {
       const tickers = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'TSLA', 'NVDA', 'AMD', 'META', 'SPY', 'QQQ'];
       const sentimentData = [];
       
+      console.log(`[REDDIT SENTIMENT DEBUG] Analyzing sentiment for ${tickers.length} tickers...`);
+      
       for (const ticker of tickers) {
         try {
           const analysis = analyzeTickerSentiment(ticker, allPosts);
           if (analysis.postCount > 0) {
             sentimentData.push(analysis);
+            console.log(`[REDDIT SENTIMENT DEBUG] Added sentiment data for ${ticker}: score=${analysis.score}, posts=${analysis.postCount}`);
+          } else {
+            console.log(`[REDDIT SENTIMENT DEBUG] No posts found for ${ticker}, skipping`);
           }
         } catch (error) {
-          console.error(`Error analyzing sentiment for ${ticker}:`, error.message);
+          console.error(`[REDDIT SENTIMENT ERROR] Error analyzing sentiment for ${ticker}:`, error.message);
         }
       }
       
-      return { 
+      console.log(`[REDDIT SENTIMENT DEBUG] Final sentiment data count: ${sentimentData.length}`);
+      
+      const result = { 
         sentimentData,
         meta: {
           totalPosts: allPosts.length,
@@ -118,19 +140,24 @@ async function getRedditTickerSentiment(timeRange = '1w') {
         }
       };
       
+      console.log(`[REDDIT SENTIMENT DEBUG] Returning result:`, JSON.stringify(result, null, 2));
+      
+      return result;
+      
     } catch (error) {
-      console.error('Error in getRedditTickerSentiment:', error.message);
-      throw new Error('Failed to fetch Reddit sentiment data');
+      console.error('[REDDIT SENTIMENT ERROR] Error in getRedditTickerSentiment:', error.message);
+      console.error('[REDDIT SENTIMENT ERROR] Full error stack:', error.stack);
+      throw new Error(`Failed to fetch Reddit sentiment data: ${error.message}`);
     }
   }, ttl);
 }
 
-async function getRedditMarketSentiment(timeRange = '1w') {
+async function getRedditMarketSentiment(timeRange = '1w', userId = null) {
   const ttl = selectTtl(timeRange);
-  const cacheKey = `reddit-market-sentiment-${timeRange}`;
+  const cacheKey = `reddit-market-sentiment-${timeRange}-${userId || 'system'}`;
   
   return cacheManager.getOrFetch(cacheKey, 'reddit-sentiment', async () => {
-    console.log(`Fetching real Reddit market sentiment data for ${timeRange}`);
+    console.log(`Fetching real Reddit market sentiment data for ${timeRange} (user: ${userId || 'system'})`);
     
     try {
       // Define subreddits to analyze
@@ -143,7 +170,8 @@ async function getRedditMarketSentiment(timeRange = '1w') {
           const posts = await redditUtils.fetchSubredditPosts(subreddit, { 
             limit: 100, 
             time: timeRange === '1d' ? 'day' : 'week',
-            sort: timeRange === '1d' ? 'hot' : 'top'
+            sort: timeRange === '1d' ? 'hot' : 'top',
+            userId: userId
           });
           allPosts.push(...posts);
         } catch (error) {

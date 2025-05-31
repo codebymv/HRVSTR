@@ -52,9 +52,19 @@ cacheManager.registerRateLimit('api-global', 100, 15 * 60); // 100 requests per 
 // Setup rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 100, // limit each IP to 100 requests per windowMs
+  limit: process.env.NODE_ENV === 'development' ? 1000 : 100, // Much higher limit for dev
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  message: 'Too many requests, please try again later.',
+});
+
+// Setup more lenient auth rate limiting
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: process.env.NODE_ENV === 'development' ? 50 : 10, // 50 auth attempts per 15 min in dev, 10 in prod
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: 'Too many authentication attempts, please try again later.',
 });
 
 // Configure CORS with specific options
@@ -245,7 +255,7 @@ app.use('/api/earnings', earningsRoutes);
 app.use('/api/sentiment', sentimentRoutes);
 app.use('/api/yahoo', yahooRoutes);
 app.use('/api/watchlist', watchlistRoutes);
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/activity', activityRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/stocks', stocksRouter);

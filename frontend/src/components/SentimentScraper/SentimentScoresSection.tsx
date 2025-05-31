@@ -259,12 +259,22 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
         </div>
       ) : currentSentiments?.length > 0 ? (
         <div className="flex flex-col space-y-4 overflow-visible">
-          {currentSentiments.slice(0, 4).map((data) => (
+          {currentSentiments.slice(0, 4).map((data, index) => {
+            // Ensure unique key even if ticker is undefined
+            const uniqueKey = `${dataSource}-${data?.ticker || 'unknown'}-${index}`;
+            
+            // Skip rendering if data is invalid
+            if (!data || !data.ticker) {
+              return null;
+            }
+
+            return (
             <SentimentCard 
-              key={`${dataSource}-${data.ticker}`} 
+                key={uniqueKey} 
               data={data}
             />
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center p-10 text-center">

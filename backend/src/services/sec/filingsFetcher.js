@@ -13,13 +13,24 @@ const {
  *
  * @param {string} [timeRange] - Optional time-range filter (placeholder for future use)
  * @param {number} [limit=100]  - Maximum number of entries to fetch from the feed
+ * @param {function} [progressCallback] - Optional callback function for progress updates
  * @returns {Promise<Array>} Parsed insider-trade objects
  */
-async function fetchInsiderTrades(timeRange = '1m', limit = 100) {
+async function fetchInsiderTrades(timeRange = '1m', limit = 100, progressCallback = null) {
   try {
     // The SEC RSS feed URL for the latest Form 4 filings
     const secUrl = `https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4&count=${limit}&output=atom`;
     console.log(`[filingsFetcher] Fetching SEC Form 4 filings from: ${secUrl}`);
+
+    // Emit initial progress
+    if (progressCallback) {
+      progressCallback({ 
+        stage: 'Fetching SEC Form 4 data from EDGAR...', 
+        progress: 5, 
+        total: limit, 
+        current: 0 
+      });
+    }
 
     // Make the actual API request to SEC EDGAR
     const response = await axios.get(secUrl, {
@@ -30,12 +41,30 @@ async function fetchInsiderTrades(timeRange = '1m', limit = 100) {
       timeout: 15000 // 15 second timeout
     });
 
-    // Parse the XML data using the form4Parser
-    const insiderTrades = await parseSecForm4Data(response.data, limit);
+    // Emit progress after successful fetch
+    if (progressCallback) {
+      progressCallback({ 
+        stage: 'SEC data received, starting processing...', 
+        progress: 10, 
+        total: limit, 
+        current: 0 
+      });
+    }
+
+    // Parse the XML data using the form4Parser with progress callback
+    const insiderTrades = await parseSecForm4Data(response.data, limit, progressCallback);
     
     // If we got no data from the parser, return empty array
     if (!insiderTrades || insiderTrades.length === 0) {
       console.log('[filingsFetcher] No insider trades found from SEC API');
+      if (progressCallback) {
+        progressCallback({ 
+          stage: 'No insider trades found', 
+          progress: 100, 
+          total: 0, 
+          current: 0 
+        });
+      }
       return [];
     }
     
@@ -43,6 +72,18 @@ async function fetchInsiderTrades(timeRange = '1m', limit = 100) {
     return insiderTrades;
   } catch (error) {
     console.error('[filingsFetcher] Error fetching SEC insider trades:', error.message);
+    
+    // Emit error progress
+    if (progressCallback) {
+      progressCallback({ 
+        stage: 'Error fetching SEC data', 
+        progress: 0, 
+        total: 0, 
+        current: 0,
+        error: error.message 
+      });
+    }
+    
     // Return empty array instead of sample data
     return [];
   }

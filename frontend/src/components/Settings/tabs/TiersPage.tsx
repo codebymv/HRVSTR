@@ -140,9 +140,9 @@ const TiersPage: React.FC = () => {
                     </div>
                   )}
                 </div>
-                <p className={`text-sm ${secondaryTextColor}`}>
+                {/* <p className={`text-sm ${secondaryTextColor}`}>
                   {tierInfo.credits.remaining} credits remaining of {tierInfo.credits.monthly} monthly credits
-                </p>
+                </p> */}
               </div>
               <div className="flex items-center">
                 {getStatusBadge('active')}

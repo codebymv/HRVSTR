@@ -5,62 +5,191 @@ const TIER_LIMITS = {
   free: {
     watchlistLimit: 5,
     monthlyCredits: 50,
+    dailyCredits: 10,
     features: ['FinViz', 'SEC-Insider', 'Earnings'],
-    historyDays: 1
+    historyDays: 1,
+    maxTickersPerRequest: 3,
+    rateLimitPerMinute: 10
   },
   pro: {
     watchlistLimit: 25,
     monthlyCredits: 500,
+    dailyCredits: 100,
     features: ['FinViz', 'SEC-Insider', 'SEC-Institutional', 'Earnings', 'Reddit', 'Yahoo'],
-    historyDays: 30
+    historyDays: 30,
+    maxTickersPerRequest: 10,
+    rateLimitPerMinute: 50
   },
   elite: {
     watchlistLimit: -1, // unlimited
     monthlyCredits: 2000,
+    dailyCredits: 500,
     features: ['FinViz', 'SEC-Insider', 'SEC-Institutional', 'Earnings', 'Reddit', 'Yahoo', 'AlphaVantage'],
-    historyDays: 90
+    historyDays: 90,
+    maxTickersPerRequest: 50,
+    rateLimitPerMinute: 200
   },
   institutional: {
     watchlistLimit: -1, // unlimited
     monthlyCredits: 10000,
+    dailyCredits: 2000,
     features: ['FinViz', 'SEC-Insider', 'SEC-Institutional', 'Earnings', 'Reddit', 'Yahoo', 'AlphaVantage'],
-    historyDays: 365
+    historyDays: 365,
+    maxTickersPerRequest: 100,
+    rateLimitPerMinute: 500
   }
 };
 
 // Credit costs for different operations
 const CREDIT_COSTS = {
-  'sentiment-basic': 1,
-  'sentiment-reddit': 3,
+  // Sentiment Analysis (per ticker)
+  'sentiment-finviz': 1,
+  'sentiment-yahoo': 1,
+  'sentiment-reddit': 3, // More expensive due to processing complexity
+  'sentiment-aggregated': 2,
+  
+  // SEC Data
   'sec-filing': 2,
+  'sec-insider': 1,
+  'sec-institutional': 3,
+  
+  // Market Data
   'earnings-analysis': 2,
+  'market-sentiment': 3,
   'real-time-refresh': 1,
-  'historical-data': 5
+  'historical-data': 5,
+  
+  // Premium Features
+  'alert-setup': 1,
+  'custom-analysis': 5
 };
 
 /**
- * Middleware to check if user has sufficient credits for an operation
+ * Calculate credit cost for sentiment operations
  */
-const checkCredits = (operation, cost = null) => {
+const calculateSentimentCost = (tickers, sources = []) => {
+  if (!Array.isArray(tickers)) {
+    tickers = typeof tickers === 'string' ? tickers.split(',') : [tickers];
+  }
+  
+  const tickerCount = tickers.length;
+  let totalCost = 0;
+  
+  // Calculate cost per source
+  sources.forEach(source => {
+    const costPerTicker = CREDIT_COSTS[`sentiment-${source.toLowerCase()}`] || 1;
+    totalCost += tickerCount * costPerTicker;
+  });
+  
+  // Default to finviz if no sources specified
+  if (sources.length === 0) {
+    totalCost = tickerCount * CREDIT_COSTS['sentiment-finviz'];
+  }
+  
+  // Apply bulk discount for 5+ tickers
+  if (tickerCount >= 5) {
+    totalCost = Math.ceil(totalCost * 0.8); // 20% discount
+  }
+  
+  return Math.max(1, totalCost); // Minimum 1 credit
+};
+
+/**
+ * Enhanced credit checking middleware for sentiment operations
+ */
+const checkSentimentCredits = (req, res, next) => {
+  return checkCreditsForOperation('sentiment')(req, res, next);
+};
+
+/**
+ * Create a credit checking middleware for a specific operation type
+ */
+const checkCredits = (operationType) => {
+  return checkCreditsForOperation(operationType);
+};
+
+/**
+ * Generic credit checking middleware with transaction support
+ */
+const checkCreditsForOperation = (operationType) => {
   return async (req, res, next) => {
     try {
+      console.log(`[TIER DEBUG] Checking credits for operation: ${operationType}, user: ${req.user?.id}`);
+      
       const userId = req.user?.id;
       if (!userId) {
-        return res.status(401).json({ error: 'Authentication required' });
+        console.error('[TIER ERROR] No authenticated user found for credit check');
+        return res.status(401).json({ 
+          error: 'Authentication required',
+          code: 'AUTH_REQUIRED'
+        });
       }
 
-      // Get user's current credit status
+      // Calculate credit cost based on operation type
+      let creditCost = 1;
+      let operationDetails = {};
+      
+      if (operationType === 'sentiment') {
+        const { tickers } = req.query;
+        const tickerList = tickers ? tickers.split(',').map(t => t.trim()).filter(Boolean) : [];
+        
+        // Determine sources based on route
+        const sources = [];
+        if (req.route.path.includes('finviz') || req.baseUrl.includes('finviz')) {
+          sources.push('finviz');
+        }
+        if (req.route.path.includes('yahoo') || req.baseUrl.includes('yahoo')) {
+          sources.push('yahoo');
+        }
+        if (req.route.path.includes('reddit') || req.baseUrl.includes('reddit')) {
+          sources.push('reddit');
+        }
+        
+        creditCost = calculateSentimentCost(tickerList, sources);
+        operationDetails = { 
+          tickers: tickerList, 
+          sources, 
+          tickerCount: tickerList.length 
+        };
+        
+        // Check ticker limits per tier
+        const userResult = await pool.query(
+          'SELECT tier FROM users WHERE id = $1',
+          [userId]
+        );
+        
+        if (userResult.rows.length > 0) {
+          const userTier = userResult.rows[0].tier;
+          const tierLimits = TIER_LIMITS[userTier];
+          
+          if (tickerList.length > tierLimits.maxTickersPerRequest) {
+            return res.status(400).json({
+              error: `Too many tickers requested. Your ${userTier} tier allows maximum ${tierLimits.maxTickersPerRequest} tickers per request`,
+              code: 'TICKER_LIMIT_EXCEEDED',
+              limit: tierLimits.maxTickersPerRequest,
+              requested: tickerList.length
+            });
+          }
+        }
+      } else {
+        creditCost = CREDIT_COSTS[operationType] || 1;
+      }
+
+      // Get user's current credit status with row locking
       const userResult = await pool.query(
-        'SELECT tier, credits_remaining, credits_reset_date FROM users WHERE id = $1',
+        'SELECT tier, credits_remaining, credits_reset_date, credits_monthly_limit FROM users WHERE id = $1 FOR UPDATE',
         [userId]
       );
 
       if (userResult.rows.length === 0) {
-        return res.status(404).json({ error: 'User not found' });
+        console.error(`[TIER ERROR] User not found: ${userId}`);
+        return res.status(404).json({ 
+          error: 'User not found',
+          code: 'USER_NOT_FOUND'
+        });
       }
 
       const user = userResult.rows[0];
-      const creditCost = cost || CREDIT_COSTS[operation] || 1;
 
       // Check if credits need to be reset (monthly cycle)
       const now = new Date();
@@ -78,51 +207,131 @@ const checkCredits = (operation, cost = null) => {
         );
 
         user.credits_remaining = tierLimits.monthlyCredits;
+        console.log(`🔄 Credits reset for user ${userId}: ${tierLimits.monthlyCredits} credits`);
       }
 
       // Check if user has sufficient credits
       if (user.credits_remaining < creditCost) {
+        console.error(`[TIER ERROR] Insufficient credits for user ${userId}: has ${user.credits_remaining}, needs ${creditCost}`);
         return res.status(402).json({ 
           error: 'Insufficient credits',
+          code: 'INSUFFICIENT_CREDITS',
           required: creditCost,
           remaining: user.credits_remaining,
-          tier: user.tier
+          tier: user.tier,
+          operation: operationType,
+          details: operationDetails
         });
       }
 
-      // Store cost for deduction after successful operation
-      req.creditCost = creditCost;
-      req.userTier = user.tier;
+      // Store operation info for deduction after successful operation
+      req.creditOperation = {
+        userId,
+        cost: creditCost,
+        type: operationType,
+        details: operationDetails,
+        tier: user.tier,
+        remainingBefore: user.credits_remaining
+      };
+
+      console.log(`💳 Credit check passed - User: ${userId}, Operation: ${operationType}, Cost: ${creditCost}, Remaining: ${user.credits_remaining}`);
       next();
 
     } catch (error) {
-      console.error('Error checking credits:', error);
-      res.status(500).json({ error: 'Internal server error' });
+      console.error('[TIER ERROR] Error in credit check:', error);
+      res.status(500).json({ 
+        error: 'Internal server error',
+        code: 'CREDIT_CHECK_ERROR'
+      });
     }
   };
 };
 
 /**
- * Middleware to deduct credits after successful operation
+ * Enhanced credit deduction middleware with logging
  */
 const deductCredits = async (req, res, next) => {
   try {
-    const userId = req.user?.id;
-    const creditCost = req.creditCost;
+    const operation = req.creditOperation;
+    
+    if (!operation) {
+      // No credit operation to process
+      return next();
+    }
 
-    if (userId && creditCost) {
-      await pool.query(
-        'UPDATE users SET credits_remaining = credits_remaining - $1 WHERE id = $2',
-        [creditCost, userId]
+    const { userId, cost, type, details, tier } = operation;
+    
+    // Begin transaction for atomic credit deduction
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+      
+      // Deduct credits
+      const result = await client.query(
+        'UPDATE users SET credits_remaining = credits_remaining - $1 WHERE id = $2 RETURNING credits_remaining',
+        [cost, userId]
       );
+      
+      const newBalance = result.rows[0]?.credits_remaining;
+      
+      // Log the credit deduction in activities
+      await client.query(
+        `INSERT INTO activities (user_id, activity_type, title, description, symbol)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          userId,
+          'credit_deduction',
+          `${cost} Credits Used - ${type.charAt(0).toUpperCase() + type.slice(1)}`,
+          `${cost} credits deducted for ${type} operation. ${details.tickerCount ? `Processed ${details.tickerCount} tickers` : 'Operation completed'}. Remaining: ${newBalance}`,
+          details.tickers ? details.tickers[0] : null // Use first ticker as symbol reference
+        ]
+      );
+      
+      await client.query('COMMIT');
+      
+      // Add credit info to response
+      res.locals.creditInfo = {
+        used: cost,
+        remaining: newBalance,
+        operation: type,
+        tier
+      };
+      
+      console.log(`✅ Credits deducted - User: ${userId}, Cost: ${cost}, New Balance: ${newBalance}`);
+      
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
 
     next();
+    
   } catch (error) {
-    console.error('Error deducting credits:', error);
-    // Don't fail the request, just log the error
+    console.error('❌ Error deducting credits:', error);
+    // Don't fail the request, but log the error
     next();
   }
+};
+
+/**
+ * Middleware to add credit info to successful responses
+ */
+const addCreditInfoToResponse = (req, res, next) => {
+  // Store original json method
+  const originalJson = res.json;
+  
+  // Override json method to add credit info
+  res.json = function(data) {
+    if (res.locals.creditInfo && data && typeof data === 'object') {
+      data.credits = res.locals.creditInfo;
+    }
+    return originalJson.call(this, data);
+  };
+  
+  next();
 };
 
 /**
@@ -253,8 +462,11 @@ const getUserTierInfo = async (userId) => {
 };
 
 module.exports = {
-  checkCredits,
+  checkCredits: checkCreditsForOperation,
+  checkSentimentCredits,
   deductCredits,
+  addCreditInfoToResponse,
+  calculateSentimentCost,
   checkFeatureAccess,
   checkWatchlistLimit,
   getUserTierInfo,

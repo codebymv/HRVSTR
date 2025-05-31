@@ -10,8 +10,9 @@ interface SentimentCardProps {
 
 // Function to get sentiment strength description
 const getSentimentDescription = (score: number): string => {
-  const absScore = Math.abs(score);
-  const isPositive = score > 0;
+  const safeScore = isNaN(score) ? 0 : score;
+  const absScore = Math.abs(safeScore);
+  const isPositive = safeScore > 0;
   
   if (absScore >= 0.8) {
     return isPositive ? 'Very Bullish' : 'Very Bearish';
@@ -26,15 +27,17 @@ const getSentimentDescription = (score: number): string => {
 
 // Function to get sentiment color
 const getSentimentColor = (score: number): string => {
-  if (score > 0.15) return 'text-green-500';
-  if (score < -0.15) return 'text-red-500';
+  const safeScore = isNaN(score) ? 0 : score;
+  if (safeScore > 0.15) return 'text-green-500';
+  if (safeScore < -0.15) return 'text-red-500';
   return 'text-yellow-500';
 };
 
 // Function to get sentiment icon
 const getSentimentIcon = (score: number) => {
-  if (score > 0.15) return <TrendingUp size={24} className="text-green-500" />;
-  if (score < -0.15) return <TrendingDown size={24} className="text-red-500" />;
+  const safeScore = isNaN(score) ? 0 : score;
+  if (safeScore > 0.15) return <TrendingUp size={24} className="text-green-500" />;
+  if (safeScore < -0.15) return <TrendingDown size={24} className="text-red-500" />;
   return <Minus size={24} className="text-yellow-500" />;
 };
 
@@ -61,9 +64,14 @@ const getDataSummary = (source: string, postCount: number, commentCount: number,
 };
 
 const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
+  // Early return if data is invalid
+  if (!data || !data.ticker) {
+    return null;
+  }
+
   const {
     ticker,
-    score,
+    score = 0,
     source,
     postCount = 0,
     commentCount = 0,
@@ -71,10 +79,16 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
     changePercent,
     newsCount = 0,
     confidence,
-    strength = Math.round(Math.abs(score * 100)),
+    strength,
     volume = 0,
     momentum = 0,
   } = data;
+  
+  // Safely handle score calculation
+  const safeScore = isNaN(score) ? 0 : Number(score);
+  const safeStrength = strength !== undefined && !isNaN(strength) 
+    ? Math.round(Math.abs(strength)) 
+    : Math.round(Math.abs(safeScore * 100));
   
   // Get theme context
   const { theme } = useTheme();
@@ -87,14 +101,12 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
   const subTextColor = isLight ? 'text-gray-600' : 'text-gray-400';
   const badgeBgColor = isLight ? 'bg-gray-100' : 'bg-gray-700';
   
-  const sentimentDescription = getSentimentDescription(score);
-  const sentimentColor = getSentimentColor(score);
-  const scoreValue = strength !== undefined && strength > 0 
-    ? strength.toString() 
-    : Math.round(Math.abs(score) * 100).toString();
+  const sentimentDescription = getSentimentDescription(safeScore);
+  const sentimentColor = getSentimentColor(safeScore);
+  const scoreValue = safeStrength > 0 ? safeStrength.toString() : '0';
   
   const hasValidConfidence = confidence !== undefined && confidence !== null && !isNaN(Number(confidence));
-  const dataSummary = getDataSummary(source, postCount, commentCount, newsCount);
+  const dataSummary = getDataSummary(source || 'unknown', postCount, commentCount, newsCount);
   
   return (
     <div className={`${cardBgColor} rounded-xl p-6 hover:shadow-lg transition-all duration-200 border ${borderColor} shadow-sm`}>
@@ -102,7 +114,7 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-3">
           <h3 className={`text-2xl font-bold ${headingTextColor}`}>{ticker}</h3>
-          {getSentimentIcon(score)}
+          {getSentimentIcon(safeScore)}
         </div>
         <div className="text-right">
           <div className={`text-sm font-medium ${subTextColor} mb-1`}>Market Sentiment</div>
@@ -118,7 +130,7 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
           <span className={sentimentColor}>{sentimentDescription}</span>
           {hasValidConfidence && (
             <span className={`ml-2 ${subTextColor}`}>
-              • {confidence}% confidence
+              • {Number(confidence).toFixed(0)}% confidence
             </span>
           )}
         </div>
@@ -161,8 +173,8 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
         <div className="group relative">
           <Info size={16} className={`${subTextColor} hover:${headingTextColor} cursor-help`} />
           <div className="absolute bottom-full right-0 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
-            Score: {score.toFixed(3)} • Source: {source}
-            {hasValidConfidence && ` • Confidence: ${confidence}%`}
+            Score: {safeScore.toFixed(3)} • Source: {source || 'unknown'}
+            {hasValidConfidence && ` • Confidence: ${Number(confidence).toFixed(0)}%`}
           </div>
         </div>
       </div>
@@ -172,7 +184,7 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
         <div className={`h-2 ${isLight ? 'bg-gray-200' : 'bg-gray-700'} rounded-full overflow-hidden`}>
           <div 
             className={`h-full transition-all duration-500 ${
-              score > 0.15 ? 'bg-green-500' : score < -0.15 ? 'bg-red-500' : 'bg-yellow-500'
+              safeScore > 0.15 ? 'bg-green-500' : safeScore < -0.15 ? 'bg-red-500' : 'bg-yellow-500'
             }`}
             style={{ width: `${Math.min(100, Math.max(5, parseInt(scoreValue)))}%` }}
           ></div>
@@ -180,7 +192,7 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
       </div>
 
       {/* Momentum indicator if significant */}
-      {Math.abs(momentum) > 0.1 && (
+      {momentum !== undefined && !isNaN(momentum) && Math.abs(momentum) > 0.1 && (
         <div className="mt-3 flex items-center justify-center">
           <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium ${
             momentum > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'

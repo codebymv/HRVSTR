@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTier } from '../../contexts/TierContext';
 import { useTierLimits } from '../../hooks/useTierLimits';
@@ -52,18 +52,64 @@ const SentimentDashboard: React.FC = () => {
   // Combined access: needs both tier access AND API keys configured
   const hasFullRedditAccess = hasRedditTierAccess && redditApiKeysConfigured;
   
+  // DEBUG: Log the Reddit access calculation with change detection
+  const prevAccessRef = useRef(hasFullRedditAccess);
+  useEffect(() => {
+    if (prevAccessRef.current !== hasFullRedditAccess) {
+      console.log('🔄 REDDIT ACCESS CHANGED:', {
+        from: prevAccessRef.current,
+        to: hasFullRedditAccess,
+        currentTier,
+        hasRedditTierAccess,
+        redditApiKeysConfigured,
+        checkingApiKeys,
+        timestamp: new Date().toISOString()
+      });
+      prevAccessRef.current = hasFullRedditAccess;
+    }
+  });
+  
+  // DEBUG: Log the Reddit access calculation on every render
+  console.log('🔑 REDDIT ACCESS DEBUG:', {
+    currentTier,
+    hasRedditTierAccess,
+    redditApiKeysConfigured,
+    hasFullRedditAccess,
+    checkingApiKeys
+  });
+  
   // Check API key status on component mount
   useEffect(() => {
     const checkApiKeyStatus = async () => {
       try {
         const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
-        const response = await fetch(`${proxyUrl}/api/settings/key-status`);
+        const token = localStorage.getItem('auth_token');
+        
+        if (!token) {
+          console.warn('No auth token found, skipping API key status check');
+          setRedditApiKeysConfigured(false);
+          return;
+        }
+        
+        const response = await fetch(`${proxyUrl}/api/settings/key-status`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
         
         if (response.ok) {
           const data = await response.json();
+          console.log('🔍 API Key Status Response:', data);
           if (data.success && data.dataSources) {
+            console.log('🔍 Reddit API Keys Status:', data.dataSources.reddit);
             setRedditApiKeysConfigured(data.dataSources.reddit || false);
+          } else {
+            console.log('🔍 API Key Status - Invalid response format');
+            setRedditApiKeysConfigured(false);
           }
+        } else {
+          console.log('🔍 API Key Status - Response not OK:', response.status);
+          setRedditApiKeysConfigured(false);
         }
       } catch (error) {
         console.error('Error checking API key status:', error);
@@ -74,47 +120,13 @@ const SentimentDashboard: React.FC = () => {
     };
 
     checkApiKeyStatus();
+    
+    // Also refresh API key status periodically
+    const interval = setInterval(checkApiKeyStatus, 5 * 60 * 1000); // Every 5 minutes
+    
+    return () => clearInterval(interval);
   }, []);
-
-  // Refresh API key status when the user returns to this tab/window
-  useEffect(() => {
-    const refreshApiKeyStatus = async () => {
-      try {
-        const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
-        const response = await fetch(`${proxyUrl}/api/settings/key-status`);
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.dataSources) {
-            setRedditApiKeysConfigured(data.dataSources.reddit || false);
-          }
-        }
-      } catch (error) {
-        console.error('Error refreshing API key status:', error);
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        refreshApiKeyStatus();
-      }
-    };
-
-    const handleFocus = () => {
-      refreshApiKeyStatus();
-    };
-
-    // Add event listeners for when user returns to the tab
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleFocus);
-
-    // Cleanup event listeners
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, []);
-
+  
   // Use sentiment data hook for all data management
   const {
     // Data states
@@ -142,7 +154,19 @@ const SentimentDashboard: React.FC = () => {
     // Actions
     refreshData,
     handleLoadMorePosts: originalHandleLoadMorePosts,
-  } = useSentimentData(timeRange, hasFullRedditAccess);
+  } = useSentimentData(timeRange, hasFullRedditAccess, !checkingApiKeys);
+  
+  // Effect to refresh data when Reddit access is gained
+  useEffect(() => {
+    // Only trigger refresh when access changes from false to true and we're not still checking API keys
+    if (hasFullRedditAccess && !checkingApiKeys && prevAccessRef.current === false) {
+      console.log('🚀 Reddit access gained - refreshing data to fetch real Reddit sentiment');
+      // Small delay to ensure state has settled
+      setTimeout(() => {
+        refreshData();
+      }, 100);
+    }
+  }, [hasFullRedditAccess, checkingApiKeys, refreshData]);
   
   // Use time range debounce hook for smooth transitions
   const {

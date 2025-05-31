@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
+import { useGoogleLogin, googleLogout, CredentialResponse } from '@react-oauth/google';
 import axios from 'axios';
-import { CredentialResponse, googleLogout, useGoogleLogin } from '@react-oauth/google';
 
 interface User {
   id: string;
@@ -35,6 +35,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  
+  // Add refs to prevent infinite loops
+  const isLoggingOut = useRef(false);
+  const backendLogoutFailures = useRef(0);
+  const refreshTokenRef = useRef<string | null>(null);
+  const tokenRefreshInProgress = useRef(false);
 
   // Use Google Login hook for direct OAuth
   const googleLogin = useGoogleLogin({
@@ -59,7 +65,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           picture: googleUser.picture
         });
 
-        const { token: backendToken, refreshToken, expiresIn, user: userData } = response.data;
+        const { token: backendToken, refreshToken, user: userData } = response.data;
         
         console.log('Backend response:', response.data);
         console.log('User data received:', userData);
@@ -93,6 +99,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const initializeAuth = () => {
       try {
         const savedToken = localStorage.getItem('auth_token');
+        const savedRefreshToken = localStorage.getItem('refresh_token');
         const tokenExpiry = localStorage.getItem('token_expiry');
         const savedUser = localStorage.getItem('user');
         
@@ -104,15 +111,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               try {
                 const userData = JSON.parse(savedUser);
                 setToken(savedToken);
+                refreshTokenRef.current = savedRefreshToken;
                 setUser({ ...userData, token: savedToken });
                 setIsAuthenticated(true);
               } catch (parseError) {
                 console.error('Error parsing saved user data:', parseError);
                 // Clear corrupted data
-                localStorage.removeItem('auth_token');
-                localStorage.removeItem('refresh_token');
-                localStorage.removeItem('token_expiry');
-                localStorage.removeItem('user');
+                clearAuthData();
               }
             }
           } else {
@@ -123,45 +128,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (error) {
         console.error('Error initializing auth:', error);
         // Clear all auth data on any error
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('token_expiry');
-        localStorage.removeItem('user');
+        clearAuthData();
       } finally {
         setLoading(false);
       }
     };
 
     initializeAuth();
-  }, []);
+  }, []); // Remove dependencies to prevent loops
 
-  // Update user token when token changes
-  useEffect(() => {
-    if (user && token) {
-      setUser(prev => prev ? { ...prev, token } : null);
-    }
-  }, [token]);
+  // Helper function to clear auth data
+  const clearAuthData = () => {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('token_expiry');
+    localStorage.removeItem('user');
+    refreshTokenRef.current = null;
+  };
 
-  // Setup axios interceptor for token refresh and error handling
+  // Setup axios interceptor for token refresh and error handling (only once)
   useEffect(() => {
     const interceptor = axios.interceptors.response.use(
       (response) => response,
       async (error) => {
         const originalRequest = error.config;
         
+        // Prevent infinite retry loops
+        if (originalRequest._retryCount >= 3) {
+          console.log('Max retry attempts reached, logging out...');
+          if (!isLoggingOut.current) {
+            logout();
+          }
+          return Promise.reject(error);
+        }
+        
         // If error is 401/403 and we haven't tried to refresh yet
         if ((error.response?.status === 401 || error.response?.status === 403) && !originalRequest._retry) {
           originalRequest._retry = true;
+          originalRequest._retryCount = (originalRequest._retryCount || 0) + 1;
           
-          const refreshToken = localStorage.getItem('refresh_token');
-          if (!refreshToken) {
-            console.log('No refresh token available, logging out...');
+          const currentRefreshToken = refreshTokenRef.current;
+          if (!currentRefreshToken || tokenRefreshInProgress.current) {
+            console.log('No refresh token available or refresh in progress, logging out...');
+            if (!isLoggingOut.current) {
             logout();
+            }
             return Promise.reject(error);
           }
 
           try {
             console.log('Attempting to refresh token...');
+            tokenRefreshInProgress.current = true;
+            
             // Attempt to refresh the token
             const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
             const response = await axios.post(`${apiUrl}/api/auth/refresh`, {
@@ -179,6 +197,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             localStorage.setItem('token_expiry', expiryTime.toString());
             
             if (newRefreshToken) {
+              refreshTokenRef.current = newRefreshToken;
               localStorage.setItem('refresh_token', newRefreshToken);
             }
             
@@ -199,8 +218,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } catch (refreshError) {
             console.error('Token refresh failed:', refreshError);
             // If refresh fails, logout and redirect to login
+            if (!isLoggingOut.current) {
             logout();
+            }
             return Promise.reject(refreshError);
+          } finally {
+            tokenRefreshInProgress.current = false;
           }
         }
         
@@ -211,20 +234,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       axios.interceptors.response.eject(interceptor);
     };
-  }, [token, user]);
+  }, []); // Remove dependencies to prevent re-registration
 
   // Token refresh function
-  const refreshToken = async () => {
+  const refreshTokenFn = async () => {
     const savedToken = localStorage.getItem('auth_token');
-    const refreshTokenValue = localStorage.getItem('refresh_token');
+    const refreshTokenValue = refreshTokenRef.current;
     
-    if (!savedToken || !refreshTokenValue) {
-      console.log('No tokens available for refresh');
+    if (!savedToken || !refreshTokenValue || tokenRefreshInProgress.current) {
+      console.log('No tokens available for refresh or refresh in progress');
       return false;
     }
 
     try {
       console.log('Refreshing token...');
+      tokenRefreshInProgress.current = true;
+      
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       const response = await axios.post(`${apiUrl}/api/auth/refresh`, {
         token: savedToken
@@ -239,6 +264,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('token_expiry', expiryTime.toString());
       
       if (newRefreshToken) {
+        refreshTokenRef.current = newRefreshToken;
         localStorage.setItem('refresh_token', newRefreshToken);
       }
 
@@ -246,8 +272,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return true;
     } catch (error) {
       console.error('Token refresh failed:', error);
+      if (!isLoggingOut.current) {
       logout();
+      }
       return false;
+    } finally {
+      tokenRefreshInProgress.current = false;
     }
   };
 
@@ -255,18 +285,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const checkAndRefreshToken = () => {
     const tokenExpiry = localStorage.getItem('token_expiry');
     
-    if (!tokenExpiry) return;
+    if (!tokenExpiry || tokenRefreshInProgress.current) return;
     
     const expiryTime = parseInt(tokenExpiry);
     const now = Date.now();
     
     // If token expires within the buffer time, refresh it
     if (now >= expiryTime - EXPIRATION_BUFFER) {
-      refreshToken();
+      refreshTokenFn();
     }
   };
 
-  // Set up periodic token refresh check
+  // Set up periodic token refresh check (only once)
   useEffect(() => {
     if (!token) return;
 
@@ -277,7 +307,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const intervalId = setInterval(checkAndRefreshToken, REFRESH_INTERVAL);
 
     return () => clearInterval(intervalId);
-  }, [token, user]);
+  }, []); // Remove dependencies to prevent multiple intervals
 
   const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
     // Keep this for backward compatibility if needed
@@ -341,6 +371,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const expiryTime = Date.now() + (7 * 24 * 60 * 60 * 1000);
     setToken(newToken);
     setIsAuthenticated(true);
+    
+    if (refreshToken) {
+      refreshTokenRef.current = refreshToken;
+    }
+    
     try {
       localStorage.setItem('auth_token', newToken);
       localStorage.setItem('token_expiry', expiryTime.toString());
@@ -364,15 +399,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
+    // Prevent multiple simultaneous logout calls
+    if (isLoggingOut.current) {
+      console.log('Logout already in progress, skipping...');
+      return;
+    }
+    
+    isLoggingOut.current = true;
+    console.log('Logging out user...');
+    
     setToken(null);
     setUser(null);
     setIsAuthenticated(false);
+    refreshTokenRef.current = null;
+    tokenRefreshInProgress.current = false;
     
     try {
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('refresh_token');
-      localStorage.removeItem('token_expiry');
-      localStorage.removeItem('user');
+      clearAuthData();
     } catch (storageError) {
       console.error('Error clearing localStorage:', storageError);
     }
@@ -384,13 +427,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Error signing out from Google:', googleError);
     }
     
-    // Optional: Call backend logout endpoint
+    // Only call backend logout if we haven't failed too many times
+    if (backendLogoutFailures.current < 5) {
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      axios.post(`${apiUrl}/api/auth/logout`);
+        axios.post(`${apiUrl}/api/auth/logout`).catch((error) => {
+          console.error('Backend logout failed:', error);
+          backendLogoutFailures.current++;
+          if (backendLogoutFailures.current >= 5) {
+            console.log('Too many backend logout failures, disabling backend logout calls');
+          }
+        });
     } catch (error) {
       console.error('Backend logout failed:', error);
+        backendLogoutFailures.current++;
+      }
     }
+    
+    // Reset logout flag after a delay
+    setTimeout(() => {
+      isLoggingOut.current = false;
+    }, 1000);
   };
 
   // Direct sign in - triggers Google OAuth popup immediately

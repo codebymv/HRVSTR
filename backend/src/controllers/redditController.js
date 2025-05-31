@@ -17,8 +17,13 @@ async function getSubredditPosts(req, res, next) {
   try {
     const { subreddit } = req.params;
     const { limit = 25, timeframe = 'day' } = req.query;
+    const userId = req.user?.id; // Get user ID from authenticated request
     
-    const posts = await redditUtils.fetchSubredditPosts(subreddit, { limit, timeframe });
+    const posts = await redditUtils.fetchSubredditPosts(subreddit, { 
+      limit, 
+      timeframe, 
+      userId 
+    });
     
     // Format response for frontend
     res.json({
@@ -43,7 +48,8 @@ async function getSubredditPosts(req, res, next) {
 async function getTickerSentiment(req, res, next) {
   try {
     const { timeRange = '1w' } = req.query;
-    const result = await sentimentService.getRedditTickerSentiment(timeRange);
+    const userId = req.user?.id; // Get user ID from authenticated request
+    const result = await sentimentService.getRedditTickerSentiment(timeRange, userId);
     
     // Log confidence values to verify they're being set
     if (result && result.sentimentData) {
@@ -72,7 +78,8 @@ async function getTickerSentiment(req, res, next) {
 async function getSentiment(req, res, next) {
   try {
     const { timeRange = '1w' } = req.query;
-    const result = await sentimentService.getRedditMarketSentiment(timeRange);
+    const userId = req.user?.id; // Get user ID from authenticated request
+    const result = await sentimentService.getRedditMarketSentiment(timeRange, userId);
     res.json(result);
   } catch (error) {
     console.error('Error calculating sentiment:', error.message);

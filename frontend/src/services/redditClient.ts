@@ -53,13 +53,20 @@ async function fetchSubreddit(
   try {
     console.log(`[Reddit] Fetching ${limit} posts from r/${subreddit}`);
     
+    const token = localStorage.getItem('auth_token');
+    const headers: HeadersInit = {
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    };
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
     const response = await fetch(url, { 
       signal,
-      headers: {
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      }
+      headers
     });
     
     if (!response.ok) {
