@@ -40,6 +40,10 @@ const RecentActivitySection: React.FC<RecentActivitySectionProps> = ({
   const textColor = isLight ? 'text-stone-800' : 'text-white';
   const mutedTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
   const activeButtonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
+  
+  // Add container styling to match upcoming events
+  const itemContainerBg = isLight ? 'bg-stone-200' : 'bg-gray-700';
+  const itemContainerBorder = isLight ? 'border-stone-300' : 'border-gray-600';
 
   // Refs for infinite scroll
   const loadingRef = useRef<HTMLDivElement | null>(null);
@@ -206,25 +210,27 @@ const RecentActivitySection: React.FC<RecentActivitySectionProps> = ({
       ) : activities.length > 0 ? (
         <div ref={containerRef} className="space-y-4 overflow-y-auto h-72 pr-2">
           {activities.map((activity) => (
-            <div key={activity.id} className="flex items-start space-x-3">
-              <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${getActivityTypeIndicator(activity.activity_type)}`} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1">
-                  <p className={`font-medium ${textColor} truncate`}>{activity.title || 'No title'}</p>
-                  {activity.symbol && (
-                    <span className={`text-xs px-2 py-1 rounded flex-shrink-0 ml-2 ${
-                      isLight 
-                        ? 'bg-blue-200 text-blue-800' 
-                        : 'bg-blue-900 text-blue-300'
-                    }`}>
-                      {activity.symbol}
-                    </span>
+            <div key={activity.id} className={`${itemContainerBg} rounded-lg border ${itemContainerBorder} p-4`}>
+              <div className="flex items-start space-x-3">
+                <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${getActivityTypeIndicator(activity.activity_type)}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className={`font-medium ${textColor} truncate`}>{activity.title || 'No title'}</p>
+                    {activity.symbol && (
+                      <span className={`text-xs px-2 py-1 rounded flex-shrink-0 ml-2 ${
+                        isLight 
+                          ? 'bg-blue-200 text-blue-800' 
+                          : 'bg-blue-900 text-blue-300'
+                      }`}>
+                        {activity.symbol}
+                      </span>
+                    )}
+                  </div>
+                  {activity.description && (
+                    <p className={`text-sm ${mutedTextColor} truncate mb-1`}>{activity.description}</p>
                   )}
+                  <p className={`text-xs ${mutedTextColor}`}>{formatActivityTime(activity.created_at)}</p>
                 </div>
-                {activity.description && (
-                  <p className={`text-sm ${mutedTextColor} truncate mb-1`}>{activity.description}</p>
-                )}
-                <p className={`text-xs ${mutedTextColor}`}>{formatActivityTime(activity.created_at)}</p>
               </div>
             </div>
           ))}

@@ -50,6 +50,7 @@ async function extractTransactionDetails(content) {
     let price = 0; 
     let value = 0;
     let tradeType = 'Purchase';
+    let transactionNote = '';
 
     // Method 0: If this is an SEC index page, try to extract from it
     if (isIndexPage) {
@@ -101,7 +102,39 @@ async function extractTransactionDetails(content) {
       }
     }
 
-    // Method 3: Try regex patterns for numeric values (if still no data)
+    // Method 3: Check if this is a non-monetary transaction
+    if (shares > 0 && (price === 0 || value === 0)) {
+      // Check for common non-monetary transaction types
+      const nonMonetaryPatterns = [
+        { pattern: /stock\s+option/i, type: 'Stock Option Grant' },
+        { pattern: /restricted\s+stock/i, type: 'Restricted Stock Grant' },
+        { pattern: /rsu/i, type: 'RSU Grant' },
+        { pattern: /phantom\s+stock/i, type: 'Phantom Stock' },
+        { pattern: /deferred\s+compensation/i, type: 'Deferred Compensation' },
+        { pattern: /employee\s+stock/i, type: 'Employee Stock Plan' },
+        { pattern: /warrant/i, type: 'Warrant' },
+        { pattern: /dividend/i, type: 'Dividend' },
+        { pattern: /spin.?off/i, type: 'Spin-off' },
+        { pattern: /merger/i, type: 'Merger Transaction' }
+      ];
+
+      for (const { pattern, type } of nonMonetaryPatterns) {
+        if (pattern.test(content)) {
+          transactionNote = type;
+          tradeType = type;
+          console.log(`[transactionExtractor] Identified non-monetary transaction: ${type}`);
+          break;
+        }
+      }
+
+      // If still no specific type identified but we have shares
+      if (!transactionNote && shares > 0) {
+        transactionNote = 'Non-monetary transaction';
+        console.log(`[transactionExtractor] Classified as non-monetary transaction (shares: ${shares}, price: ${price}, value: ${value})`);
+      }
+    }
+
+    // Method 4: Try regex patterns as final fallback
     if (shares === 0 && price === 0 && value === 0) {
       const regexMatches = extractWithRegexPatterns(content);
       if (regexMatches.shares > 0 || regexMatches.price > 0 || regexMatches.value > 0) {
@@ -137,6 +170,7 @@ async function extractTransactionDetails(content) {
       price: parseFloat(price.toFixed(2)),
       value: parseFloat(value.toFixed(2)),
       tradeType,
+      transactionNote: transactionNote || (shares > 0 && (price === 0 || value === 0) ? 'Non-monetary transaction' : ''),
       actualFilingDate // Include the actual filing date
     };
   } catch (error) {
@@ -667,6 +701,7 @@ function extractFromHtmlTables(content) {
   try {
     // Look for table data patterns
     const tableRows = content.match(/<tr[^>]*>.*?<\/tr>/gi) || [];
+    console.log(`[transactionExtractor] Found ${tableRows.length} table rows to analyze`);
     
     for (const row of tableRows) {
       const cells = row.match(/<td[^>]*>(.*?)<\/td>/gi) || [];
@@ -674,23 +709,77 @@ function extractFromHtmlTables(content) {
       for (let i = 0; i < cells.length; i++) {
         const cellContent = cells[i].replace(/<[^>]*>/g, '').trim();
         
-        // Check for numeric values that might be shares, price, or value
-        const numericValue = parseFloat(cellContent.replace(/[,$]/g, ''));
+        // Skip empty cells or cells with just whitespace
+        if (!cellContent || cellContent.length === 0) continue;
         
-        if (!isNaN(numericValue) && numericValue > 0) {
-          // Heuristics to determine what type of value this might be
-          if (numericValue > 1000 && numericValue < 1000000 && shares === 0) {
-            shares = numericValue;
-          } else if (numericValue > 1 && numericValue < 1000 && price === 0) {
-            price = numericValue;
-          } else if (numericValue > 1000 && value === 0) {
-            value = numericValue;
+        // Check for numeric values that might be shares, price, or value
+        const numericMatch = cellContent.match(/(\d+(?:,\d{3})*(?:\.\d{2})?)/);
+        
+        if (numericMatch) {
+          const numericValue = parseFloat(numericMatch[1].replace(/[,$]/g, ''));
+          
+          if (!isNaN(numericValue) && numericValue > 0) {
+            // Better heuristics to determine what type of value this might be
+            const cellText = cellContent.toLowerCase();
+            
+            // Look for shares indicators
+            if ((cellText.includes('shares') || cellText.includes('qty') || cellText.includes('quantity')) && shares === 0) {
+              shares = numericValue;
+              console.log(`[transactionExtractor] Found shares in table: ${shares}`);
+            }
+            // Look for price indicators
+            else if ((cellText.includes('price') || cellText.includes('$') || 
+                     (numericValue > 1 && numericValue < 10000 && price === 0 && i > 0))) {
+              price = numericValue;
+              console.log(`[transactionExtractor] Found price in table: $${price}`);
+            }
+            // Look for value indicators
+            else if ((cellText.includes('value') || cellText.includes('total') || 
+                     (numericValue > 10000 && value === 0))) {
+              value = numericValue;
+              console.log(`[transactionExtractor] Found value in table: $${value}`);
+            }
+            // Fallback heuristics based on position and magnitude
+            else if (shares === 0 && numericValue > 100 && numericValue < 1000000) {
+              shares = numericValue;
+              console.log(`[transactionExtractor] Assigned to shares (fallback): ${shares}`);
+            }
+          }
+        }
+        
+        // Check for zero values explicitly mentioned
+        if (cellContent === '0' || cellContent === '$0' || cellContent === '$0.00') {
+          // Look at adjacent cells for context
+          const nextCell = cells[i + 1] ? cells[i + 1].replace(/<[^>]*>/g, '').trim().toLowerCase() : '';
+          const prevCell = cells[i - 1] ? cells[i - 1].replace(/<[^>]*>/g, '').trim().toLowerCase() : '';
+          
+          if (nextCell.includes('price') || prevCell.includes('price')) {
+            price = 0;
+            console.log(`[transactionExtractor] Found explicit $0 price in table`);
+          } else if (nextCell.includes('value') || prevCell.includes('value')) {
+            value = 0;
+            console.log(`[transactionExtractor] Found explicit $0 value in table`);
           }
         }
       }
     }
+    
+    // Look for transaction type indicators in table content
+    const contentText = content.toLowerCase();
+    if (contentText.includes('acquisition') || contentText.includes('purchase') || contentText.includes('bought')) {
+      tradeType = 'Purchase';
+    } else if (contentText.includes('disposition') || contentText.includes('sale') || contentText.includes('sold')) {
+      tradeType = 'Sale';
+    } else if (contentText.includes('grant') || contentText.includes('award')) {
+      tradeType = 'Grant';
+    } else if (contentText.includes('option')) {
+      tradeType = 'Option';
+    }
+    
+    console.log(`[transactionExtractor] HTML table extraction complete: shares=${shares}, price=${price}, value=${value}, type=${tradeType}`);
+    
   } catch (error) {
-    console.warn(`[transactionExtractor] Error in HTML table extraction: ${error.message}`);
+    console.warn(`[transactionExtractor] Error extracting from HTML tables: ${error.message}`);
   }
 
   return { shares, price, value, tradeType };

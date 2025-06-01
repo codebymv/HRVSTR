@@ -454,7 +454,21 @@ export const fetchInstitutionalHoldings = async (timeRange: TimeRange = '1m', re
   try {
     const proxyUrl = getProxyUrl();
     const refreshParam = refresh ? '&refresh=true' : '';
-    const response = await fetch(`${proxyUrl}/api/sec/institutional-holdings?timeRange=${timeRange}${refreshParam}`, { signal });
+    
+    // Get authentication token and prepare headers
+    const token = localStorage.getItem('auth_token');
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json'
+    };
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    const response = await fetch(`${proxyUrl}/api/sec/institutional-holdings?timeRange=${timeRange}${refreshParam}`, { 
+      signal,
+      headers
+    });
     
     if (!response.ok) {
       throw new Error(`Proxy server returned error: ${response.status}`);

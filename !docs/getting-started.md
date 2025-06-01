@@ -6,7 +6,7 @@ Welcome to **HRVSTR** – your comprehensive financial sentiment and data analys
 
 HRVSTR aggregates financial data from multiple sources and presents it in an easy-to-understand dashboard. Think of it as your command center for tracking market sentiment, insider trades, institutional moves, and earnings events.
 
-> 📋 **New to v0.7.5?** Check out the [Version 0.7.5 Release Notes](/help/Version/0.7.5-overview) to see the latest improvements including enhanced mobile experience, faster data loading, and improved dark/light mode consistency.
+> 📋 **New to v0.8.1?** Check out the [Version 0.8.1 Release Notes](/help/Version/0.8.1-overview) to see the latest improvements including enhanced mobile experience, faster data loading, and improved dark/light mode consistency.
 
 ## 🚀 Quick Start:
 

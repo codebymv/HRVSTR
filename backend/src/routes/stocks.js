@@ -9,12 +9,12 @@ const { getEffectiveApiKey } = require('../utils/userApiKeys');
 // Remove the global instance - we'll create user-specific instances when needed
 // const financialCalendarService = new FinancialCalendarService();
 
-// Tier limits for API usage
+// Tier limits for API usage - Updated to reflect real-world Alpha Vantage API constraints
 const TIER_LIMITS = {
   free: { daily_searches: 25, daily_price_updates: 25 },
-  pro: { daily_searches: null, daily_price_updates: null }, // unlimited
-  elite: { daily_searches: null, daily_price_updates: null }, // unlimited
-  institutional: { daily_searches: null, daily_price_updates: null } // unlimited
+  pro: { daily_searches: 25, daily_price_updates: 25 }, // Limited by Alpha Vantage free API key
+  elite: { daily_searches: 25, daily_price_updates: 25 }, // Limited by Alpha Vantage free API key  
+  institutional: { daily_searches: 25, daily_price_updates: 25 } // Limited by Alpha Vantage free API key
 };
 
 // Helper function to check and increment API usage
@@ -31,15 +31,17 @@ const checkAndIncrementUsage = async (userId, usageType, tier) => {
     // Get current date for daily reset
     const today = new Date().toISOString().split('T')[0];
 
-    // Check current usage
+    // Get current usage - use the correct schema with daily_searches and daily_price_updates
     const usageResult = await pool.query(
-      'SELECT count FROM api_usage WHERE user_id = $1 AND usage_type = $2 AND date = $3',
-      [userId, usageType, today]
+      'SELECT daily_searches, daily_price_updates FROM api_usage WHERE user_id = $1 AND usage_date = $2',
+      [userId, today]
     );
 
     let currentUsage = 0;
     if (usageResult.rows.length > 0) {
-      currentUsage = usageResult.rows[0].count;
+      currentUsage = usageType === 'daily_searches' 
+        ? usageResult.rows[0].daily_searches || 0
+        : usageResult.rows[0].daily_price_updates || 0;
     }
 
     // Check if user has exceeded limit
@@ -48,13 +50,14 @@ const checkAndIncrementUsage = async (userId, usageType, tier) => {
       return { allowed: false, current: currentUsage, limit };
     }
 
-    // Increment usage
+    // Increment usage using the correct schema
+    const incrementField = usageType === 'daily_searches' ? 'daily_searches' : 'daily_price_updates';
     await pool.query(
-      `INSERT INTO api_usage (user_id, usage_type, date, count) 
-       VALUES ($1, $2, $3, 1)
-       ON CONFLICT (user_id, usage_type, date) 
-       DO UPDATE SET count = api_usage.count + 1`,
-      [userId, usageType, today]
+      `INSERT INTO api_usage (user_id, usage_date, ${incrementField}) 
+       VALUES ($1, $2, 1)
+       ON CONFLICT (user_id, usage_date) 
+       DO UPDATE SET ${incrementField} = api_usage.${incrementField} + 1, updated_at = CURRENT_TIMESTAMP`,
+      [userId, today]
     );
 
     const newUsage = currentUsage + 1;
@@ -262,6 +265,45 @@ router.get('/search', authenticateToken, async (req, res) => {
       message: 'Error searching stocks',
       error: error.message,
       details: 'Internal server error during search'
+    });
+  }
+});
+
+// Get search usage stats
+router.get('/search-usage', authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+  const userTier = req.user.tier || 'free';
+
+  try {
+    // Get current date for daily usage
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Get current usage using the correct schema
+    const usageResult = await pool.query(
+      'SELECT daily_searches FROM api_usage WHERE user_id = $1 AND usage_date = $2',
+      [userId, today]
+    );
+
+    const currentUsage = usageResult.rows.length > 0 ? (usageResult.rows[0].daily_searches || 0) : 0;
+    const limit = TIER_LIMITS[userTier]?.daily_searches;
+
+    console.log(`[SEARCH_USAGE] User ${userId} (${userTier}): ${currentUsage}/${limit || '∞'} searches`);
+
+    res.json({
+      success: true,
+      data: {
+        current: currentUsage,
+        limit: limit,
+        tier: userTier,
+        unlimited: limit === null || limit === undefined
+      }
+    });
+
+  } catch (error) {
+    console.error('Error getting search usage:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Internal server error' 
     });
   }
 });

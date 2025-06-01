@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Search, Loader2, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
@@ -19,6 +19,38 @@ const AddTickerModal: React.FC<AddTickerModalProps> = ({ isOpen, onClose, onAdd,
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [searchUsage, setSearchUsage] = useState<{current: number; limit: number | null; unlimited: boolean} | null>(null);
+  const [loadingUsage, setLoadingUsage] = useState(false);
+
+  // Fetch search usage when modal opens
+  const fetchSearchUsage = async () => {
+    if (!user?.token) return;
+    
+    setLoadingUsage(true);
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const response = await axios.get(`${apiUrl}/api/stocks/search-usage`, {
+        headers: {
+          Authorization: `Bearer ${user.token}`
+        }
+      });
+      
+      if (response.data.success) {
+        setSearchUsage(response.data.data);
+      }
+    } catch (err) {
+      console.error('Error fetching search usage:', err);
+    } finally {
+      setLoadingUsage(false);
+    }
+  };
+
+  // Fetch usage when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchSearchUsage();
+    }
+  }, [isOpen, user?.token]);
 
   const handleSearch = async () => {
     if (!searchTerm.trim()) return;
@@ -65,6 +97,8 @@ const AddTickerModal: React.FC<AddTickerModalProps> = ({ isOpen, onClose, onAdd,
 • Alpha Vantage API issues - try again in a moment
 • API rate limits - wait a few seconds and retry`);
         }
+        // Refresh usage after successful search
+        fetchSearchUsage();
       } else {
         setSearchResults([]);
         setError(`Unexpected response format for "${searchTerm}". Please try again or contact support if this persists.`);
@@ -156,6 +190,52 @@ const AddTickerModal: React.FC<AddTickerModalProps> = ({ isOpen, onClose, onAdd,
               {isSearching ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
             </button>
           </div>
+          
+          {/* Search Usage Display */}
+          <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            {loadingUsage ? (
+              <span className="flex items-center">
+                <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                Loading usage...
+              </span>
+            ) : searchUsage ? (
+              searchUsage.unlimited ? (
+                <span className="flex items-center text-green-600 dark:text-green-400">
+                  🔥 <span className="ml-1 font-medium">Unlimited searches</span>
+                </span>
+              ) : (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span>
+                      Searches used: <span className={`font-medium ${searchUsage.current >= (searchUsage.limit || 0) ? 'text-red-500' : searchUsage.current >= (searchUsage.limit || 0) * 0.8 ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                        {searchUsage.current}/{searchUsage.limit}
+                      </span> today
+                    </span>
+                    {searchUsage.current >= (searchUsage.limit || 0) && (
+                      <span className="text-xs text-red-500 font-medium">LIMIT REACHED</span>
+                    )}
+                  </div>
+                  {/* Progress bar for free tier */}
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                    <div 
+                      className={`h-1.5 rounded-full transition-all duration-300 ${
+                        searchUsage.current >= (searchUsage.limit || 0) 
+                          ? 'bg-red-500' 
+                          : searchUsage.current >= (searchUsage.limit || 0) * 0.8 
+                            ? 'bg-yellow-500' 
+                            : 'bg-blue-500'
+                      }`}
+                      style={{ 
+                        width: `${Math.min(100, (searchUsage.current / (searchUsage.limit || 1)) * 100)}%` 
+                      }}
+                    ></div>
+                  </div>
+                </div>
+              )
+            ) : (
+              <span>Enter a ticker symbol above to get started</span>
+            )}
+          </div>
         </div>
 
         {error && (
@@ -214,7 +294,15 @@ const AddTickerModal: React.FC<AddTickerModalProps> = ({ isOpen, onClose, onAdd,
             ) : !hasSearched ? (
               <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                 <div className="text-lg mb-2">Search for stocks</div>
-                <div className="text-sm">Enter a ticker symbol above to get started</div>
+                {/* <div className="text-sm">
+                  {searchUsage && !searchUsage.unlimited ? (
+                    `${searchUsage.current}/${searchUsage.limit} searches used today`
+                  ) : searchUsage?.unlimited ? (
+                    'Unlimited searches available'
+                  ) : (
+                    'Enter a ticker symbol above to get started'
+                  )}
+                </div> */}
               </div>
             ) : null}
           </div>

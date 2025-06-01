@@ -55,6 +55,10 @@ const WatchlistSection: React.FC<WatchlistSectionProps> = ({
   const mutedTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
   const activeButtonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
   const buttonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
+  
+  // Add container styling to match upcoming events
+  const itemContainerBg = isLight ? 'bg-stone-200' : 'bg-gray-700';
+  const itemContainerBorder = isLight ? 'border-stone-300' : 'border-gray-600';
 
   // Check if user is over their limit (tier downgrade case)
   const isOverLimit = watchlistLimit && watchlist.length > watchlistLimit;
@@ -218,7 +222,7 @@ const WatchlistSection: React.FC<WatchlistSectionProps> = ({
             const priceChangeInfo = formatPriceChange(item.price_change);
             
             return (
-              <div key={item.symbol || Math.random()} className={`py-3 border-b ${borderColor}`}>
+              <div key={item.symbol || Math.random()} className={`${itemContainerBg} rounded-lg border ${itemContainerBorder} p-4`}>
                 {/* Mobile Layout */}
                 <div className="block sm:hidden">
                   <div className="flex items-center justify-between mb-2">

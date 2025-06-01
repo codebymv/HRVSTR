@@ -276,285 +276,287 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
   };
 
   return (
-    <div className={`p-6 ${textColor}`}>
-      <div className={`${cardBg} rounded-lg p-4 border ${cardBorder}`}>
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-xl font-semibold">Earnings Monitor</h1>
-          <div className="flex items-center space-x-3">
-            <div className="flex items-center space-x-2">
-              <span className={`text-sm ${subTextColor}`}>Time Range:</span>
-              <select 
-                className={`${isLight ? 'bg-stone-200 border-stone-400' : 'bg-gray-800 border-gray-700'} border rounded px-3 py-1.5 text-sm ${textColor}`}
-                value={timeRange}
-                onChange={(e) => setTimeRange(e.target.value as TimeRange)}
-              >
-                <option value="1d">Today</option>
-                <option value="1w">This Week</option>
-              </select>
-            </div>
-            <button 
-              onClick={refreshData}
-              className={`${isLight ? 'bg-blue-500' : 'bg-blue-600'} hover:${isLight ? 'bg-blue-600' : 'bg-blue-700'} rounded-full p-2 transition-colors`}
-              title="Refresh Data"
-            >
-              <RefreshCw size={18} className="text-white" />
-            </button>
-          </div>
+    <div className="flex flex-col h-full">
+      <div className={`flex flex-row justify-between items-center gap-4 mb-4 ${cardBg} rounded-lg p-4 border ${cardBorder}`}>
+        <div className="flex-1">
+          <h1 className={`text-xl font-bold ${textColor}`}>Earnings Monitor</h1>
+          <p className={`text-sm ${subTextColor}`}>Track upcoming earnings events and analysis</p>
         </div>
+        
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Time range selector */}
+          <select 
+            value={timeRange}
+            onChange={(e) => setTimeRange(e.target.value as TimeRange)}
+            className={`py-1 px-2 rounded text-sm ${cardBg} ${textColor} border ${cardBorder}`}
+          >
+            <option value="1d">Today</option>
+            <option value="1w">This Week</option>
+          </select>
+          
+          {/* Refresh button */}
+          <button 
+            onClick={refreshData}
+            className={`p-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white transition-colors`}
+            title="Refresh Data"
+          >
+            <RefreshCw size={18} className="text-white" />
+          </button>
+        </div>
+      </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden`}>
-            <div className={`p-4 border-b ${borderColor}`}>
-              <h2 className={`text-lg font-semibold ${textColor}`}>Upcoming Earnings</h2>
-            </div>
-            <div className="p-4">
-              {loading.upcomingEarnings ? (
-                <div className="flex flex-col items-center justify-center py-20 text-center">
-                  <Loader2 className="mb-3 text-blue-500 animate-spin" size={32} />
-                  <p className={`text-lg font-semibold ${textColor} mb-2`}>{loadingStage}</p>
-                  <div className="w-full max-w-sm mt-4 mb-2">
-                    <ProgressBar progress={loadingProgress} />
-                  </div>
-                  <div className="text-xs text-blue-400">{loadingProgress}% complete</div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden`}>
+          <div className={`p-4 border-b ${borderColor}`}>
+            <h2 className={`text-lg font-semibold ${textColor}`}>Upcoming Earnings</h2>
+          </div>
+          <div className="p-4">
+            {loading.upcomingEarnings ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <Loader2 className="mb-3 text-blue-500 animate-spin" size={32} />
+                <p className={`text-lg font-semibold ${textColor} mb-2`}>{loadingStage}</p>
+                <div className="w-full max-w-sm mt-4 mb-2">
+                  <ProgressBar progress={loadingProgress} />
                 </div>
-              ) : errors.upcomingEarnings ? (
-                <div className={`flex flex-col items-center justify-center p-10 ${subTextColor} text-center`}>
-                  <AlertTriangle className="mb-2 text-yellow-500" size={32} />
-                  <p>{errors.upcomingEarnings}</p>
-                </div>
-              ) : upcomingEarnings.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className={`min-w-full ${textColor}`}>
-                    <thead className={`${tableHeaderBg} ${borderColor}`}>
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Ticker</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Company</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className={`divide-y ${borderColor}`}>
-                      {sortedEarnings
-                        .filter((earnings, index) => {
-                          // Final UI-level validation - filter out any invalid tickers
-                          if (!earnings.ticker || typeof earnings.ticker !== 'string' || earnings.ticker.trim() === '') {
-                            console.error('🚨 UI FILTER: Removing invalid ticker from render:', {
-                              index,
-                              earnings,
-                              ticker: earnings.ticker,
-                              type: typeof earnings.ticker
-                            });
-                            return false;
-                          }
-                          return true;
-                        })
-                        .map((earnings, index) => {
-                        // Defensive logging for any remaining edge cases
+                <div className="text-xs text-blue-400">{loadingProgress}% complete</div>
+              </div>
+            ) : errors.upcomingEarnings ? (
+              <div className={`flex flex-col items-center justify-center p-10 ${subTextColor} text-center`}>
+                <AlertTriangle className="mb-2 text-yellow-500" size={32} />
+                <p>{errors.upcomingEarnings}</p>
+              </div>
+            ) : upcomingEarnings.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className={`min-w-full ${textColor}`}>
+                  <thead className={`${tableHeaderBg} ${borderColor}`}>
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Ticker</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Company</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className={`divide-y ${borderColor}`}>
+                    {sortedEarnings
+                      .filter((earnings, index) => {
+                        // Final UI-level validation - filter out any invalid tickers
                         if (!earnings.ticker || typeof earnings.ticker !== 'string' || earnings.ticker.trim() === '') {
-                          console.error('🚨 RENDERING ITEM WITH INVALID TICKER:', {
+                          console.error('🚨 UI FILTER: Removing invalid ticker from render:', {
                             index,
                             earnings,
                             ticker: earnings.ticker,
                             type: typeof earnings.ticker
                           });
-                          // Skip rendering this item
-                          return null;
+                          return false;
                         }
-                        
-                        return (
-                          <tr 
-                            key={`earnings-${earnings.ticker}-${index}`} 
-                            className={`${hoverBg} ${selectedTicker === earnings.ticker ? selectedBg : ''} cursor-pointer transition-colors`}
-                            onClick={() => {
-                              // Validate ticker before processing
-                              if (earnings.ticker && typeof earnings.ticker === 'string' && earnings.ticker.trim() !== '') {
-                                setSelectedTicker(earnings.ticker);
-                                loadAnalysis(earnings.ticker);
-                              } else {
-                                console.warn('Invalid ticker symbol:', earnings.ticker);
-                              }
-                            }}
-                          >
-                            <td className="px-4 py-3 font-medium">{earnings.ticker}</td>
-                            <td className="px-4 py-3">
-                              {earnings.companyName || 'Unknown Company'}
-                            </td>
-                            <td className="px-4 py-3">
-                              {earnings.reportDate ? 
-                                new Date(earnings.reportDate).toLocaleDateString() : 
-                                'TBA'}
-                            </td>
-                          </tr>
-                        );
-                      }).filter(Boolean)} {/* Remove any null entries */}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className={`flex flex-col items-center justify-center p-10 ${subTextColor} text-center`}>
-                  <Info className="mb-2" size={32} />
-                  <p>No upcoming earnings found in the selected time range</p>
-                </div>
-              )}
-            </div>
+                        return true;
+                      })
+                      .map((earnings, index) => {
+                      // Defensive logging for any remaining edge cases
+                      if (!earnings.ticker || typeof earnings.ticker !== 'string' || earnings.ticker.trim() === '') {
+                        console.error('🚨 RENDERING ITEM WITH INVALID TICKER:', {
+                          index,
+                          earnings,
+                          ticker: earnings.ticker,
+                          type: typeof earnings.ticker
+                        });
+                        // Skip rendering this item
+                        return null;
+                      }
+                      
+                      return (
+                        <tr 
+                          key={`earnings-${earnings.ticker}-${index}`} 
+                          className={`${hoverBg} ${selectedTicker === earnings.ticker ? selectedBg : ''} cursor-pointer transition-colors`}
+                          onClick={() => {
+                            // Validate ticker before processing
+                            if (earnings.ticker && typeof earnings.ticker === 'string' && earnings.ticker.trim() !== '') {
+                              setSelectedTicker(earnings.ticker);
+                              loadAnalysis(earnings.ticker);
+                            } else {
+                              console.warn('Invalid ticker symbol:', earnings.ticker);
+                            }
+                          }}
+                        >
+                          <td className="px-4 py-3 font-medium">{earnings.ticker}</td>
+                          <td className="px-4 py-3">
+                            {earnings.companyName || 'Unknown Company'}
+                          </td>
+                          <td className="px-4 py-3">
+                            {earnings.reportDate ? 
+                              new Date(earnings.reportDate).toLocaleDateString() : 
+                              'TBA'}
+                          </td>
+                        </tr>
+                      );
+                    }).filter(Boolean)} {/* Remove any null entries */}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className={`flex flex-col items-center justify-center p-10 ${subTextColor} text-center`}>
+                <Info className="mb-2" size={32} />
+                <p>No upcoming earnings found in the selected time range</p>
+              </div>
+            )}
           </div>
+        </div>
 
-          <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden`}>
-            <div className={`p-4 border-b ${borderColor}`}>
-              <h2 className={`text-lg font-semibold ${textColor}`}>
-                {selectedTicker ? `${selectedTicker} Earnings Analysis` : 'Select a Ticker'}
-              </h2>
-            </div>
-            <div className="p-4">
-              {!selectedTicker ? (
-                <div className={`flex flex-col items-center justify-center p-10 ${subTextColor} text-center`}>
-                  <Info className="mb-2" size={32} />
-                  <p>Select a ticker from the table to view earnings analysis</p>
+        <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden`}>
+          <div className={`p-4 border-b ${borderColor}`}>
+            <h2 className={`text-lg font-semibold ${textColor}`}>
+              {selectedTicker ? `${selectedTicker} Earnings Analysis` : 'Select a Ticker'}
+            </h2>
+          </div>
+          <div className="p-4">
+            {!selectedTicker ? (
+              <div className={`flex flex-col items-center justify-center p-10 ${subTextColor} text-center`}>
+                <Info className="mb-2" size={32} />
+                <p>Select a ticker from the table to view earnings analysis</p>
+              </div>
+            ) : loading.analysis ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <Loader2 className="mb-3 text-blue-500 animate-spin" size={32} />
+                <p className={`text-lg font-semibold ${textColor} mb-2`}>{loadingStage}</p>
+                <div className="w-full max-w-sm mt-4 mb-2">
+                  <ProgressBar progress={loadingProgress} />
                 </div>
-              ) : loading.analysis ? (
-                <div className="flex flex-col items-center justify-center py-20 text-center">
-                  <Loader2 className="mb-3 text-blue-500 animate-spin" size={32} />
-                  <p className={`text-lg font-semibold ${textColor} mb-2`}>{loadingStage}</p>
-                  <div className="w-full max-w-sm mt-4 mb-2">
-                    <ProgressBar progress={loadingProgress} />
+                <div className="text-xs text-blue-400">{loadingProgress}% complete</div>
+              </div>
+            ) : errors.analysis ? (
+              <div className={`flex flex-col items-center justify-center p-10 ${subTextColor} text-center`}>
+                <AlertTriangle className="mb-2 text-yellow-500" size={32} />
+                <p>{errors.analysis}</p>
+              </div>
+            ) : earningsAnalysis ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className={`${analysisBg} rounded-lg p-4`}>
+                    <div className="flex items-center space-x-2 mb-2">
+                      <BarChart2 size={20} className="text-blue-400" />
+                      <span className="text-sm font-medium">Financial Metrics</span>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Current Price:</span>
+                        <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
+                          {earningsAnalysis.currentPrice !== null 
+                            ? `$${earningsAnalysis.currentPrice.toFixed(2)}`
+                            : 'N/A'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Price Change:</span>
+                        <span className={
+                          earningsAnalysis.priceChangePercent === null
+                            ? isLight ? 'text-stone-600' : 'text-gray-400'
+                            : earningsAnalysis.priceChangePercent > 0 
+                              ? 'text-green-500' 
+                              : 'text-red-500'
+                        }>
+                          {earningsAnalysis.priceChangePercent !== null
+                            ? `${earningsAnalysis.priceChangePercent > 0 ? '+' : ''}${earningsAnalysis.priceChangePercent.toFixed(2)}%`
+                            : 'N/A'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Market Cap:</span>
+                        <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
+                          {earningsAnalysis.marketCap !== null
+                            ? `$${(earningsAnalysis.marketCap / 1e9).toFixed(2)}B`
+                            : 'N/A'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>P/E Ratio:</span>
+                        <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
+                          {earningsAnalysis.pe !== null
+                            ? earningsAnalysis.pe.toFixed(1)
+                            : 'N/A'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-xs text-blue-400">{loadingProgress}% complete</div>
-                </div>
-              ) : errors.analysis ? (
-                <div className={`flex flex-col items-center justify-center p-10 ${subTextColor} text-center`}>
-                  <AlertTriangle className="mb-2 text-yellow-500" size={32} />
-                  <p>{errors.analysis}</p>
-                </div>
-              ) : earningsAnalysis ? (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                  {hasProAccess ? (
                     <div className={`${analysisBg} rounded-lg p-4`}>
                       <div className="flex items-center space-x-2 mb-2">
-                        <BarChart2 size={20} className="text-blue-400" />
-                        <span className="text-sm font-medium">Financial Metrics</span>
+                        {earningsAnalysis.priceChangePercent && earningsAnalysis.priceChangePercent > 0 ? (
+                          <TrendingUp size={20} className="text-green-500" />
+                        ) : (
+                          <TrendingDown size={20} className="text-red-500" />
+                        )}
+                        <span className="text-sm font-medium">Company & Trading Info</span>
                       </div>
                       <div className="space-y-2">
                         <div className="flex justify-between">
-                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Current Price:</span>
+                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Sector:</span>
                           <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
-                            {earningsAnalysis.currentPrice !== null 
-                              ? `$${earningsAnalysis.currentPrice.toFixed(2)}`
+                            {earningsAnalysis.sector || 'N/A'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Day Range:</span>
+                          <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
+                            {earningsAnalysis.dayLow !== null && earningsAnalysis.dayHigh !== null
+                              ? `$${earningsAnalysis.dayLow.toFixed(2)} - $${earningsAnalysis.dayHigh.toFixed(2)}`
                               : 'N/A'}
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Price Change:</span>
-                          <span className={
-                            earningsAnalysis.priceChangePercent === null
-                              ? isLight ? 'text-stone-600' : 'text-gray-400'
-                              : earningsAnalysis.priceChangePercent > 0 
-                                ? 'text-green-500' 
-                                : 'text-red-500'
-                          }>
-                            {earningsAnalysis.priceChangePercent !== null
-                              ? `${earningsAnalysis.priceChangePercent > 0 ? '+' : ''}${earningsAnalysis.priceChangePercent.toFixed(2)}%`
+                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>52W Range:</span>
+                          <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
+                            {earningsAnalysis.yearLow !== null && earningsAnalysis.yearHigh !== null
+                              ? `$${earningsAnalysis.yearLow.toFixed(2)} - $${earningsAnalysis.yearHigh.toFixed(2)}`
                               : 'N/A'}
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Market Cap:</span>
+                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>EPS:</span>
                           <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
-                            {earningsAnalysis.marketCap !== null
-                              ? `$${(earningsAnalysis.marketCap / 1e9).toFixed(2)}B`
-                              : 'N/A'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>P/E Ratio:</span>
-                          <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
-                            {earningsAnalysis.pe !== null
-                              ? earningsAnalysis.pe.toFixed(1)
+                            {earningsAnalysis.eps !== null
+                              ? `$${earningsAnalysis.eps.toFixed(2)}`
                               : 'N/A'}
                           </span>
                         </div>
                       </div>
                     </div>
-
-                    {hasProAccess ? (
-                      <div className={`${analysisBg} rounded-lg p-4`}>
-                        <div className="flex items-center space-x-2 mb-2">
-                          {earningsAnalysis.priceChangePercent && earningsAnalysis.priceChangePercent > 0 ? (
-                            <TrendingUp size={20} className="text-green-500" />
-                          ) : (
-                            <TrendingDown size={20} className="text-red-500" />
-                          )}
-                          <span className="text-sm font-medium">Company & Trading Info</span>
-                        </div>
-                        <div className="space-y-2">
-                          <div className="flex justify-between">
-                            <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Sector:</span>
-                            <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
-                              {earningsAnalysis.sector || 'N/A'}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Day Range:</span>
-                            <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
-                              {earningsAnalysis.dayLow !== null && earningsAnalysis.dayHigh !== null
-                                ? `$${earningsAnalysis.dayLow.toFixed(2)} - $${earningsAnalysis.dayHigh.toFixed(2)}`
-                                : 'N/A'}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>52W Range:</span>
-                            <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
-                              {earningsAnalysis.yearLow !== null && earningsAnalysis.yearHigh !== null
-                                ? `$${earningsAnalysis.yearLow.toFixed(2)} - $${earningsAnalysis.yearHigh.toFixed(2)}`
-                                : 'N/A'}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>EPS:</span>
-                            <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
-                              {earningsAnalysis.eps !== null
-                                ? `$${earningsAnalysis.eps.toFixed(2)}`
-                                : 'N/A'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <EarningsProUpgradeCard />
-                    )}
-                  </div>
-
-                  {hasProAccess && (
-                    <div className={`${analysisBg} rounded-lg p-4`}>
-                      <h3 className="text-sm font-medium mb-2">Analysis Summary</h3>
-                      <p className={`${isLight ? 'text-stone-800' : 'text-gray-200'} text-sm`}>
-                        {earningsAnalysis.companyName} ({earningsAnalysis.sector}) 
-                        {earningsAnalysis.analysisScore !== undefined && earningsAnalysis.riskLevel ? (
-                          <>
-                            {' '}has an analysis score of <span className="text-blue-500 font-medium">{earningsAnalysis.analysisScore}</span>
-                            {' '}with a <span className={
-                              earningsAnalysis.riskLevel === 'High' ? 'text-red-500' :
-                              earningsAnalysis.riskLevel === 'Medium' ? 'text-yellow-500' : 'text-green-500'
-                            }>{earningsAnalysis.riskLevel}</span> risk level.
-                          </>
-                        ) : ''}
-                        {earningsAnalysis.dataLimitations && earningsAnalysis.dataLimitations.length > 0 && (
-                          <>
-                            {' '}
-                            <span className={isLight ? 'text-stone-600' : 'text-gray-400'}>
-                              Note: {earningsAnalysis.dataLimitations.join(', ')}.
-                            </span>
-                          </>
-                        )}
-                      </p>
-                    </div>
+                  ) : (
+                    <EarningsProUpgradeCard />
                   )}
                 </div>
-              ) : (
-                <div className={`flex flex-col items-center justify-center p-10 ${subTextColor} text-center`}>
-                  <Info className="mb-2" size={32} />
-                  <p>Select a ticker to view earnings analysis</p>
-                </div>
-              )}
-            </div>
+
+                {hasProAccess && (
+                  <div className={`${analysisBg} rounded-lg p-4`}>
+                    <h3 className="text-sm font-medium mb-2">Analysis Summary</h3>
+                    <p className={`${isLight ? 'text-stone-800' : 'text-gray-200'} text-sm`}>
+                      {earningsAnalysis.companyName} ({earningsAnalysis.sector}) 
+                      {earningsAnalysis.analysisScore !== undefined && earningsAnalysis.riskLevel ? (
+                        <>
+                          {' '}has an analysis score of <span className="text-blue-500 font-medium">{earningsAnalysis.analysisScore}</span>
+                          {' '}with a <span className={
+                            earningsAnalysis.riskLevel === 'High' ? 'text-red-500' :
+                            earningsAnalysis.riskLevel === 'Medium' ? 'text-yellow-500' : 'text-green-500'
+                          }>{earningsAnalysis.riskLevel}</span> risk level.
+                        </>
+                      ) : ''}
+                      {earningsAnalysis.dataLimitations && earningsAnalysis.dataLimitations.length > 0 && (
+                        <>
+                          {' '}
+                          <span className={isLight ? 'text-stone-600' : 'text-gray-400'}>
+                            Note: {earningsAnalysis.dataLimitations.join(', ')}.
+                          </span>
+                        </>
+                      )}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className={`flex flex-col items-center justify-center p-10 ${subTextColor} text-center`}>
+                <Info className="mb-2" size={32} />
+                <p>Select a ticker to view earnings analysis</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -23,20 +23,25 @@ import {
   Star,
   Crown,
   Zap,
-  Building
+  Building,
+  Search
 } from 'lucide-react';
-// import { Bell, Search, User, Sun, Moon } from 'lucide-react'; // Commented out for now
-import { useLocation } from 'react-router-dom';
+// import { Bell, Sun, Moon } from 'lucide-react'; // Commented out for now
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { AuthButton } from './AuthButton';
 import { useAuth } from '../contexts/AuthContext';
 import { useTier } from '../contexts/TierContext';
+import AddTickerModal from './Watchlist/AddTickerModal';
 
 const Navbar: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSettingsExpanded, setIsSettingsExpanded] = useState(false);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [isAddingTicker, setIsAddingTicker] = useState(false);
   const { theme } = useTheme();
   const location = useLocation();
+  const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const { tierInfo } = useTier();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -80,9 +85,8 @@ const Navbar: React.FC = () => {
   const isLight = theme === 'light';
   const bgColor = isLight ? 'bg-stone-300' : 'bg-gray-900'; // Darker beige/grey for better contrast with white logo
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
-  // Commented out for now - will be used when search is re-enabled
-  // const inputBgColor = isLight ? 'bg-stone-200' : 'bg-gray-800';
-  // const inputTextColor = isLight ? 'text-gray-900' : 'text-gray-200';
+  const inputBgColor = isLight ? 'bg-stone-200' : 'bg-gray-800';
+  const inputTextColor = isLight ? 'text-gray-900' : 'text-gray-200';
   const iconColor = isLight ? 'text-stone-700' : 'text-gray-400'; // Darker color for better visibility
   const hoverBgColor = isLight ? 'hover:bg-stone-400' : 'hover:bg-gray-800';
   const textColor = isLight ? 'text-stone-800' : 'text-gray-300';
@@ -92,6 +96,40 @@ const Navbar: React.FC = () => {
 
   // Add logo filter for theme switching
   const logoFilter = isLight ? 'invert(1) brightness(0)' : 'none';
+
+  // Handle search bar focus (desktop)
+  const handleSearchClick = () => {
+    if (isAuthenticated) {
+      setIsSearchModalOpen(true);
+    }
+  };
+
+  // Handle search icon click (mobile)
+  const handleSearchIconClick = () => {
+    if (isAuthenticated) {
+      setIsSearchModalOpen(true);
+    }
+  };
+
+  // Handle adding ticker from search modal
+  const handleAddTicker = async (symbol: string) => {
+    setIsAddingTicker(true);
+    try {
+      // Here you could add the ticker to watchlist via API call if needed
+      // For now, we'll just redirect to user-home (watchlist page)
+      navigate('/user-home');
+      setIsSearchModalOpen(false);
+    } catch (error) {
+      console.error('Error adding ticker:', error);
+    } finally {
+      setIsAddingTicker(false);
+    }
+  };
+
+  const handleMenuItemClick = () => {
+    setIsMenuOpen(false);
+    setIsSettingsExpanded(false);
+  };
 
   // Settings sub-items - organized to match SettingsLayout sidebar structure
   const settingsItems = [
@@ -108,11 +146,6 @@ const Navbar: React.FC = () => {
     { path: '/settings/api-keys', label: 'API Keys', icon: Key, category: 'FEATURES' },
     { path: '/settings/data-sources', label: 'Data Sources', icon: Database, category: 'FEATURES' },
   ];
-
-  const handleMenuItemClick = () => {
-    setIsMenuOpen(false);
-    setIsSettingsExpanded(false);
-  };
 
   // Helper function to get user tier information with icon and color
   const getUserTierInfo = () => {
@@ -184,22 +217,35 @@ const Navbar: React.FC = () => {
             </div>
           </div>
           
-          {/* Search Bar - Kept at a reasonable width */}
-          {/* Commented out for now - can be implemented later if needed
-          <div className="hidden md:flex relative flex-1 max-w-xl">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search size={18} className={iconColor} />
+          {/* Search Bar - Interactive for authenticated users */}
+          {isAuthenticated && (
+            <div className="hidden md:flex relative flex-1 max-w-xl mx-4">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search size={18} className={iconColor} />
+              </div>
+              <input
+                type="text"
+                placeholder="Search for a stock symbol (e.g., AAPL, MSFT)..."
+                className={`${inputBgColor} w-full pl-10 pr-4 py-2 rounded-lg ${inputTextColor} text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer`}
+                onClick={handleSearchClick}
+                readOnly
+              />
             </div>
-            <input
-              type="text"
-              placeholder="Search for a ticker or company..."
-              className={`${inputBgColor} w-full pl-10 pr-4 py-2 rounded-lg ${inputTextColor} text-sm focus:outline-none focus:ring-2 focus:ring-blue-500`}
-            />
-          </div>
-          */}
+          )}
           
           {/* User Controls */}
-          <div className="flex items-center gap-3 ml-4">             
+          <div className="flex items-center gap-3 ml-4">
+
+            {/* Mobile Search Icon - only show when authenticated */}
+            {isAuthenticated && (
+              <button 
+                onClick={handleSearchIconClick}
+                className={`md:hidden p-2 rounded-full ${hoverBgColor} transition-colors`}
+                aria-label="Search stocks"
+              >
+                <Search size={20} className={iconColor} />
+              </button>
+            )}
 
             {/* User Tier Icon - only show when authenticated and not on free tier */}
             {isAuthenticated && tierInfo?.tier?.toLowerCase() !== 'free' && (
@@ -405,6 +451,14 @@ const Navbar: React.FC = () => {
           </nav>
         </div>
       )}
+
+      {/* Global Search Modal */}
+      <AddTickerModal
+        isOpen={isSearchModalOpen}
+        onClose={() => setIsSearchModalOpen(false)}
+        onAdd={handleAddTicker}
+        isAdding={isAddingTicker}
+      />
     </header>
   );
 };

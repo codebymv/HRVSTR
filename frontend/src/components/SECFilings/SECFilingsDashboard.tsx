@@ -569,13 +569,13 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
   return (
     <>
       <div className="flex flex-col h-full">
-        <div className={`flex flex-col md:flex-row justify-between md:items-center gap-4 mb-4 ${cardBg} rounded-lg p-4 border ${cardBorder}`}>
-          <div>
+        <div className={`flex flex-row justify-between items-center gap-4 mb-4 ${cardBg} rounded-lg p-4 border ${cardBorder}`}>
+          <div className="flex-1">
             <h1 className={`text-xl font-bold ${textColor}`}>SEC Filings</h1>
             <p className={`text-sm ${subTextColor}`}>Track insider trading and institutional holdings</p>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             {/* Time range selector */}
             <select
               value={timeRange}
