@@ -25,11 +25,17 @@ import {
   BarChart
 } from 'lucide-react';
 import AddTickerModal from '../Watchlist/AddTickerModal';
+import WatchlistSection from '../Watchlist/WatchlistSection';
+import RecentActivitySection from './RecentActivitySection';
 import ConfirmationDialog from '../UI/ConfirmationDialog';
 import TierLimitDialog from '../UI/TierLimitDialog';
 import { formatEventRelativeTime, getRelativeTimeBadgeStyle } from '../../utils/timeUtils';
 import { useTier } from '../../contexts/TierContext';
 import { useTierLimits } from '../../hooks/useTierLimits';
+import { useWatchlistInfiniteScroll } from '../../hooks/useWatchlistInfiniteScroll';
+import { useRecentActivityInfiniteScroll } from '../../hooks/useRecentActivityInfiniteScroll';
+import { useUpcomingEventsInfiniteScroll } from '../../hooks/useUpcomingEventsInfiniteScroll';
+import UpcomingEventsSection from './UpcomingEventsSection';
 
 interface WatchlistItem {
   id: string;
@@ -63,21 +69,55 @@ const UserHome: React.FC = () => {
   const { tierInfo } = useTier();
   const { showTierLimitDialog, tierLimitDialog, closeTierLimitDialog } = useTierLimits();
   
-  // State for watchlist data, loading, and error
+  // Infinite scroll watchlist hook
+  const {
+    watchlist: infiniteWatchlist,
+    hasMore: hasMoreWatchlist,
+    loading: watchlistLoading,
+    loadingProgress: watchlistProgress,
+    loadingStage: watchlistStage,
+    error: infiniteWatchlistError,
+    handleLoadMore: handleLoadMoreWatchlist,
+    fetchWatchlist: fetchInfiniteWatchlist,
+    resetPagination
+  } = useWatchlistInfiniteScroll();
+
+  // Infinite scroll recent activity hook
+  const {
+    activities: recentActivity,
+    hasMore: hasMoreActivity,
+    loading: activityLoading,
+    loadingProgress: activityProgress,
+    loadingStage: activityStage,
+    error: activityError,
+    handleLoadMore: handleLoadMoreActivity,
+    fetchActivities: fetchRecentActivity,
+    resetPagination: resetActivityPagination
+  } = useRecentActivityInfiniteScroll();
+
+  // Infinite scroll upcoming events hook
+  const {
+    events: upcomingEvents,
+    hasMore: hasMoreEvents,
+    loading: eventsLoading,
+    loadingProgress: eventsProgress,
+    loadingStage: eventsStage,
+    error: eventsError,
+    handleLoadMore: handleLoadMoreEvents,
+    fetchEvents: fetchUpcomingEvents,
+    resetPagination: resetEventsPagination
+  } = useUpcomingEventsInfiniteScroll();
+
+  // Legacy watchlist state for backwards compatibility
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [loadingWatchlist, setLoadingWatchlist] = useState(true);
   const [watchlistError, setWatchlistError] = useState<string | null>(null);
 
-  // State for recent activity data, loading, and error
-  const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
+  // Legacy activity states - kept for backward compatibility but no longer used
   const [loadingActivity, setLoadingActivity] = useState(true);
-  const [activityError, setActivityError] = useState<string | null>(null);
 
-  // State for upcoming events data, loading, and error
-  const [upcomingEvents, setUpcomingEvents] = useState<EventItem[]>([]);
-  const [loadingEvents, setLoadingEvents] = useState(true);
-  const [eventsError, setEventsError] = useState<string | null>(null);
-
+  // Other existing state
+  const [watchlistLimit, setWatchlistLimit] = useState<number | undefined>(undefined);
   const [isAddTickerModalOpen, setIsAddTickerModalOpen] = useState(false);
   const [refreshingData, setRefreshingData] = useState(false);
   const [rateLimitActive, setRateLimitActive] = useState(false);
@@ -95,17 +135,63 @@ const UserHome: React.FC = () => {
   // Add refs to track if requests are in progress to prevent duplicate calls
   const fetchingWatchlist = useRef(false);
   const fetchingActivity = useRef(false);
-  const fetchingEvents = useRef(false);
 
   // Add cache with timestamps to prevent unnecessary requests
   const dataCache = useRef({
     watchlist: { data: null as WatchlistItem[] | null, timestamp: 0 },
-    activity: { data: null as ActivityItem[] | null, timestamp: 0 },
-    events: { data: null as EventItem[] | null, timestamp: 0 }
+    activity: { data: null as ActivityItem[] | null, timestamp: 0 }
   });
 
   // Cache duration in milliseconds (5 minutes)
   const CACHE_DURATION = 5 * 60 * 1000;
+
+  // Update legacy watchlist state when infinite scroll watchlist changes
+  useEffect(() => {
+    setWatchlist(infiniteWatchlist);
+    setLoadingWatchlist(!!watchlistLoading);
+    setWatchlistError(infiniteWatchlistError);
+  }, [infiniteWatchlist, watchlistLoading, infiniteWatchlistError]);
+
+  // Update legacy activity state when infinite scroll activity changes  
+  useEffect(() => {
+    setLoadingActivity(!!activityLoading);
+  }, [activityLoading]);
+
+  // Load data on mount
+  useEffect(() => {
+    fetchInfiniteWatchlist();
+    fetchRecentActivity();
+  }, [fetchInfiniteWatchlist, fetchRecentActivity]);
+
+  // Load watchlist limit from sessionStorage on mount
+  useEffect(() => {
+    try {
+      const storedLimits = sessionStorage.getItem('watchlist_limits');
+      if (storedLimits) {
+        const limits = JSON.parse(storedLimits);
+        if (limits.watchlist) {
+          setWatchlistLimit(limits.watchlist);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading watchlist limits from storage:', error);
+    }
+  }, []);
+
+  // Set default watchlist limit based on tier if not already set
+  useEffect(() => {
+    if (!watchlistLimit && tierInfo?.tier) {
+      const defaultLimits = {
+        'free': 3,      // Based on marketing: "3 watchlist stocks"
+        'pro': 25,      // Based on usage page: "4/25" 
+        'elite': 50,    // Based on marketing: "50 watchlist stocks"
+        'institutional': 500
+      };
+      const tierLimit = defaultLimits[tierInfo.tier.toLowerCase() as keyof typeof defaultLimits] || 3;
+      setWatchlistLimit(tierLimit);
+      console.log(`Set default watchlist limit for ${tierInfo.tier} tier: ${tierLimit}`);
+    }
+  }, [watchlistLimit, tierInfo?.tier]);
 
   // Helper function to check if cached data is still valid
   const isCacheValid = (timestamp: number) => {
@@ -124,14 +210,18 @@ const UserHome: React.FC = () => {
 
   // Theme-specific styling
   const isLight = theme === 'light';
-  const bgColor = isLight ? 'bg-stone-200' : 'bg-gray-950';
+  const bgColor = isLight ? 'bg-stone-100' : 'bg-gray-950';
   const textColor = isLight ? 'text-stone-700' : 'text-white';
   const welcomeTextColor = isLight ? 'text-stone-600' : 'text-white';
-  const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-900';
-  const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
+  const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-800';
+  const borderColor = isLight ? 'border-stone-400' : 'border-gray-700';
   const secondaryTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
   const buttonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
   const membershipTextColor = isLight ? 'text-amber-600' : 'text-amber-400';
+  
+  // Container styling for buttons - matching upcoming events
+  const buttonContainerBg = isLight ? 'bg-stone-200' : 'bg-gray-700';
+  const buttonContainerBorder = isLight ? 'border-stone-300' : 'border-gray-600';
 
   // Add icon filter for theme switching
   const iconFilter = isLight ? 'invert(1) brightness(0)' : 'none';
@@ -229,320 +319,13 @@ const UserHome: React.FC = () => {
     }
   }, [user?.token]);
 
-  // Fetch watchlist data from the backend with rate limiting protection
-  const fetchWatchlist = useCallback(async (forceRefresh = false) => {
-    if (!user?.token) {
-      setWatchlistError('User not authenticated');
-      setLoadingWatchlist(false);
-      return;
-    }
-
-    // Check if request is already in progress
-    if (fetchingWatchlist.current) {
-      return;
-    }
-
-    // Check cache first (unless force refresh)
-    if (!forceRefresh && dataCache.current.watchlist.data && isCacheValid(dataCache.current.watchlist.timestamp)) {
-      setWatchlist(dataCache.current.watchlist.data);
-      setLoadingWatchlist(false);
-      return;
-    }
-
-    fetchingWatchlist.current = true;
-    setLoadingWatchlist(true);
-
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await axios.get(`${apiUrl}/api/watchlist`, {
-        headers: {
-          Authorization: `Bearer ${user.token}`
-        }
-      });
-      
-      // Defensive programming: ensure we have an array
-      let watchlistData = response.data;
-      
-      // Log the response for debugging in production
-      console.log('Watchlist API response:', { 
-        status: response.status,
-        data: response.data,
-        dataType: typeof response.data,
-        isArray: Array.isArray(response.data)
-      });
-      
-      // Handle different response structures
-      if (response.data && typeof response.data === 'object') {
-        if (Array.isArray(response.data)) {
-          watchlistData = response.data;
-        } else if (response.data.data && Array.isArray(response.data.data)) {
-          // Handle wrapped response like { data: [...] }
-          watchlistData = response.data.data;
-        } else if (response.data.data && response.data.data.stocks && Array.isArray(response.data.data.stocks)) {
-          // Handle new tier-aware response like { data: { stocks: [...], limits: {...} } }
-          watchlistData = response.data.data.stocks;
-          // Store tier limits if available for future use
-          if (response.data.data.limits) {
-            sessionStorage.setItem('watchlist_limits', JSON.stringify(response.data.data.limits));
-          }
-        } else if (response.data.stocks && Array.isArray(response.data.stocks)) {
-          // Handle direct stocks response like { stocks: [...], limits: {...} }
-          watchlistData = response.data.stocks;
-          if (response.data.limits) {
-            sessionStorage.setItem('watchlist_limits', JSON.stringify(response.data.limits));
-          }
-        } else if (response.data.watchlist && Array.isArray(response.data.watchlist)) {
-          // Handle response like { watchlist: [...] }
-          watchlistData = response.data.watchlist;
-        } else {
-          // Fallback: if it's an object but not an array, create empty array
-          console.warn('Unexpected watchlist response structure:', response.data);
-          watchlistData = [];
-        }
-      } else {
-        // If response.data is null, undefined, or not an object, use empty array
-        watchlistData = [];
-      }
-      
-      // Ensure it's definitely an array
-      if (!Array.isArray(watchlistData)) {
-        console.error('Failed to convert watchlist response to array, using empty array');
-        watchlistData = [];
-      }
-      
-      // Update cache
-      dataCache.current.watchlist = {
-        data: watchlistData,
-        timestamp: Date.now()
-      };
-      
-      setWatchlist(watchlistData);
-      setWatchlistError(null);
-    } catch (error: any) {
-      console.error('Error fetching watchlist:', error);
-      if (error.response?.status === 429) {
-        setWatchlistError('Rate limit exceeded. Data will retry automatically in a moment.');
-        setRateLimitActive(true);
-        // Auto-retry after 3 seconds for rate limit errors
-        setTimeout(() => {
-          if (user?.token) {
-            setRateLimitActive(false);
-            fetchWatchlist(true);
-          }
-        }, 3000);
-      } else {
-        setWatchlistError('Failed to fetch watchlist');
-      }
-      // Ensure watchlist is set to empty array on error
-      setWatchlist([]);
-    } finally {
-      setLoadingWatchlist(false);
-      fetchingWatchlist.current = false;
-    }
-  }, [user?.token]);
-
-  // Fetch recent activity data with rate limiting protection
-  const fetchRecentActivity = useCallback(async (forceRefresh = false) => {
-    if (!user?.token) {
-      setActivityError('User not authenticated');
-      setLoadingActivity(false);
-      return;
-    }
-
-    // Check if request is already in progress
-    if (fetchingActivity.current) {
-      return;
-    }
-
-    // Check cache first (unless force refresh)
-    if (!forceRefresh && dataCache.current.activity.data && isCacheValid(dataCache.current.activity.timestamp)) {
-      setRecentActivity(dataCache.current.activity.data);
-      setLoadingActivity(false);
-      return;
-    }
-
-    fetchingActivity.current = true;
-    setLoadingActivity(true);
-
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await axios.get(`${apiUrl}/api/activity`, {
-        headers: {
-          Authorization: `Bearer ${user.token}`
-        }
-      });
-      
-      // Defensive programming: ensure we have an array
-      let activityData = response.data;
-      
-      // Log the response for debugging in production
-      console.log('Activity API response:', { 
-        status: response.status,
-        data: response.data,
-        dataType: typeof response.data,
-        isArray: Array.isArray(response.data)
-      });
-      
-      // Handle different response structures
-      if (response.data && typeof response.data === 'object') {
-        if (Array.isArray(response.data)) {
-          activityData = response.data;
-        } else if (response.data.data && Array.isArray(response.data.data)) {
-          // Handle wrapped response like { data: [...] }
-          activityData = response.data.data;
-        } else if (response.data.activity && Array.isArray(response.data.activity)) {
-          // Handle response like { activity: [...] }
-          activityData = response.data.activity;
-        } else {
-          // Fallback: if it's an object but not an array, create empty array
-          console.warn('Unexpected activity response structure:', response.data);
-          activityData = [];
-        }
-      } else {
-        // If response.data is null, undefined, or not an object, use empty array
-        activityData = [];
-      }
-      
-      // Ensure it's definitely an array
-      if (!Array.isArray(activityData)) {
-        console.error('Failed to convert activity response to array, using empty array');
-        activityData = [];
-      }
-      
-      // Update cache
-      dataCache.current.activity = {
-        data: activityData,
-        timestamp: Date.now()
-      };
-      
-      setRecentActivity(activityData);
-      setActivityError(null);
-    } catch (error: any) {
-      console.error('Error fetching recent activity:', error);
-      if (error.response?.status === 429) {
-        setActivityError('Rate limit exceeded. Data will retry automatically in a moment.');
-        // Auto-retry after 3 seconds for rate limit errors
-        setTimeout(() => {
-          if (user?.token) {
-            fetchRecentActivity(true);
-          }
-        }, 3000);
-      } else {
-        setActivityError('Failed to fetch recent activity');
-      }
-      // Ensure activity is set to empty array on error
-      setRecentActivity([]);
-    } finally {
-      setLoadingActivity(false);
-      fetchingActivity.current = false;
-    }
-  }, [user?.token]);
-
-  // Fetch upcoming events data with rate limiting protection
-  const fetchUpcomingEvents = useCallback(async (forceRefresh = false) => {
-    if (!user?.token) {
-      setEventsError('User not authenticated');
-      setLoadingEvents(false);
-      return;
-    }
-
-    // Check if request is already in progress
-    if (fetchingEvents.current) {
-      return;
-    }
-
-    // Check cache first (unless force refresh)
-    if (!forceRefresh && dataCache.current.events.data && isCacheValid(dataCache.current.events.timestamp)) {
-      setUpcomingEvents(dataCache.current.events.data);
-      setLoadingEvents(false);
-      return;
-    }
-
-    fetchingEvents.current = true;
-    setLoadingEvents(true);
-
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await axios.get(`${apiUrl}/api/events`, {
-        headers: {
-          Authorization: `Bearer ${user.token}`
-        }
-      });
-      
-      // Defensive programming: ensure we have an array
-      let eventsData = response.data;
-      
-      // Log the response for debugging in production
-      console.log('Events API response:', { 
-        status: response.status,
-        data: response.data,
-        dataType: typeof response.data,
-        isArray: Array.isArray(response.data)
-      });
-      
-      // Handle different response structures
-      if (response.data && typeof response.data === 'object') {
-        if (Array.isArray(response.data)) {
-          eventsData = response.data;
-        } else if (response.data.data && Array.isArray(response.data.data)) {
-          // Handle wrapped response like { data: [...] }
-          eventsData = response.data.data;
-        } else if (response.data.events && Array.isArray(response.data.events)) {
-          // Handle response like { events: [...] }
-          eventsData = response.data.events;
-        } else {
-          // Fallback: if it's an object but not an array, create empty array
-          console.warn('Unexpected events response structure:', response.data);
-          eventsData = [];
-        }
-      } else {
-        // If response.data is null, undefined, or not an object, use empty array
-        eventsData = [];
-      }
-      
-      // Ensure it's definitely an array
-      if (!Array.isArray(eventsData)) {
-        console.error('Failed to convert events response to array, using empty array');
-        eventsData = [];
-      }
-      
-      // Update cache
-      dataCache.current.events = {
-        data: eventsData,
-        timestamp: Date.now()
-      };
-      
-      setUpcomingEvents(eventsData);
-      setEventsError(null);
-    } catch (error: any) {
-      console.error('Error fetching upcoming events:', error);
-      if (error.response?.status === 429) {
-        setEventsError('Rate limit exceeded. Data will retry automatically in a moment.');
-        // Auto-retry after 3 seconds for rate limit errors
-        setTimeout(() => {
-          if (user?.token) {
-            fetchUpcomingEvents(true);
-          }
-        }, 3000);
-      } else {
-        setEventsError('Failed to fetch upcoming events');
-      }
-      // Ensure events is set to empty array on error
-      setUpcomingEvents([]);
-    } finally {
-      setLoadingEvents(false);
-      fetchingEvents.current = false;
-    }
-  }, [user?.token]);
-
   // Single effect to fetch all data when user token is available
   useEffect(() => {
     if (user?.token) {
       // Debounce the initial data fetch to prevent rapid successive calls
       debounce('initialFetch', () => {
-        fetchWatchlist();
-        fetchRecentActivity();
-        fetchUpcomingEvents();
+        // Watchlist, activity, and events are now handled by their respective infinite scroll hooks
+        // No need to manually call fetch functions here as they're handled in the hooks
         checkAlphaVantageApiKeyStatus();
       }, 500);
     }
@@ -700,7 +483,6 @@ const UserHome: React.FC = () => {
       // Clear cache first to ensure fresh data
       dataCache.current.watchlist.timestamp = 0;
       dataCache.current.activity.timestamp = 0;
-      dataCache.current.events.timestamp = 0;
 
       // Try to trigger backend data refresh, but don't let it block the UI update
       try {
@@ -716,7 +498,7 @@ const UserHome: React.FC = () => {
 
       // Always update the frontend regardless of backend refresh success
       await Promise.all([
-        fetchWatchlist(true),
+        fetchInfiniteWatchlist(true),
         fetchRecentActivity(true),
         fetchUpcomingEvents(true)
       ]);
@@ -802,8 +584,7 @@ const UserHome: React.FC = () => {
       // Clear cache and force refresh data after removing
       dataCache.current.watchlist.timestamp = 0;
       dataCache.current.activity.timestamp = 0;
-      dataCache.current.events.timestamp = 0;
-      fetchWatchlist(true);
+      fetchInfiniteWatchlist(true);
       fetchRecentActivity(true);
       fetchUpcomingEvents(true);
     } catch (error) {
@@ -819,13 +600,13 @@ const UserHome: React.FC = () => {
     setRateLimitActive(false);
     
     try {
-      // Clear cache to force fresh data
-      dataCache.current.watchlist.timestamp = 0;
-      dataCache.current.activity.timestamp = 0;
-      dataCache.current.events.timestamp = 0;
+      // Reset pagination and refresh all data
+      resetPagination();
+      resetActivityPagination();
+      resetEventsPagination();
       
       await Promise.all([
-        fetchWatchlist(true),
+        fetchInfiniteWatchlist(true),
         fetchRecentActivity(true),
         fetchUpcomingEvents(true)
       ]);
@@ -915,11 +696,11 @@ const UserHome: React.FC = () => {
                 style={{ filter: iconFilter }}
               />
               {/* Tier Badge - Scaled proportionally */}
-              <div className="absolute -top-1 -right-1 sm:-top-1 sm:-right-1">
+              {/* <div className="absolute -top-1 -right-1 sm:-top-1 sm:-right-1">
                 <div className={`w-6 h-6 sm:w-5 sm:h-5 flex items-center justify-center ${getUserTierInfo().iconColor}`}>
                   {getUserTierInfo().icon}
                 </div>
-              </div>
+              </div> */}
             </div>
           </div>
           
@@ -944,201 +725,73 @@ const UserHome: React.FC = () => {
           </div>
         </div>
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <button 
-            onClick={() => navigate('/sentiment')}
-            className={`${cardBgColor} p-4 rounded-lg border ${borderColor} hover:scale-105 transition-transform flex items-center space-x-3`}
-          >
-            <BarChart2 className="w-6 h-6 text-blue-500" />
-            <span className={textColor}>Sentiment Scraper</span>
-          </button>
-          <button 
-            onClick={() => navigate('/sec-filings')}
-            className={`${cardBgColor} p-4 rounded-lg border ${borderColor} hover:scale-105 transition-transform flex items-center space-x-3`}
-          >
-            <ListChecks className="w-6 h-6 text-blue-500" />
-            <span className={textColor}>SEC Filings</span>
-          </button>
-          <button 
-            onClick={() => navigate('/earnings')}
-            className={`${cardBgColor} p-4 rounded-lg border ${borderColor} hover:scale-105 transition-transform flex items-center space-x-3`}
-          >
-            <TrendingUp className="w-6 h-6 text-blue-500" />
-            <span className={textColor}>Earnings Monitor</span>
-          </button>
-        </div>
+        {/* Navigation */}
+        {/* <div className={`${cardBgColor} rounded-lg p-6 mb-6 border ${borderColor}`}>
+          <h2 className={`text-xl font-semibold ${textColor} mb-4 flex items-center`}>
+            <ArrowRight className="w-5 h-5 mr-2 text-blue-500" />
+            Navigation
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <button 
+              onClick={() => navigate('/sentiment')}
+              className={`${buttonContainerBg} p-4 rounded-lg border ${buttonContainerBorder} hover:scale-105 transition-transform flex items-center space-x-3`}
+            >
+              <BarChart2 className="w-6 h-6 text-blue-500" />
+              <span className={textColor}>Sentiment Scraper</span>
+            </button>
+            <button 
+              onClick={() => navigate('/sec-filings')}
+              className={`${buttonContainerBg} p-4 rounded-lg border ${buttonContainerBorder} hover:scale-105 transition-transform flex items-center space-x-3`}
+            >
+              <ListChecks className="w-6 h-6 text-blue-500" />
+              <span className={textColor}>SEC Filings</span>
+            </button>
+            <button 
+              onClick={() => navigate('/earnings')}
+              className={`${buttonContainerBg} p-4 rounded-lg border ${buttonContainerBorder} hover:scale-105 transition-transform flex items-center space-x-3`}
+            >
+              <TrendingUp className="w-6 h-6 text-blue-500" />
+              <span className={textColor}>Earnings Monitor</span>
+            </button>
+          </div>
+        </div> */}
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Watchlist */}
-          <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} h-[32rem] sm:h-96`}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className={`text-xl font-semibold ${textColor} flex items-center`}>
-                <Star className="w-5 h-5 mr-2 text-blue-500" />
-                Watchlist
-              </h2>
-              <div className="flex items-center space-x-2">
-                <button 
-                  onClick={() => setIsAddTickerModalOpen(true)}
-                  className={`text-sm ${buttonBgColor} text-white px-3 py-1 rounded`}
-                >
-                  Add Ticker
-                </button>
-                <button
-                  onClick={handleRefreshData}
-                  disabled={refreshingData || rateLimitActive}
-                  className={`p-2 rounded-full ${rateLimitActive ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-blue-600 hover:bg-blue-700'} text-white ${(refreshingData || rateLimitActive) ? 'opacity-50' : ''}`}
-                  title={refreshingData ? 'Refreshing...' : rateLimitActive ? 'Rate Limited...' : 'Refresh Data'}
-                >
-                  {refreshingData ? (
-                    <Loader2 size={18} className="text-white animate-spin" />
-                  ) : (
-                    <RefreshCw size={18} className="text-white" />
-                  )}
-                </button>
-              </div>
-            </div>
-            <div className="space-y-4 overflow-y-auto h-[26rem] sm:h-72">
-              {loadingWatchlist && (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className={`w-6 h-6 animate-spin ${secondaryTextColor}`} />
-                  <span className={`ml-2 ${secondaryTextColor}`}>Loading watchlist...</span>
-                </div>
-              )}
-              {watchlistError && <p className="text-red-500">Error: {watchlistError}</p>}
-              {!loadingWatchlist && !watchlistError && watchlist.length === 0 && (
-                <p className={secondaryTextColor}>Your watchlist is empty.</p>
-              )}
-              {!loadingWatchlist && !watchlistError && watchlist.length > 0 && (() => {
-                try {
-                  // Ensure watchlist is definitely an array before mapping
-                  const safeWatchlist = Array.isArray(watchlist) ? watchlist : [];
-                  return safeWatchlist.map((item) => (
-                    <div key={item.symbol || Math.random()} className={`py-3 border-b ${borderColor}`}>
-                      {/* Mobile Layout */}
-                      <div className="block sm:hidden">
-                        <div className="flex items-center justify-between mb-2">
-                          <div>
-                            <div className={`text-lg font-semibold ${textColor}`}>{item.symbol || 'N/A'}</div>
-                            <div className={`text-sm ${secondaryTextColor} truncate`}>{item.company_name || 'N/A'}</div>
-                          </div>
-                          <button
-                            className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                            onClick={() => {
-                              setTickerToRemove({ symbol: item.symbol, name: item.company_name });
-                              setShowConfirmDialog(true);
-                            }}
-                            title="Remove from watchlist"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                        <div className="flex items-center">
-                          <div className="flex-1 pl-6">
-                            <div className={`text-sm ${secondaryTextColor} mb-1`}>Current Price</div>
-                            <div className={`text-xl font-bold ${textColor}`}>
-                              {formatPrice(item.last_price)}
-                            </div>
-                          </div>
-                          <div className="flex-shrink-0 text-right pr-4">
-                            <div className={`text-sm ${secondaryTextColor} mb-1`}>Change</div>
-                            <div className={`text-lg font-medium ${getPriceChangeColor(item.price_change)}`}>
-                              {formatPriceChange(item.price_change)}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Desktop Layout */}
-                      <div className="hidden sm:grid sm:grid-cols-12 sm:gap-4 sm:items-center">
-                        {/* Company Info */}
-                        <div className="sm:col-span-5">
-                          <div className={`text-lg font-semibold ${textColor}`}>{item.symbol || 'N/A'}</div>
-                          <div className={`text-sm ${secondaryTextColor} truncate`}>{item.company_name || 'N/A'}</div>
-                        </div>
-                        
-                        {/* Price Info and Remove Button for Desktop */}
-                        <div className="sm:col-span-7 sm:grid sm:grid-cols-3 sm:gap-4 sm:items-center">
-                          {/* Current Price */}
-                          <div className="text-center">
-                            <div className={`text-xs ${secondaryTextColor} mb-1`}>Current Price</div>
-                            <div className={`text-lg font-semibold ${textColor}`}>
-                              {formatPrice(item.last_price)}
-                            </div>
-                          </div>
-                          
-                          {/* Change */}
-                          <div className="text-center">
-                            <div className={`text-xs ${secondaryTextColor} mb-1`}>Change</div>
-                            <div className={`text-sm font-medium ${getPriceChangeColor(item.price_change)}`}>
-                              {formatPriceChange(item.price_change)}
-                            </div>
-                          </div>
-                          
-                          {/* Remove Button */}
-                          <div className="flex justify-center">
-                            <button
-                              className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                              onClick={() => {
-                                setTickerToRemove({ symbol: item.symbol, name: item.company_name });
-                                setShowConfirmDialog(true);
-                              }}
-                              title="Remove from watchlist"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ));
-                } catch (error) {
-                  console.error('Error rendering watchlist:', error);
-                  return <p className="text-red-500">Error displaying watchlist data</p>;
-                }
-              })()}
-            </div>
-          </div>
+          <WatchlistSection
+            watchlist={watchlist}
+            isLoading={loadingWatchlist}
+            loadingProgress={watchlistProgress || 0}
+            loadingStage={watchlistStage || (loadingWatchlist ? 'Loading watchlist...' : '')}
+            error={watchlistError}
+            hasMore={hasMoreWatchlist && watchlist.length >= 10} // Enable infinite scroll when we have 10+ items
+            onLoadMore={handleLoadMoreWatchlist}
+            onAddTicker={() => setIsAddTickerModalOpen(true)}
+            onRemoveTicker={(symbol: string, name: string) => {
+              setTickerToRemove({ symbol, name });
+              setShowConfirmDialog(true);
+            }}
+            onRefresh={() => {
+              resetPagination();
+              fetchInfiniteWatchlist(true);
+            }}
+            refreshingData={refreshingData}
+            rateLimitActive={rateLimitActive}
+            isAddingTicker={isAddingTicker}
+            watchlistLimit={watchlistLimit}
+          />
 
           {/* Recent Activity */}
-          <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} h-96`}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className={`text-xl font-semibold ${textColor} flex items-center`}>
-                <Activity className="w-5 h-5 mr-2 text-blue-500" />
-                Recent Activity
-              </h2>
-            </div>
-            <div className="space-y-4 overflow-y-auto h-72">
-              {loadingActivity && (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className={`w-6 h-6 animate-spin ${secondaryTextColor}`} />
-                  <span className={`ml-2 ${secondaryTextColor}`}>Loading recent activity...</span>
-                </div>
-              )}
-              {activityError && <p className="text-red-500">Error: {activityError}</p>}
-              {!loadingActivity && !activityError && recentActivity.length === 0 && (
-                <p className={secondaryTextColor}>No recent activity.</p>
-              )}
-              {!loadingActivity && !activityError && recentActivity.length > 0 && (() => {
-                try {
-                  // Ensure recentActivity is definitely an array before mapping
-                  const safeActivity = Array.isArray(recentActivity) ? recentActivity : [];
-                  return safeActivity.map((activity) => (
-                    <div key={activity.id || Math.random()} className="flex items-center">
-                      <div>
-                        <p className={`font-medium ${textColor}`}>{activity.title || 'No title'}</p>
-                        <p className={`text-sm ${secondaryTextColor}`}>{formatActivityTime(activity.created_at)}</p>
-                      </div>
-                    </div>
-                  ));
-                } catch (error) {
-                  console.error('Error rendering recent activity:', error);
-                  return <p className="text-red-500">Error displaying activity data</p>;
-                }
-              })()}
-            </div>
-          </div>
+          <RecentActivitySection
+            activities={recentActivity}
+            isLoading={activityLoading}
+            loadingProgress={activityProgress || 0}
+            loadingStage={activityStage || (activityLoading ? 'Loading recent activity...' : '')}
+            error={activityError}
+            hasMore={hasMoreActivity}
+            onLoadMore={handleLoadMoreActivity}
+          />
 
           {/* Upcoming Events / Alpha Vantage Setup */}
           {checkingApiKeys ? (
@@ -1154,104 +807,21 @@ const UserHome: React.FC = () => {
             </div>
           ) : (
             // Normal upcoming events when Alpha Vantage is configured
-            <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} lg:col-span-2`}>
+            <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} lg:col-span-2 h-[32rem] sm:h-96`}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className={`text-xl font-semibold ${textColor} flex items-center`}>
                   <Clock className="w-5 h-5 mr-2 text-blue-500" />
                   Upcoming Events
                 </h2>
               </div>
-              <div className="space-y-4">
-                {loadingEvents && (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className={`w-6 h-6 animate-spin ${secondaryTextColor}`} />
-                    <span className={`ml-2 ${secondaryTextColor}`}>Loading upcoming events...</span>
-                  </div>
-                )}
-                {eventsError && <p className="text-red-500">Error: {eventsError}</p>}
-                {!loadingEvents && !eventsError && upcomingEvents.length === 0 && (
-                  <p className={secondaryTextColor}>No upcoming events.</p>
-                )}
-                {!loadingEvents && !eventsError && upcomingEvents.length > 0 && (() => {
-                  try {
-                    // Ensure upcomingEvents is definitely an array before mapping
-                    const safeEvents = Array.isArray(upcomingEvents) ? upcomingEvents : [];
-                    
-                    // Group events by symbol
-                    const eventsBySymbol = safeEvents.reduce((acc, event) => {
-                      const symbol = event.symbol || 'Unknown';
-                      if (!acc[symbol]) {
-                        acc[symbol] = [];
-                      }
-                      acc[symbol].push(event);
-                      return acc;
-                    }, {} as { [key: string]: typeof safeEvents });
-
-                    return Object.entries(eventsBySymbol).map(([symbol, symbolEvents]) => (
-                      <div key={symbol} className={`p-4 rounded-lg border ${borderColor} ${cardBgColor}`}>
-                        {/* Company Header */}
-                        <div className="flex items-center mb-3">
-                          <span className={`text-lg font-semibold ${textColor}`}>{symbol}</span>
-                          <span className={`text-sm ${secondaryTextColor} ml-2`}>
-                            ({symbolEvents.length} event{symbolEvents.length !== 1 ? 's' : ''})
-                          </span>
-                        </div>
-                        
-                        {/* Events Row */}
-                        <div className="flex space-x-4 overflow-x-auto">
-                          {symbolEvents.map((event) => (
-                            <div 
-                              key={event.id || Math.random()} 
-                              className={`min-w-64 p-3 rounded-lg border ${borderColor} bg-opacity-50 hover:bg-opacity-70 transition-all flex-shrink-0`}
-                            >
-                              <div className="flex items-center space-x-2 mb-2">
-                                {getEventIcon(event.event_type)}
-                                <span className={`text-sm font-medium ${textColor}`}>
-                                  {capitalizeFirstLetter(event.event_type || 'event')}
-                                </span>
-                              </div>
-                              <div className="mb-2">
-                                <p className={`text-sm ${secondaryTextColor}`}>
-                                  {formatDate(event.scheduled_at)}
-                                </p>
-                                <p className={`text-xs ${secondaryTextColor}`}>
-                                  {formatTime(event.scheduled_at)}
-                                </p>
-                              </div>
-                              <div className="flex items-center">
-                                {(() => {
-                                  const relativeTime = formatEventRelativeTime(event.scheduled_at);
-                                  if (!relativeTime) {
-                                    // Fallback to status if no relative time available
-                                    return (
-                                      <span className={`text-xs px-2 py-1 rounded-full ${
-                                        event.status === 'scheduled' 
-                                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                                          : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                      }`}>
-                                        {event.status || 'unknown'}
-                                      </span>
-                                    );
-                                  }
-                                  
-                                  const badgeStyle = getRelativeTimeBadgeStyle(relativeTime);
-                                  return (
-                                    <span className={`text-xs px-2 py-1 rounded-full ${badgeStyle.className}`}>
-                                      {relativeTime}
-                                    </span>
-                                  );
-                                })()}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ));
-                  } catch (error) {
-                    console.error('Error rendering upcoming events:', error);
-                    return <p className="text-red-500">Error displaying events data</p>;
-                  }
-                })()}
+              <div className="h-[26rem] sm:h-72 overflow-y-auto">
+                <UpcomingEventsSection
+                  events={upcomingEvents}
+                  isLoading={eventsLoading}
+                  error={eventsError}
+                  hasMore={hasMoreEvents && upcomingEvents.length >= 10} // Enable infinite scroll when we have 10+ events
+                  onLoadMore={handleLoadMoreEvents}
+                />
               </div>
             </div>
           )}

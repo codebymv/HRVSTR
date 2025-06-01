@@ -96,89 +96,219 @@ function extractInsiderRole(content) {
     // Default role if nothing else is found
     let role = 'Unknown Position';
     
-    // Common executive titles to look for
-    const commonTitles = [
-      // C-suite
-      'Chief Executive Officer', 'CEO', 'Chief Financial Officer', 'CFO',
-      'Chief Operating Officer', 'COO', 'Chief Technology Officer', 'CTO',
-      // Directors and officers
-      'Director', 'Board Member', 'Chairman', 'Chairperson', 'Chair',
-      'President', 'Vice President', 'VP', 'Executive Vice President', 'EVP',
-      'Senior Vice President', 'SVP', 'Managing Director', 'MD',
-      // Other roles
-      'Treasurer', 'Secretary', 'General Counsel', 'Controller',
-      '10% Owner', 'Principal Accounting Officer', 'PAO'
-    ];
+    // Enhanced role mapping for common abbreviations and titles
+    const roleMapping = {
+      'md': 'Managing Director',
+      'ceo': 'Chief Executive Officer',
+      'cfo': 'Chief Financial Officer',
+      'coo': 'Chief Operating Officer',
+      'cto': 'Chief Technology Officer',
+      'vp': 'Vice President',
+      'evp': 'Executive Vice President',
+      'svp': 'Senior Vice President',
+      'pao': 'Principal Accounting Officer',
+      'gc': 'General Counsel',
+      'chair': 'Chairman',
+      'chairperson': 'Chairman',
+      'pres': 'President',
+      'treas': 'Treasurer',
+      'sec': 'Secretary',
+      'dir': 'Director',
+      'officer': 'Officer',
+      'director': 'Director',
+      'trustee': 'Trustee',
+      'partner': 'Partner',
+      'founder': 'Founder',
+      'owner': '10% Owner',
+      '10%': '10% Owner',
+      'ten percent': '10% Owner'
+    };
     
-    // First, try to find a common title directly in the content
-    const titlePattern = new RegExp(`(${commonTitles.join('|')})`, 'i');
-    const directMatch = content.match(titlePattern);
+    // Helper function to decode HTML entities and clean text
+    function cleanExtractedRole(text) {
+      if (!text) return '';
+      
+      // Decode common HTML entities
+      const decoded = text
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&nbsp;/g, ' ');
+      
+      // Clean up whitespace and normalize
+      return decoded.replace(/\s+/g, ' ').trim();
+    }
     
-    if (directMatch) {
-      role = directMatch[1];
-      console.log(`Found role directly in content: ${role}`);
-    } else {
-      // Next, try to extract from specific title fields
-      const titleFieldPatterns = [
-        /\bTitle\b[^:]*:\s*([^\n]+)/i,
-        /\bPosition\b[^:]*:\s*([^\n]+)/i,
-        /Relationship[^:]*:\s*([^\n]+)/i,
-        /Relationship of Reporting Person[^:]*:\s*([^\n]+)/i,
-        /\bOfficer\b[^:]*:\s*([^\n]+)/i,
-        /\bRole\b[^:]*:\s*([^\n]+)/i
+    // Helper function to validate if extracted text is a real position
+    function isValidPosition(text) {
+      if (!text || text.length < 3) return false;
+      
+      // Reject document titles and form references
+      const invalidPatterns = [
+        /\bsec\s*form\s*4\b/i,
+        /\bform\s*4\b/i,
+        /\bdocument\b/i,
+        /\bxml\b/i,
+        /\bhtml\b/i,
+        /\bfiling\b/i,
+        /\btitle\b/i,
+        /\bheader\b/i,
+        /\bpage\b/i
       ];
       
-      for (const pattern of titleFieldPatterns) {
-        const match = content.match(pattern);
-        if (match && match[1]) {
-          const extractedRole = match[1].trim();
-          if (extractedRole && extractedRole.length < 50) { // Sanity check on length
-            role = extractedRole;
-            console.log(`Found role in title field: ${role}`);
-            break;
-          }
-        }
-      }
+      return !invalidPatterns.some(pattern => pattern.test(text));
+    }
+    
+    // Clean the content for better pattern matching
+    const cleanContent = content.toLowerCase().replace(/[^\w\s]/g, ' ');
+    
+    // FIRST: Check for XML boolean flags specifically (these need special handling)
+    if (content.includes('isDirector') && (content.includes('>true<') || content.includes('="true"') || /isDirector[^>]*>[^<]*true/i.test(content))) {
+      role = 'Director';
+      console.log('Detected Director role from XML isDirector flag');
+      return role;
+    } else if (content.includes('isOfficer') && (content.includes('>true<') || content.includes('="true"') || /isOfficer[^>]*>[^<]*true/i.test(content))) {
+      role = 'Officer';
+      console.log('Detected Officer role from XML isOfficer flag');
+      return role;
+    } else if (content.includes('isTenPercentOwner') && (content.includes('>true<') || content.includes('="true"') || /isTenPercentOwner[^>]*>[^<]*true/i.test(content))) {
+      role = '10% Owner';
+      console.log('Detected 10% Owner role from XML isTenPercentOwner flag');
+      return role;
+    }
+    
+    // Enhanced pattern matching for roles in various contexts
+    const rolePatterns = [
+      // XML-specific patterns for actual position fields (not document titles)
+      /<officertitle[^>]*>([^<]+)<\/officertitle>/i,
+      /<directortitle[^>]*>([^<]+)<\/directortitle>/i,
+      /<positiontitle[^>]*>([^<]+)<\/positiontitle>/i,
+      /<relationship[^>]*>([^<]+)<\/relationship>/i,
       
-      // If we still don't have a good title, look for individual words that indicate a role
-      if (role === 'Unknown Position') {
-        // Look for keywords that might indicate a role
-        const roleKeywords = [
-          'director', 'officer', 'executive', 'president', 'chief', 'chairman', 
-          'owner', 'principal', 'vice', 'senior', 'managing', 'general', 'counsel',
-          'secretary', 'treasurer', 'controller', 'member', 'partner', 'trustee'
-        ];
+      // Text-based patterns with better context
+      /\bofficer\s+title[:\s]+([^.\n]+)/i,
+      /\bdirector\s+title[:\s]+([^.\n]+)/i,
+      /\bposition[:\s]+([^.\n]+)/i,
+      /\brole[:\s]+([^.\n]+)/i,
+      /\btitle[:\s]+([^.\n]+)/i,
+      
+      // Common role patterns with capture groups
+      /\b(chief\s+executive\s+officer|ceo)\b/i,
+      /\b(chief\s+financial\s+officer|cfo)\b/i,
+      /\b(chief\s+operating\s+officer|coo)\b/i,
+      /\b(chief\s+technology\s+officer|cto)\b/i,
+      /\b(managing\s+director|md)\b/i,
+      /\b(vice\s+president|vp)\b/i,
+      /\b(executive\s+vice\s+president|evp)\b/i,
+      /\b(senior\s+vice\s+president|svp)\b/i,
+      /\b(chairman)\b/i,
+      /\b(chairperson)\b/i,
+      /\b(president)\b/i,
+      /\b(treasurer)\b/i,
+      /\b(secretary)\b/i,
+      /\b(director)\b/i,
+      /\b(officer)\b/i,
+      /\b(trustee)\b/i,
+      /\b(partner)\b/i,
+      /\b(founder)\b/i,
+      /\b(10\s*%\s*owner)\b/i,
+      /\b(ten\s*percent\s*owner)\b/i
+    ];
+    
+    // Try each pattern
+    for (const pattern of rolePatterns) {
+      const match = content.match(pattern);
+      if (match) {
+        let foundRole = match[1] || match[0];
+        foundRole = cleanExtractedRole(foundRole);
         
-        for (const keyword of roleKeywords) {
-          const keywordPattern = new RegExp(`\\b${keyword}\\b[^\\n\\r,.]*`, 'i');
-          const match = content.match(keywordPattern);
-          if (match) {
-            role = match[0].trim();
-            console.log(`Found role using keyword '${keyword}': ${role}`);
-            break;
+        console.log(`Found role pattern: "${foundRole}" using pattern: ${pattern}`);
+        
+        // Validate that this is actually a position, not a document title
+        if (!isValidPosition(foundRole)) {
+          console.log(`Rejected invalid position: "${foundRole}"`);
+          continue;
+        }
+        
+        // Convert to lowercase for mapping check
+        const lowerRole = foundRole.toLowerCase();
+        
+        // Check if it's a mapped abbreviation
+        if (roleMapping[lowerRole]) {
+          role = roleMapping[lowerRole];
+          console.log(`Mapped "${foundRole}" to "${role}"`);
+          break;
+        }
+        
+        // Clean up and capitalize properly
+        if (foundRole.length >= 3 && foundRole.length <= 50) {
+          // Clean up any remaining XML artifacts
+          foundRole = foundRole.replace(/[<>]/g, '').replace(/\btrue\b/g, '').trim();
+          
+          // Skip if it's still mostly XML junk
+          if (foundRole.includes('>') || foundRole.includes('<') || foundRole.includes('xml')) {
+            continue;
           }
+          
+          // Properly capitalize the role
+          role = foundRole
+            .split(' ')
+            .map(word => {
+              // Handle special cases like & and common abbreviations
+              if (word === '&') return '&';
+              if (word.toUpperCase() === 'CEO' || word.toUpperCase() === 'CFO' || 
+                  word.toUpperCase() === 'COO' || word.toUpperCase() === 'CTO') {
+                return word.toUpperCase();
+              }
+              return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+            })
+            .join(' ');
+          console.log(`Cleaned role: "${role}"`);
+          break;
         }
       }
     }
     
-    // Clean up the role if we found something
-    if (role !== 'Unknown Position') {
-      // Remove any Form 4 text
-      role = role.replace(/\bForm\s*4\b/i, '').trim();
+    // Final fallback: look for context clues
+    if (role === 'Unknown Position') {
+      const contextClues = [
+        { pattern: /\bissuer\b/i, role: 'Issuer' },
+        { pattern: /\bboard\s*member\b/i, role: 'Board Member' },
+        { pattern: /\bexecutive\b/i, role: 'Executive' },
+        { pattern: /\bmember\b/i, role: 'Board Member' },
+        { pattern: /\bmanager\b/i, role: 'Manager' },
+        { pattern: /\banalyst\b/i, role: 'Analyst' }
+      ];
       
-      // Capitalize first letter of each word for consistency
-      role = role.split(' ').map(word => {
-        if (word.length > 0) {
-          return word[0].toUpperCase() + word.substring(1).toLowerCase();
+      for (const clue of contextClues) {
+        if (clue.pattern.test(content)) {
+          role = clue.role;
+          console.log(`Assigned role "${role}" based on context clue`);
+          break;
         }
-        return word;
-      }).join(' ');
+      }
     }
     
+    // If still unknown, try to infer from company indicators
+    if (role === 'Unknown Position') {
+      // If content suggests this is a company/entity filing
+      if (/\b(inc|corp|corporation|llc|ltd|company|holding|fund|trust|group)\b/i.test(content)) {
+        role = 'Entity/Issuer';
+        console.log('Assigned "Entity/Issuer" role based on company indicators');
+      } else {
+        // Default for individual persons
+        role = 'Executive';
+        console.log('Assigned default "Executive" role for individual');
+      }
+    }
+    
+    console.log(`Final extracted role: ${role}`);
     return role;
   } catch (error) {
-    console.error(`[insiderExtractor] Error extracting insider role: ${error.message}`);
-    return 'Unknown Position';
+    console.error(`[insiderExtractor] Error extracting role: ${error.message}`);
+    return 'Executive'; // Default fallback
   }
 }
 

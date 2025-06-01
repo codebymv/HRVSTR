@@ -19,13 +19,18 @@ import {
   Database,
   Monitor,
   BarChart3,
-  DollarSign
+  DollarSign,
+  Star,
+  Crown,
+  Zap,
+  Building
 } from 'lucide-react';
 // import { Bell, Search, User, Sun, Moon } from 'lucide-react'; // Commented out for now
 import { useLocation } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { AuthButton } from './AuthButton';
 import { useAuth } from '../contexts/AuthContext';
+import { useTier } from '../contexts/TierContext';
 
 const Navbar: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -33,6 +38,7 @@ const Navbar: React.FC = () => {
   const { theme } = useTheme();
   const location = useLocation();
   const { isAuthenticated } = useAuth();
+  const { tierInfo } = useTier();
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   
@@ -108,6 +114,45 @@ const Navbar: React.FC = () => {
     setIsSettingsExpanded(false);
   };
 
+  // Helper function to get user tier information with icon and color
+  const getUserTierInfo = () => {
+    // Use TierContext tierInfo instead of hardcoded user data
+    const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
+    
+    const tierData = {
+      free: {
+        name: 'HRVSTR Free',
+        icon: <Star className="w-4 h-4" />,
+        iconColor: isLight ? 'text-gray-600' : 'text-gray-300',
+        textColor: isLight ? 'text-gray-600' : 'text-gray-300',
+        bgColor: isLight ? 'bg-gray-200' : 'bg-gray-800'
+      },
+      pro: {
+        name: 'HRVSTR Pro',
+        icon: <Crown className="w-4 h-4" />,
+        iconColor: isLight ? 'text-blue-600' : 'text-blue-400',
+        textColor: isLight ? 'text-blue-600' : 'text-blue-400',
+        bgColor: isLight ? 'bg-blue-200' : 'bg-blue-900'
+      },
+      elite: {
+        name: 'HRVSTR Elite',
+        icon: <Zap className="w-4 h-4" />,
+        iconColor: isLight ? 'text-purple-600' : 'text-purple-400',
+        textColor: isLight ? 'text-purple-600' : 'text-purple-400',
+        bgColor: isLight ? 'bg-purple-200' : 'bg-purple-900'
+      },
+      institutional: {
+        name: 'HRVSTR Institutional',
+        icon: <Building className="w-4 h-4" />,
+        iconColor: isLight ? 'text-emerald-600' : 'text-emerald-400',
+        textColor: isLight ? 'text-emerald-600' : 'text-emerald-400',
+        bgColor: isLight ? 'bg-emerald-200' : 'bg-emerald-900'
+      }
+    };
+
+    return tierData[currentTier as keyof typeof tierData] || tierData.free;
+  };
+
   return (
     <header className={`${bgColor} border-b ${borderColor} sticky top-0 z-50 relative`}>
       <div className="container mx-auto px-4">
@@ -156,6 +201,12 @@ const Navbar: React.FC = () => {
           {/* User Controls */}
           <div className="flex items-center gap-3 ml-4">             
 
+            {/* User Tier Icon - only show when authenticated and not on free tier */}
+            {isAuthenticated && tierInfo?.tier?.toLowerCase() !== 'free' && (
+              <div className={`w-6 h-6 sm:w-5 sm:h-5 flex items-center justify-center ${getUserTierInfo().iconColor}`}>
+                {getUserTierInfo().icon}
+              </div>
+            )}
             
             {/* Auth Button for login/logout */}
             <div className="flex items-center">

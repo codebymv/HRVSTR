@@ -2,6 +2,8 @@
  * SEC EDGAR Full-Text Search API utilities
  * Provides functions for searching SEC filings using the EDGAR Full-Text Search API
  */
+const axios = require('axios');
+const { secRateLimiter } = require('./utils/rateLimiter');
 const cacheUtils = require('../../utils/cache');
 
 /**
@@ -32,20 +34,73 @@ async function searchSecFilings(query, options = {}) {
     return cacheUtils.getCachedItem('sec-search', cacheKey);
   }
   
-  // In this environment, we'll return mock data instead of making actual API calls
-  console.log(`[searchUtil] Generating mock search results for query: ${query}`);
+  // Build search parameters
+  const searchParams = new URLSearchParams({
+    q: query,
+    category: category,
+    from: from,
+    size: size
+  });
   
-  // Generate mock search results based on the query
-  const mockResults = generateMockSearchResults(query, category, size);
+  console.log(`[searchUtil] Searching SEC filings with query: ${query}`);
   
-  // Cache the mock results
-  cacheUtils.setCachedItem('sec-search', cacheKey, mockResults, cacheTtl);
+  try {
+    // Make rate-limited request to SEC EDGAR Full-Text Search API
+    const response = await secRateLimiter.scheduleRequest(async () => {
+      return axios.get(
+        `https://efts.sec.gov/LATEST/search-index?${searchParams}`,
+        { 
+          headers: { 
+            'User-Agent': 'HRVSTR Financial Analysis Platform (educational purposes) contact@example.com',
+            'Accept': 'application/json',
+            'Host': 'efts.sec.gov'
+          },
+          timeout: 30000, // Increase timeout to 30 seconds
+          validateStatus: function (status) {
+            return status < 500; // Accept anything less than 500 as valid
+          }
+        }
+      );
+    });
+    
+    // Handle rate limiting response
+    if (response.status === 429) {
+      console.warn(`[searchUtil] Rate limited for query "${query}". Using fallback data.`);
+      const mockResults = generateMockSearchResults(query, category, size);
+      // Cache the mock results for a shorter time
+      cacheUtils.setCachedItem('sec-search', cacheKey, mockResults, 5 * 60 * 1000); // 5 minutes
+      return mockResults;
+    }
+    
+    // Cache successful results
+    cacheUtils.setCachedItem('sec-search', cacheKey, response.data, cacheTtl);
+    
+    return response.data;
+  } catch (error) {
+    const isRateLimit = error.response?.status === 429;
+    const isServerError = error.response?.status >= 500;
+    
+    if (isRateLimit) {
+      console.warn(`[searchUtil] Rate limited for query "${query}". Using fallback data.`);
+    } else if (isServerError) {
+      console.warn(`[searchUtil] Server error (${error.response?.status}) for query "${query}". Using fallback data.`);
+    } else {
+      console.error(`[searchUtil] SEC search error for query "${query}":`, error.message);
+    }
   
-  return mockResults;
+    // If the search fails, return mock data as fallback to avoid breaking the system
+    console.log(`[searchUtil] Falling back to mock data due to API error`);
+    const mockResults = generateMockSearchResults(query, category, size);
+  
+    // Cache the mock results for a shorter time
+    cacheUtils.setCachedItem('sec-search', cacheKey, mockResults, 5 * 60 * 1000); // 5 minutes
+  
+    return mockResults;
+  }
 }
 
 /**
- * Generate mock search results for testing
+ * Generate mock search results for testing/fallback
  * @param {string} query - Search query
  * @param {string} category - Filing category
  * @param {number} size - Number of results to return

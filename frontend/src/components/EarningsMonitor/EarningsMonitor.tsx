@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { TimeRange } from '../../types';
-import { EarningsEvent, EarningsAnalysis, fetchUpcomingEarnings, analyzeEarningsSurprise } from '../../services/earningsService';
-import { RefreshCw, AlertTriangle, Info, ArrowUpDown, TrendingUp, TrendingDown, BarChart2, Loader2 } from 'lucide-react';
+import { EarningsEvent, EarningsAnalysis, fetchUpcomingEarnings, analyzeEarningsSurprise, fetchUpcomingEarningsWithProgress, ProgressUpdate } from '../../services/earningsService';
+import { RefreshCw, AlertTriangle, Info, ArrowUpDown, TrendingUp, TrendingDown, BarChart2, Loader2, Crown } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useTier } from '../../contexts/TierContext';
+import { useTierLimits } from '../../hooks/useTierLimits';
 import ProgressBar from '../ProgressBar';
 
 interface EarningsMonitorProps {
@@ -11,7 +13,13 @@ interface EarningsMonitorProps {
 
 const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChange }) => {
   const { theme } = useTheme();
+  const { tierInfo } = useTier();
+  const { showTierLimitDialog } = useTierLimits();
   const isLight = theme === 'light';
+  
+  // Tier checking
+  const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
+  const hasProAccess = currentTier !== 'free';
   
   // Theme specific styling
   const cardBg = isLight ? 'bg-stone-300' : 'bg-gray-900';
@@ -24,7 +32,7 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
   const selectedBg = isLight ? 'bg-blue-100' : 'bg-blue-900/30'; // Background for selected items
   const analysisBg = isLight ? 'bg-stone-200' : 'bg-gray-800/90'; // Lighter background in light mode for better contrast
   
-  const [timeRange, setTimeRange] = useState<TimeRange>('1m');
+  const [timeRange, setTimeRange] = useState<TimeRange>('1w');
   const [loading, setLoading] = useState({
     upcomingEarnings: true,
     analysis: true
@@ -65,39 +73,41 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
     
     // Reset progress tracking
     setLoadingProgress(0);
-    setLoadingStage('Initializing earnings data...');
+    setLoadingStage('Starting earnings scraping...');
     if (onLoadingProgressChange) {
-      onLoadingProgressChange(0, 'Initializing earnings data...');
+      onLoadingProgressChange(0, 'Starting earnings scraping...');
     }
     
-    // Total steps in loading process
-    const totalSteps = 3;
-    
-    // Helper function to update progress
-    const updateProgress = (step: number, stage: string) => {
-      const progressPercentage = Math.round((step / totalSteps) * 100);
-      console.log(`Loading progress: ${progressPercentage}%, Stage: ${stage}`);
-      setLoadingProgress(progressPercentage);
-      setLoadingStage(stage);
-      
-      // Propagate to parent component if callback exists
-      if (onLoadingProgressChange) {
-        onLoadingProgressChange(progressPercentage, stage);
-      }
-    };
-    
     try {
-      // Step 1: Initialize loading
-      updateProgress(1, 'Fetching upcoming earnings...');
-      const earnings = await fetchUpcomingEarnings(timeRange);
+      // Use the new progress tracking system
+      const earnings = await fetchUpcomingEarningsWithProgress(
+        timeRange,
+        (progress: ProgressUpdate) => {
+          // Update progress with real-time information from backend
+          setLoadingProgress(progress.percent);
+          setLoadingStage(progress.message);
+          
+          if (onLoadingProgressChange) {
+            onLoadingProgressChange(progress.percent, progress.message);
+          }
+          
+          console.log(`📊 Real-time progress: ${progress.percent}% - ${progress.message}`);
+          if (progress.currentDate) {
+            console.log(`📅 Currently processing: ${progress.currentDate}`);
+          }
+        }
+      );
       
-      // Step 2: Process data
-      updateProgress(2, 'Processing earnings data...');
       setUpcomingEarnings(earnings);
-      
-      // Step 3: Complete loading
-      updateProgress(3, 'Finalizing earnings display...');
       setLoading(prev => ({ ...prev, upcomingEarnings: false }));
+      
+      // Final progress update
+      setLoadingProgress(100);
+      setLoadingStage(`Completed! Found ${earnings.length} earnings events`);
+      if (onLoadingProgressChange) {
+        onLoadingProgressChange(100, `Completed! Found ${earnings.length} earnings events`);
+      }
+      
     } catch (error) {
       console.error('Upcoming earnings error:', error);
       setErrors(prev => ({ 
@@ -105,6 +115,13 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
         upcomingEarnings: error instanceof Error ? error.message : 'Failed to fetch upcoming earnings data' 
       }));
       setLoading(prev => ({ ...prev, upcomingEarnings: false }));
+      
+      // Error progress update
+      setLoadingProgress(0);
+      setLoadingStage('Failed to load earnings data');
+      if (onLoadingProgressChange) {
+        onLoadingProgressChange(0, 'Failed to load earnings data');
+      }
     }
   };
 
@@ -213,6 +230,51 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
     return sortEarnings(upcomingEarnings);
   }, [upcomingEarnings, sortConfig]);
 
+  // Pro Upgrade Card Component for Advanced Earnings Analysis
+  const EarningsProUpgradeCard: React.FC = () => {
+    const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-800';
+    const borderColor = isLight ? 'border-stone-400' : 'border-gray-700';
+    const gradientFrom = isLight ? 'from-blue-500' : 'from-blue-600';
+    const gradientTo = isLight ? 'to-purple-600' : 'to-purple-700';
+    const buttonBg = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
+
+    return (
+      <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} text-center`}>
+        <div className={`w-12 h-12 rounded-full bg-gradient-to-r ${gradientFrom} ${gradientTo} flex items-center justify-center mx-auto mb-4`}>
+          <Crown className="w-6 h-6 text-white" />
+        </div>
+        <h3 className={`text-lg font-semibold ${textColor} mb-2`}>Advanced Earnings Analysis</h3>
+        <p className={`${subTextColor} text-sm mb-6`}>
+          Unlock detailed company information, trading ranges, risk analysis, and professional-grade earnings insights.
+        </p>
+        
+        <div className={`${isLight ? 'bg-stone-200' : 'bg-gray-700'} rounded-lg p-4 mb-6`}>
+          <h4 className={`text-sm font-medium ${textColor} mb-2`}>Pro Features Include:</h4>
+          <div className={`text-xs ${subTextColor} space-y-1 text-left`}>
+            <div>• Sector & Industry Analysis</div>
+            <div>• Daily & 52-Week Trading Ranges</div>
+            <div>• Risk Level Assessment</div>
+            <div>• Analysis Score & Ratings</div>
+            <div>• Enhanced EPS Data</div>
+          </div>
+        </div>
+        
+        <button
+          onClick={() => showTierLimitDialog(
+            'Advanced Earnings Analysis',
+            'Advanced earnings analysis including company information, trading ranges, and risk assessment is a Pro feature. Upgrade to access detailed financial insights.',
+            'Unlock comprehensive earnings analysis, risk scoring, and professional trading insights with HRVSTR Pro.',
+            'general'
+          )}
+          className={`${buttonBg} text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center mx-auto`}
+        >
+          <Crown className="w-4 h-4 mr-2" />
+          Upgrade to Pro
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div className={`p-6 ${textColor}`}>
       <div className={`${cardBg} rounded-lg p-4 border ${cardBorder}`}>
@@ -226,10 +288,8 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
                 value={timeRange}
                 onChange={(e) => setTimeRange(e.target.value as TimeRange)}
               >
-                <option value="1d">1 Day</option>
-                <option value="1w">1 Week</option>
-                <option value="1m">1 Month</option>
-                <option value="3m">3 Months</option>
+                <option value="1d">Today</option>
+                <option value="1w">This Week</option>
               </select>
             </div>
             <button 
@@ -264,61 +324,68 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
                 </div>
               ) : upcomingEarnings.length > 0 ? (
                 <div className="overflow-x-auto">
-                  <table className={`w-full text-sm text-left ${textColor}`}>
-                    <thead className={`text-xs ${subTextColor} uppercase ${tableHeaderBg}`}>
+                  <table className={`min-w-full ${textColor}`}>
+                    <thead className={`${tableHeaderBg} ${borderColor}`}>
                       <tr>
-                        <th className="px-4 py-3 cursor-pointer" onClick={() => handleSort('ticker')}>
-                          <div className="flex items-center">
-                            Ticker
-                            {sortConfig.key === 'ticker' && (
-                              <ArrowUpDown size={14} className="ml-1" />
-                            )}
-                          </div>
-                        </th>
-                        <th className="px-4 py-3 cursor-pointer" onClick={() => handleSort('reportDate')}>
-                          <div className="flex items-center">
-                            Report Date
-                            {sortConfig.key === 'reportDate' && (
-                              <ArrowUpDown size={14} className="ml-1" />
-                            )}
-                          </div>
-                        </th>
-                        <th className="px-4 py-3 cursor-pointer" onClick={() => handleSort('estEPS')}>
-                          <div className="flex items-center">
-                            Est. EPS
-                            {sortConfig.key === 'estEPS' && (
-                              <ArrowUpDown size={14} className="ml-1" />
-                            )}
-                          </div>
-                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Ticker</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Company</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Date</th>
                       </tr>
                     </thead>
                     <tbody className={`divide-y ${borderColor}`}>
-                      {sortedEarnings.map((earnings, index) => (
-                        <tr 
-                          key={`earnings-${earnings.ticker}-${index}`} 
-                          className={`${hoverBg} ${selectedTicker === earnings.ticker ? selectedBg : ''} cursor-pointer transition-colors`}
-                          onClick={() => {
-                            setSelectedTicker(earnings.ticker);
-                            loadAnalysis(earnings.ticker);
-                          }}
-                        >
-                          <td className="px-4 py-3 font-medium">{earnings.ticker}</td>
-                          <td className="px-4 py-3">
-                            {earnings.reportDate ? 
-                              new Date(earnings.reportDate).toLocaleDateString() : 
-                              'TBA'}
-                          </td>
-                          <td className="px-4 py-3">
-                            {typeof earnings.estEPS === 'number' 
-                              ? `$${earnings.estEPS.toFixed(2)}` 
-                              : typeof earnings.estimatedEPS === 'number' 
-                                ? `$${earnings.estimatedEPS.toFixed(2)}` 
-                                : `${earnings.estEPS || earnings.estimatedEPS || 'N/A'}`
-                            }
-                          </td>
-                        </tr>
-                      ))}
+                      {sortedEarnings
+                        .filter((earnings, index) => {
+                          // Final UI-level validation - filter out any invalid tickers
+                          if (!earnings.ticker || typeof earnings.ticker !== 'string' || earnings.ticker.trim() === '') {
+                            console.error('🚨 UI FILTER: Removing invalid ticker from render:', {
+                              index,
+                              earnings,
+                              ticker: earnings.ticker,
+                              type: typeof earnings.ticker
+                            });
+                            return false;
+                          }
+                          return true;
+                        })
+                        .map((earnings, index) => {
+                        // Defensive logging for any remaining edge cases
+                        if (!earnings.ticker || typeof earnings.ticker !== 'string' || earnings.ticker.trim() === '') {
+                          console.error('🚨 RENDERING ITEM WITH INVALID TICKER:', {
+                            index,
+                            earnings,
+                            ticker: earnings.ticker,
+                            type: typeof earnings.ticker
+                          });
+                          // Skip rendering this item
+                          return null;
+                        }
+                        
+                        return (
+                          <tr 
+                            key={`earnings-${earnings.ticker}-${index}`} 
+                            className={`${hoverBg} ${selectedTicker === earnings.ticker ? selectedBg : ''} cursor-pointer transition-colors`}
+                            onClick={() => {
+                              // Validate ticker before processing
+                              if (earnings.ticker && typeof earnings.ticker === 'string' && earnings.ticker.trim() !== '') {
+                                setSelectedTicker(earnings.ticker);
+                                loadAnalysis(earnings.ticker);
+                              } else {
+                                console.warn('Invalid ticker symbol:', earnings.ticker);
+                              }
+                            }}
+                          >
+                            <td className="px-4 py-3 font-medium">{earnings.ticker}</td>
+                            <td className="px-4 py-3">
+                              {earnings.companyName || 'Unknown Company'}
+                            </td>
+                            <td className="px-4 py-3">
+                              {earnings.reportDate ? 
+                                new Date(earnings.reportDate).toLocaleDateString() : 
+                                'TBA'}
+                            </td>
+                          </tr>
+                        );
+                      }).filter(Boolean)} {/* Remove any null entries */}
                     </tbody>
                   </table>
                 </div>
@@ -363,83 +430,123 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
                     <div className={`${analysisBg} rounded-lg p-4`}>
                       <div className="flex items-center space-x-2 mb-2">
                         <BarChart2 size={20} className="text-blue-400" />
-                        <span className="text-sm font-medium">Historical Pattern</span>
+                        <span className="text-sm font-medium">Financial Metrics</span>
                       </div>
                       <div className="space-y-2">
                         <div className="flex justify-between">
-                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Beat Frequency:</span>
+                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Current Price:</span>
                           <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
-                            {earningsAnalysis.historicalPattern.beatFrequency.toFixed(1)}%
+                            {earningsAnalysis.currentPrice !== null 
+                              ? `$${earningsAnalysis.currentPrice.toFixed(2)}`
+                              : 'N/A'}
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Avg. Surprise:</span>
-                          <span className={earningsAnalysis.historicalPattern.averageSurprise > 0 ? 'text-green-500' : 'text-red-500'}>
-                            {earningsAnalysis.historicalPattern.averageSurprise > 0 ? '+' : ''}
-                            {earningsAnalysis.historicalPattern.averageSurprise.toFixed(2)}%
+                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Price Change:</span>
+                          <span className={
+                            earningsAnalysis.priceChangePercent === null
+                              ? isLight ? 'text-stone-600' : 'text-gray-400'
+                              : earningsAnalysis.priceChangePercent > 0 
+                                ? 'text-green-500' 
+                                : 'text-red-500'
+                          }>
+                            {earningsAnalysis.priceChangePercent !== null
+                              ? `${earningsAnalysis.priceChangePercent > 0 ? '+' : ''}${earningsAnalysis.priceChangePercent.toFixed(2)}%`
+                              : 'N/A'}
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Consistency:</span>
+                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Market Cap:</span>
                           <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
-                            {earningsAnalysis.historicalPattern.consistency.toFixed(1)}%
+                            {earningsAnalysis.marketCap !== null
+                              ? `$${(earningsAnalysis.marketCap / 1e9).toFixed(2)}B`
+                              : 'N/A'}
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Post-Earnings Drift:</span>
-                          <span className={earningsAnalysis.historicalPattern.postEarningsDrift > 0 ? 'text-green-500' : 'text-red-500'}>
-                            {earningsAnalysis.historicalPattern.postEarningsDrift > 0 ? '+' : ''}
-                            {earningsAnalysis.historicalPattern.postEarningsDrift.toFixed(2)}%
+                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>P/E Ratio:</span>
+                          <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
+                            {earningsAnalysis.pe !== null
+                              ? earningsAnalysis.pe.toFixed(1)
+                              : 'N/A'}
                           </span>
                         </div>
                       </div>
                     </div>
 
+                    {hasProAccess ? (
+                      <div className={`${analysisBg} rounded-lg p-4`}>
+                        <div className="flex items-center space-x-2 mb-2">
+                          {earningsAnalysis.priceChangePercent && earningsAnalysis.priceChangePercent > 0 ? (
+                            <TrendingUp size={20} className="text-green-500" />
+                          ) : (
+                            <TrendingDown size={20} className="text-red-500" />
+                          )}
+                          <span className="text-sm font-medium">Company & Trading Info</span>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Sector:</span>
+                            <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
+                              {earningsAnalysis.sector || 'N/A'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Day Range:</span>
+                            <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
+                              {earningsAnalysis.dayLow !== null && earningsAnalysis.dayHigh !== null
+                                ? `$${earningsAnalysis.dayLow.toFixed(2)} - $${earningsAnalysis.dayHigh.toFixed(2)}`
+                                : 'N/A'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>52W Range:</span>
+                            <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
+                              {earningsAnalysis.yearLow !== null && earningsAnalysis.yearHigh !== null
+                                ? `$${earningsAnalysis.yearLow.toFixed(2)} - $${earningsAnalysis.yearHigh.toFixed(2)}`
+                                : 'N/A'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>EPS:</span>
+                            <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
+                              {earningsAnalysis.eps !== null
+                                ? `$${earningsAnalysis.eps.toFixed(2)}`
+                                : 'N/A'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <EarningsProUpgradeCard />
+                    )}
+                  </div>
+
+                  {hasProAccess && (
                     <div className={`${analysisBg} rounded-lg p-4`}>
-                      <div className="flex items-center space-x-2 mb-2">
-                        {earningsAnalysis.direction === 'positive' ? (
-                          <TrendingUp size={20} className="text-green-500" />
-                        ) : (
-                          <TrendingDown size={20} className="text-red-500" />
+                      <h3 className="text-sm font-medium mb-2">Analysis Summary</h3>
+                      <p className={`${isLight ? 'text-stone-800' : 'text-gray-200'} text-sm`}>
+                        {earningsAnalysis.companyName} ({earningsAnalysis.sector}) 
+                        {earningsAnalysis.analysisScore !== undefined && earningsAnalysis.riskLevel ? (
+                          <>
+                            {' '}has an analysis score of <span className="text-blue-500 font-medium">{earningsAnalysis.analysisScore}</span>
+                            {' '}with a <span className={
+                              earningsAnalysis.riskLevel === 'High' ? 'text-red-500' :
+                              earningsAnalysis.riskLevel === 'Medium' ? 'text-yellow-500' : 'text-green-500'
+                            }>{earningsAnalysis.riskLevel}</span> risk level.
+                          </>
+                        ) : ''}
+                        {earningsAnalysis.dataLimitations && earningsAnalysis.dataLimitations.length > 0 && (
+                          <>
+                            {' '}
+                            <span className={isLight ? 'text-stone-600' : 'text-gray-400'}>
+                              Note: {earningsAnalysis.dataLimitations.join(', ')}.
+                            </span>
+                          </>
                         )}
-                        <span className="text-sm font-medium">Latest Earnings</span>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Surprise:</span>
-                          <span className={earningsAnalysis.surprisePercentage > 0 ? 'text-green-500' : 'text-red-500'}>
-                            {earningsAnalysis.surprisePercentage > 0 ? '+' : ''}
-                            {earningsAnalysis.surprisePercentage.toFixed(2)}%
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Magnitude:</span>
-                          <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
-                            {earningsAnalysis.magnitude.toFixed(2)}%
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Market Reaction:</span>
-                          <span className={earningsAnalysis.marketReaction.immediateReaction > 0 ? 'text-green-500' : 'text-red-500'}>
-                            {earningsAnalysis.marketReaction.immediateReaction > 0 ? '+' : ''}
-                            {earningsAnalysis.marketReaction.immediateReaction.toFixed(2)}%
-                          </span>
-                        </div>
-                      </div>
+                      </p>
                     </div>
-                  </div>
-
-                  <div className={`${analysisBg} rounded-lg p-4`}>
-                    <h3 className="text-sm font-medium mb-2">Post-Earnings Drift Prediction</h3>
-                    <p className={`${isLight ? 'text-stone-800' : 'text-gray-200'} text-sm`}>
-                      Based on historical patterns, {selectedTicker} typically experiences a{' '}
-                      <span className={earningsAnalysis.historicalPattern.postEarningsDrift > 0 ? 'text-green-500' : 'text-red-500'}>
-                        {earningsAnalysis.historicalPattern.postEarningsDrift > 0 ? 'positive' : 'negative'}{' '}
-                        post-earnings drift of {Math.abs(earningsAnalysis.historicalPattern.postEarningsDrift).toFixed(2)}%
-                      </span>
-                      {' '}in the week following earnings.
-                    </p>
-                  </div>
+                  )}
                 </div>
               ) : (
                 <div className={`flex flex-col items-center justify-center p-10 ${subTextColor} text-center`}>

@@ -199,6 +199,78 @@ const InsiderTradesTab: React.FC<InsiderTradesTabProps> = ({
     };
   };
   
+  // Helper function to filter trades by timeRange
+  const filterTradesByTimeRange = (trades: InsiderTrade[], range: TimeRange): InsiderTrade[] => {
+    if (!trades || trades.length === 0) return trades;
+    
+    // Backend already filters by time range, so we don't need to filter again
+    // This prevents double-filtering that can exclude valid trades
+    console.log(`🗓️ FILTERING: Returning all ${trades.length} trades from backend (already filtered by timeRange ${range})`);
+    
+    // DEBUG: Log sample dates from the data
+    if (trades.length > 0) {
+      const sampleTrade = trades[0];
+      console.log(`🗓️ FRONTEND DEBUG: Sample trade date data:`, {
+        filingDate: sampleTrade.filingDate,
+        filingDateType: typeof sampleTrade.filingDate,
+        transactionDate: sampleTrade.transactionDate,
+        parsedFilingDate: new Date(sampleTrade.filingDate).toISOString(),
+        formattedForDisplay: new Date(sampleTrade.filingDate).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        })
+      });
+      
+      // Log first 3 trades' dates
+      trades.slice(0, 3).forEach((trade, index) => {
+        console.log(`🗓️ FRONTEND Trade ${index + 1} dates:`, {
+          ticker: trade.ticker,
+          filingDate: trade.filingDate,
+          formatted: new Date(trade.filingDate).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+          })
+        });
+      });
+    }
+    
+    return trades;
+    
+    /* Original filtering logic - disabled to prevent double filtering
+    const now = new Date();
+    let cutoffDate: Date;
+    
+    switch (range) {
+      case '1w':
+        cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 days ago
+        break;
+      case '1m':
+        cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
+        break;
+      case '3m':
+        cutoffDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000); // 90 days ago
+        break;
+      case '6m':
+        cutoffDate = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000); // 180 days ago
+        break;
+      default:
+        return trades; // Return all if unknown range
+    }
+    
+    console.log(`🗓️ FILTERING: Filtering ${trades.length} trades for timeRange ${range}, cutoff: ${cutoffDate.toISOString()}`);
+    
+    const filtered = trades.filter(trade => {
+      const filingDate = new Date(trade.filingDate);
+      return filingDate >= cutoffDate;
+    });
+    
+    console.log(`🗓️ FILTERING: Filtered down to ${filtered.length} trades within ${range} timeRange`);
+    return filtered;
+    */
+  };
+
   // Load data from API
   const loadData = async (refresh: boolean = false) => {
     console.log(`🔄 INSIDER TAB: Loading insider trades for time range: ${timeRange}, refresh: ${refresh}`);
@@ -232,23 +304,34 @@ const InsiderTradesTab: React.FC<InsiderTradesTabProps> = ({
             console.log('🌊 INSIDER TAB: Stream completed with data:', data);
             streamCompleted = true;
             
-            const trades = data.insiderTrades || [];
-            setInsiderTrades(trades);
+            const allTrades = data.insiderTrades || [];
+            // Apply frontend timeRange filtering
+            const filteredTrades = filterTradesByTimeRange(allTrades, timeRange);
+            setInsiderTrades(filteredTrades);
             
             // Analyze for abnormal activity
-            if (trades.length > 0) {
-              detectAbnormalActivity(trades);
+            if (filteredTrades.length > 0) {
+              detectAbnormalActivity(filteredTrades);
             }
             
-            console.log(`🌊 INSIDER TAB: Calling onLoadingChange with ${trades.length} trades`);
-            onLoadingChange(false, 100, 'Insider trades loaded successfully', trades, null);
+            console.log(`🌊 INSIDER TAB: Calling onLoadingChange with ${filteredTrades.length} filtered trades`);
+            onLoadingChange(false, 100, 'Insider trades loaded successfully', filteredTrades, null);
           },
           // Error callback
           (error) => {
             console.error('🌊 INSIDER TAB: Stream error:', error);
             streamCompleted = true;
-            setError(error);
-            onLoadingChange(false, 0, 'Error loading insider trades', [], error);
+            // Extract user-friendly error message from error object or string
+            let errorMessage: string;
+            if (typeof error === 'string') {
+              errorMessage = error;
+            } else if (error && typeof error === 'object') {
+              errorMessage = (error as any).userMessage || (error as any).message || 'Failed to load insider trades data';
+            } else {
+              errorMessage = 'Failed to load insider trades data';
+            }
+            setError(errorMessage);
+            onLoadingChange(false, 0, 'Error loading insider trades', [], errorMessage);
           }
         );
         
@@ -284,30 +367,35 @@ const InsiderTradesTab: React.FC<InsiderTradesTabProps> = ({
 
         // Step 1: Fetch insider trades with refresh parameter
         updateProgress(1, 'Fetching insider trades data...');
-        const trades = await fetchInsiderTrades(timeRange, refresh);
-        console.log(`📡 INSIDER TAB: Received ${trades.length} insider trades from API`);
+        const allTrades = await fetchInsiderTrades(timeRange, refresh);
+        console.log(`📡 INSIDER TAB: Received ${allTrades.length} insider trades from API`);
+        
+        // Step 2: Apply frontend timeRange filtering
+        updateProgress(2, 'Filtering trades by time range...');
+        const filteredTrades = filterTradesByTimeRange(allTrades, timeRange);
+        console.log(`📡 INSIDER TAB: Filtered to ${filteredTrades.length} trades for ${timeRange} range`);
         
         // Log a sample trade to help with debugging
-        if (trades.length > 0) {
-          console.log('📡 INSIDER TAB: Sample insider trade:', JSON.stringify(trades[0], null, 2));
+        if (filteredTrades.length > 0) {
+          console.log('📡 INSIDER TAB: Sample filtered insider trade:', JSON.stringify(filteredTrades[0], null, 2));
         }
         
-        // Update state with trades
-        setInsiderTrades(trades);
+        // Update state with filtered trades
+        setInsiderTrades(filteredTrades);
         
-        // Step 2: Analyze insider trades for abnormal activity if we have data
-        updateProgress(2, 'Analyzing insider trading patterns...');
-        if (trades.length > 0) {
-          detectAbnormalActivity(trades);
+        // Step 3: Analyze insider trades for abnormal activity if we have data
+        updateProgress(3, 'Analyzing insider trading patterns...');
+        if (filteredTrades.length > 0) {
+          detectAbnormalActivity(filteredTrades);
         } else {
-          console.warn('📡 INSIDER TAB: No insider trades data available for analysis');
+          console.warn('📡 INSIDER TAB: No insider trades data available for analysis after filtering');
         }
         
         // Final steps
         updateProgress(5, 'Finalizing insider trades display...');
         setTimeout(() => {
-          console.log(`📡 INSIDER TAB: Calling onLoadingChange with ${trades.length} trades (regular API)`);
-          onLoadingChange(false, 100, 'Insider trades loaded successfully', trades, null);
+          console.log(`📡 INSIDER TAB: Calling onLoadingChange with ${filteredTrades.length} filtered trades (regular API)`);
+          onLoadingChange(false, 100, 'Insider trades loaded successfully', filteredTrades, null);
         }, 300);
       }
     } catch (error) {
@@ -424,11 +512,13 @@ const InsiderTradesTab: React.FC<InsiderTradesTabProps> = ({
     // Create a unique key for the current load parameters
     const currentParams = { timeRange, forceReload };
     const paramsChanged = JSON.stringify(currentParams) !== JSON.stringify(lastLoadParamsRef.current);
+    const timeRangeChanged = timeRange !== lastLoadParamsRef.current.timeRange;
     
     console.log(`🔄 INSIDER TAB: useEffect triggered`, {
       isLoading,
       isLoadingRef: isLoadingRef.current,
       paramsChanged,
+      timeRangeChanged,
       forceReload,
       timeRange,
       initialDataLength: initialData.length,
@@ -438,9 +528,9 @@ const InsiderTradesTab: React.FC<InsiderTradesTabProps> = ({
     
     // Only load if:
     // 1. We're supposed to be loading AND haven't started yet
-    // 2. OR the parameters have changed (timeRange or forceReload)
+    // 2. OR the parameters have changed (timeRange or forceReload) - this should trigger fresh data
     // 3. OR forceReload is explicitly requested (manual refresh)
-    if ((isLoading && !isLoadingRef.current) || (paramsChanged && forceReload) || (forceReload && !isLoadingRef.current)) {
+    if ((isLoading && !isLoadingRef.current) || (paramsChanged && (forceReload || timeRangeChanged)) || (forceReload && !isLoadingRef.current)) {
       console.log(`🔄 INSIDER TAB: Conditions met, starting loading process`);
       
       // Mark that we've started the loading process
@@ -448,18 +538,18 @@ const InsiderTradesTab: React.FC<InsiderTradesTabProps> = ({
       lastLoadParamsRef.current = currentParams;
       
       // Determine if we should use cached data or fetch fresh
-      // Never use cache if forceReload is requested (manual refresh)
-      const hasValidCache = initialData && initialData.length > 0 && !forceReload;
+      // Never use cache if forceReload is requested (manual refresh) OR timeRange changed
+      const hasValidCache = initialData && initialData.length > 0 && !forceReload && !timeRangeChanged;
       
-      if (hasValidCache && !forceReload) {
+      if (hasValidCache && !forceReload && !timeRangeChanged) {
         console.log('📋 INSIDER TAB: Using cached insider trades data, no API call needed');
         // Process cached data for abnormal activity detection
         detectAbnormalActivity(initialData as InsiderTrade[]);
         // Notify parent that loading is complete
         onLoadingChange(false, 100, 'Insider trades loaded from cache', initialData, null);
       } else {
-        console.log(`🔄 INSIDER TAB: Loading fresh insider trades data: timeRange=${timeRange}, forceReload=${forceReload}`);
-        loadData(forceReload);
+        console.log(`🔄 INSIDER TAB: Loading fresh insider trades data: timeRange=${timeRange}, forceReload=${forceReload}, timeRangeChanged=${timeRangeChanged}`);
+        loadData(forceReload || paramsChanged);
       }
     } else if (!isLoading && !forceReload) {
       console.log(`🔄 INSIDER TAB: Resetting loading ref (not loading and not forcing reload)`);

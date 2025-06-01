@@ -10,6 +10,62 @@ const axios = require('axios');
 initSecTickerDatabase();
 
 /**
+ * Enhanced error handler for SEC service operations
+ * @param {Error} error - The error to handle
+ * @param {string} operation - Description of the operation that failed
+ * @returns {Object} - Standardized error response
+ */
+function handleSecServiceError(error, operation) {
+  console.error(`[secService] ${operation} failed:`, error.message);
+  
+  // Check for rate limiting
+  if (error.isRateLimit || error.message.includes('429') || error.message.includes('rate limit')) {
+    return {
+      success: false,
+      error: 'SEC_RATE_LIMITED',
+      message: 'SEC API rate limit reached. This is temporary - please wait a moment and try again.',
+      userMessage: 'The SEC servers are currently busy. We\'ll automatically retry in a few seconds.',
+      retryAfter: 60, // Suggest waiting 60 seconds
+      technical: error.message
+    };
+  }
+  
+  // Check for server errors
+  if (error.isServerError || (error.response && error.response.status >= 500)) {
+    return {
+      success: false,
+      error: 'SEC_SERVER_ERROR',
+      message: 'SEC API servers are temporarily unavailable.',
+      userMessage: 'SEC servers are experiencing issues. Please try again in a few minutes.',
+      retryAfter: 300, // Suggest waiting 5 minutes
+      technical: error.message
+    };
+  }
+  
+  // Check for network errors
+  if (error.isNetworkError || error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
+    return {
+      success: false,
+      error: 'NETWORK_ERROR',
+      message: 'Network connection to SEC API failed.',
+      userMessage: 'Connection issue detected. Please check your internet connection and try again.',
+      retryAfter: 30,
+      technical: error.message
+    };
+  }
+  
+  // Generic error
+  return {
+    success: false,
+    error: 'SEC_API_ERROR',
+    message: 'SEC API request failed.',
+    userMessage: 'Unable to fetch SEC data at the moment. Please try again later.',
+    retryAfter: 60,
+    technical: error.message
+  };
+}
+
+/**
  * Get detailed information for a specific SEC filing by accession number
  * @param {string} accessionNumber - The SEC filing accession number
  * @returns {Promise<Object>} Filing details
@@ -45,35 +101,49 @@ async function getFilingDetails(accessionNumber) {
 
     return filingDetails;
   } catch (error) {
-    console.error(`[secService] Error fetching filing details: ${error.message}`);
-    throw new Error(`Failed to fetch filing details: ${error.message}`);
+    return handleSecServiceError(error, 'filing details fetch');
   }
 }
 
 /**
- * Enhanced wrapper for fetchInsiderTrades with error handling
- * @param {string} timeRange - Time range for the data
- * @param {number} limit - Maximum number of results
- * @param {function} progressCallback - Optional callback function for progress updates
- * @returns {Promise<Array>} Array of insider trades
+ * Get insider trades with enhanced error handling
  */
 async function getInsiderTrades(timeRange = '1m', limit = 100, progressCallback = null) {
   try {
     console.log(`[secService] Fetching insider trades for ${timeRange}, limit: ${limit}`);
     
-    const trades = await fetchInsiderTrades(timeRange, limit, progressCallback);
+    // Add progress callback for rate limit awareness
+    const enhancedProgressCallback = progressCallback ? (progress) => {
+      // Add rate limit context to progress updates
+      if (progress.stage && progress.stage.includes('Rate Limit')) {
+        progress.isRateLimit = true;
+        progress.userMessage = 'SEC servers are busy. Waiting to retry...';
+      }
+      progressCallback(progress);
+    } : null;
     
-    if (!trades || trades.length === 0) {
-      console.warn(`[secService] No insider trades found for timeRange: ${timeRange}`);
-      return [];
+    const insiderTrades = await fetchInsiderTrades(timeRange, limit, enhancedProgressCallback);
+    
+    if (!insiderTrades || insiderTrades.length === 0) {
+      console.log(`[secService] No insider trades found for timeRange: ${timeRange}`);
+      return {
+        success: true,
+        data: [],
+        count: 0,
+        message: 'No insider trades found for the selected time range.',
+        userMessage: 'No insider trading activity found for the selected time period. Try a different time range.'
+      };
     }
     
-    console.log(`[secService] Successfully fetched ${trades.length} insider trades`);
-    return trades;
+    console.log(`[secService] Successfully fetched ${insiderTrades.length} insider trades`);
+    return {
+      success: true,
+      data: insiderTrades,
+      count: insiderTrades.length,
+      message: `Successfully fetched ${insiderTrades.length} insider trades`
+    };
   } catch (error) {
-    console.error(`[secService] Error in getInsiderTrades: ${error.message}`);
-    // Return empty array instead of throwing to prevent cascade failures
-    return [];
+    return handleSecServiceError(error, 'insider trades fetch');
   }
 }
 
@@ -97,9 +167,7 @@ async function getInstitutionalHoldings(timeRange = '1m', limit = 50) {
     console.log(`[secService] Successfully fetched ${holdings.length} institutional holdings`);
     return holdings;
   } catch (error) {
-    console.error(`[secService] Error in getInstitutionalHoldings: ${error.message}`);
-    // Return empty array instead of throwing to prevent cascade failures
-    return [];
+    return handleSecServiceError(error, 'institutional holdings fetch');
   }
 }
 
@@ -123,8 +191,7 @@ async function getInsiderTradesByTicker(ticker, timeRange = '1m', limit = 50) {
     console.log(`[secService] Found ${tickerTrades.length} insider trades for ${ticker}`);
     return tickerTrades.slice(0, limit);
   } catch (error) {
-    console.error(`[secService] Error in getInsiderTradesByTicker: ${error.message}`);
-    return [];
+    return handleSecServiceError(error, 'insider trades by ticker fetch');
   }
 }
 
@@ -148,8 +215,7 @@ async function getInstitutionalHoldingsByTicker(ticker, timeRange = '1m', limit 
     console.log(`[secService] Found ${tickerHoldings.length} institutional holdings for ${ticker}`);
     return tickerHoldings.slice(0, limit);
   } catch (error) {
-    console.error(`[secService] Error in getInstitutionalHoldingsByTicker: ${error.message}`);
-    return [];
+    return handleSecServiceError(error, 'institutional holdings by ticker fetch');
   }
 }
 
@@ -183,15 +249,16 @@ async function searchFilings(options = {}) {
 
     return [];
   } catch (error) {
-    console.error(`[secService] Error in searchFilings: ${error.message}`);
-    return [];
+    return handleSecServiceError(error, 'filings search');
   }
 }
 
 module.exports = {
   // Core functions with enhanced error handling
   fetchInsiderTrades: getInsiderTrades,
+  getInsiderTrades,
   fetchInstitutionalHoldings: getInstitutionalHoldings,
+  getInstitutionalHoldings,
   
   // New enhanced functions
   getFilingDetails,

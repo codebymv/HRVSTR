@@ -6,7 +6,8 @@ const authenticateToken = require('../middleware/authMiddleware');
 const { FinancialCalendarService } = require('../services/financialCalendar');
 const { getEffectiveApiKey } = require('../utils/userApiKeys');
 
-const financialCalendarService = new FinancialCalendarService();
+// Remove the global instance - we'll create user-specific instances when needed
+// const financialCalendarService = new FinancialCalendarService();
 
 // Tier limits for API usage
 const TIER_LIMITS = {

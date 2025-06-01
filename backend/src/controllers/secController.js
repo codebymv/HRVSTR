@@ -588,6 +588,9 @@ async function getSecDataParallel(req, res, next) {
 async function streamInsiderTrades(req, res) {
   const { timeRange = '1m', limit = 100, refresh = 'false' } = req.query;
   
+  console.log(`\n🔍 SEC CONTROLLER - streamInsiderTrades START`);
+  console.log(`🔍 Request params:`, { timeRange, limit, refresh });
+  
   // Set up SSE headers
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -604,6 +607,8 @@ async function streamInsiderTrades(req, res) {
   const progressCallback = (progressData) => {
     if (completed) return; // Don't send more events after completion
     
+    console.log(`🔍 SEC CONTROLLER - Progress callback:`, progressData);
+    
     const eventData = JSON.stringify({
       ...progressData,
       timestamp: new Date().toISOString()
@@ -612,7 +617,7 @@ async function streamInsiderTrades(req, res) {
     try {
       res.write(`data: ${eventData}\n\n`);
     } catch (error) {
-      console.error('Error writing SSE data:', error);
+      console.error('🔍 SEC CONTROLLER - Error writing SSE data:', error);
       completed = true;
     }
   };
@@ -622,59 +627,85 @@ async function streamInsiderTrades(req, res) {
     if (completed) return;
     completed = true;
     
+    console.log(`🔍 SEC CONTROLLER - endStream called:`, { 
+      hasData: !!data, 
+      hasError: !!error,
+      dataType: data ? typeof data : 'none',
+      dataCount: data?.insiderTrades?.length || data?.count || 0
+    });
+    
     try {
       // Send final event
       const finalEvent = {
         stage: error ? 'Error occurred during processing' : 'Stream completed successfully',
         progress: error ? 0 : 100,
-        total: data ? (data.insiderTrades?.length || 0) : 0,
-        current: data ? (data.insiderTrades?.length || 0) : 0,
+        total: data ? (data.insiderTrades?.length || data.count || 0) : 0,
+        current: data ? (data.insiderTrades?.length || data.count || 0) : 0,
         completed: true,
         timestamp: new Date().toISOString()
       };
       
       if (error) {
         finalEvent.error = error;
+        finalEvent.userMessage = error.userMessage || 'An error occurred while fetching SEC data';
+        finalEvent.retryAfter = error.retryAfter || 60;
       } else if (data) {
         finalEvent.data = data;
+        
+        // Log sample of data being sent to frontend
+        if (data.insiderTrades && data.insiderTrades.length > 0) {
+          console.log(`🔍 SEC CONTROLLER - Sample data being sent:`, {
+            firstTrade: {
+              ticker: data.insiderTrades[0].ticker,
+              filingDate: data.insiderTrades[0].filingDate,
+              insiderName: data.insiderTrades[0].insiderName?.substring(0, 30)
+            },
+            uniqueDatesInResponse: [...new Set(data.insiderTrades.map(t => t.filingDate?.split('T')[0]))].slice(0, 5)
+          });
+        }
       }
       
       res.write(`data: ${JSON.stringify(finalEvent)}\n\n`);
     } catch (writeError) {
-      console.error('Error writing final SSE event:', writeError);
+      console.error('🔍 SEC CONTROLLER - Error writing final SSE event:', writeError);
     } finally {
       // Always end the response
       try {
         res.end();
       } catch (endError) {
-        console.error('Error ending SSE response:', endError);
+        console.error('🔍 SEC CONTROLLER - Error ending SSE response:', endError);
       }
     }
   };
 
   // Handle client disconnect
   req.on('close', () => {
-    console.log('SSE client disconnected');
+    console.log('🔍 SEC CONTROLLER - SSE client disconnected');
     completed = true;
   });
 
   req.on('error', (error) => {
-    console.error('SSE request error:', error);
+    console.error('🔍 SEC CONTROLLER - SSE request error:', error);
     endStream(null, error.message);
   });
 
   try {
     // Check cache first, unless refresh is requested
     if (refresh !== 'true' && cache.hasCachedItem && cache.hasCachedItem('sec-insider-trades', { timeRange, limit })) {
-      console.log(`Serving cached SEC insider trades data for ${timeRange}`);
+      console.log(`🔍 SEC CONTROLLER - Serving cached SEC insider trades data for ${timeRange}`);
       
       // Send cached data immediately
       const cachedResult = cache.getCachedItem('sec-insider-trades', { timeRange, limit });
       
+      console.log(`🔍 SEC CONTROLLER - Cached data:`, { 
+        hasData: !!cachedResult,
+        tradesCount: cachedResult?.insiderTrades?.length || 0
+      });
+      
       // Emit progress events for cached data
       progressCallback({
-        stage: 'Loading cached data...',
-        progress: 50,
+        stage: 'Insider trades loaded from cache',
+        progress: 100,
         total: cachedResult.insiderTrades?.length || 0,
         current: cachedResult.insiderTrades?.length || 0
       });
@@ -685,19 +716,38 @@ async function streamInsiderTrades(req, res) {
     }
 
     // Fetch fresh data with progress streaming
-    console.log(`Streaming fresh SEC insider trades data for ${timeRange}`);
+    console.log(`🔍 SEC CONTROLLER - Streaming fresh SEC insider trades data for ${timeRange}`);
     
-    // Fetch insider trades with progress callback
-    const insiderTrades = await secService.fetchInsiderTrades(timeRange, parseInt(limit), progressCallback);
+    // Use the enhanced getInsiderTrades method instead of direct fetchInsiderTrades
+    const serviceResult = await secService.getInsiderTrades(timeRange, parseInt(limit), progressCallback);
+    
+    console.log(`🔍 SEC CONTROLLER - Service result:`, {
+      success: serviceResult?.success,
+      dataCount: serviceResult?.data?.length || 0,
+      error: serviceResult?.error
+    });
+    
+    // Check if the service returned an error
+    if (!serviceResult.success) {
+      console.error(`🔍 SEC CONTROLLER - SEC service error: ${serviceResult.error}`);
+      endStream(null, serviceResult);
+      return;
+    }
 
     const result = {
       timeRange,
-      insiderTrades,
-      count: insiderTrades.length,
+      insiderTrades: serviceResult.data,
+      count: serviceResult.count,
       source: 'sec-edgar',
       refreshed: true,
       lastUpdated: new Date().toISOString()
     };
+    
+    console.log(`🔍 SEC CONTROLLER - Final result structure:`, {
+      timeRange: result.timeRange,
+      tradesCount: result.insiderTrades?.length || 0,
+      uniqueDates: result.insiderTrades ? [...new Set(result.insiderTrades.map(t => t.filingDate?.split('T')[0]))].slice(0, 5) : []
+    });
     
     // Cache the result (30 minutes TTL)
     if (cache.setCachedItem) {
@@ -708,8 +758,17 @@ async function streamInsiderTrades(req, res) {
     endStream(result);
     
   } catch (error) {
-    console.error(`SEC Insider Trades Stream Error: ${error.message}`);
-    endStream(null, error.message);
+    console.error(`🔍 SEC CONTROLLER - SEC Insider Trades Stream Error: ${error.message}`);
+    
+    // Format error for user consumption
+    const errorResponse = {
+      error: 'STREAM_ERROR',
+      message: error.message,
+      userMessage: 'An unexpected error occurred while streaming SEC data. Please try again.',
+      retryAfter: 30
+    };
+    
+    endStream(null, errorResponse);
   }
 }
 

@@ -61,7 +61,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
       gradient: 'from-blue-400 to-blue-600',
       popular: true,
       features: [
-        '15 watchlist stocks',
+        '25 watchlist stocks',
         '500 scrape credits/month',
         'Reddit sentiment access',
         'All sentiment sources',

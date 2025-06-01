@@ -137,22 +137,83 @@ async function initSecTickerDatabase() {
  * Add additional well-known companies that might not be in the SEC database
  */
 function addAdditionalCompanies() {
-  // Add some additional well-known companies
+  // Add companies we're seeing in the Form 4 filings based on CIK and names from logs
   const additionalCompanies = [
+    // Companies from current logs
+    { cik: '0000014930', ticker: 'BC', name: 'BRUNSWICK CORP' },
+    { cik: '0000017843', ticker: 'CRS', name: 'CARPENTER TECHNOLOGY CORP' },
+    { cik: '0000004281', ticker: 'AXP', name: 'AMERICAN EXPRESS CO' },
+    { cik: '0000004281', ticker: 'AXP', name: 'AMERICAN EXPRESS COMPANY' },
+    
+    // Additional major companies commonly seen in Form 4s
+    { cik: '0000019617', ticker: 'JPM', name: 'JPMORGAN CHASE & CO' },
+    { cik: '0000732712', ticker: 'CAL', name: 'CALERES INC' },
+    { cik: '0000018230', ticker: 'CAT', name: 'CATERPILLAR INC' },
+    { cik: '0000093410', ticker: 'WMT', name: 'WALMART INC' },
+    { cik: '0000034088', ticker: 'XOM', name: 'EXXON MOBIL CORP' },
+    { cik: '0000051143', ticker: 'IBM', name: 'INTERNATIONAL BUSINESS MACHINES CORP' },
+    { cik: '0000078003', ticker: 'PFE', name: 'PFIZER INC' },
+    { cik: '0000021344', ticker: 'KO', name: 'COCA COLA CO' },
+    { cik: '0000886982', ticker: 'DIS', name: 'WALT DISNEY CO' },
+    { cik: '0000040987', ticker: 'MCD', name: 'MCDONALDS CORP' },
+    { cik: '0000732717', ticker: 'GE', name: 'GENERAL ELECTRIC CO' },
+    { cik: '0000086312', ticker: 'JNJ', name: 'JOHNSON & JOHNSON' },
+    { cik: '0000012927', ticker: 'UNH', name: 'UNITEDHEALTH GROUP INC' },
+    { cik: '0000773840', ticker: 'HD', name: 'HOME DEPOT INC' },
+    { cik: '0000315066', ticker: 'VZ', name: 'VERIZON COMMUNICATIONS INC' },
+    { cik: '0000200406', ticker: 'JNJ', name: 'JOHNSON & JOHNSON' },
+    { cik: '0000826675', ticker: 'MA', name: 'MASTERCARD INC' },
+    { cik: '0000277948', ticker: 'QCOM', name: 'QUALCOMM INC' },
+    { cik: '0000858877', ticker: 'NFLX', name: 'NETFLIX INC' },
+    { cik: '0000831001', ticker: 'PYPL', name: 'PAYPAL HOLDINGS INC' },
+    { cik: '0000320187', ticker: 'ADBE', name: 'ADOBE INC' },
+    { cik: '0000051253', ticker: 'PEP', name: 'PEPSICO INC' },
+    { cik: '0000884887', ticker: 'T', name: 'AT&T INC' },
+    { cik: '0000019617', ticker: 'CVX', name: 'CHEVRON CORP' },
+    { cik: '0000100493', ticker: 'TM', name: 'TOYOTA MOTOR CORP' },
+    { cik: '0000037996', ticker: 'F', name: 'FORD MOTOR CO' },
+    { cik: '0000813828', ticker: 'COST', name: 'COSTCO WHOLESALE CORP' },
+    { cik: '0000914208', ticker: 'TGT', name: 'TARGET CORP' },
+    
+    // Legacy entries
     { ticker: 'H', name: 'HYATT HOTELS CORP' },
-    { ticker: 'LOUIS', name: 'LOUIS VUITTON' },
-    { ticker: 'BRUNO', name: 'BRUNO INC' },
     { ticker: 'O', name: 'REALTY INCOME CORP' },
-    { ticker: 'CORP', name: 'CORPORATE HOLDINGS' },
-    { ticker: 'CORVEL', name: 'CORVEL CORP' },
     { ticker: 'CELH', name: 'CELSIUS HOLDINGS INC' }
   ];
   
   additionalCompanies.forEach(company => {
+    // Add to name mapping
     secTickersByName[company.name] = company.ticker;
+    
+    // Add to CIK mapping if provided
+    if (company.cik) {
+      // Add both padded and unpadded versions
+      secTickersByCik[company.cik] = company.ticker;
+      secTickersByCik[company.cik.replace(/^0+/, '')] = company.ticker; // Remove leading zeros
+      secTickersByCik[parseInt(company.cik).toString()] = company.ticker; // Ensure numeric version
+    }
+    
+    // Add variations of the company name
+    const cleanName = company.name.replace(/,?\s*(INC\.?|CORP\.?|CORPORATION|LLC|LTD\.?|CO\.?)$/i, '').trim();
+    if (cleanName !== company.name) {
+      secTickersByName[cleanName] = company.ticker;
+    }
+    
+    // Add additional common variations
+    if (company.name.includes(' CORP')) {
+      secTickersByName[company.name.replace(' CORP', ' CORPORATION')] = company.ticker;
+    }
+    if (company.name.includes(' INC')) {
+      secTickersByName[company.name.replace(' INC', ' INCORPORATED')] = company.ticker;
+    }
+    if (company.name.includes(' CO')) {
+      secTickersByName[company.name.replace(' CO', ' COMPANY')] = company.ticker;
+    }
   });
   
   console.log(`Added ${additionalCompanies.length} additional companies to the database`);
+  console.log(`Total companies in name mapping: ${Object.keys(secTickersByName).length}`);
+  console.log(`Total companies in CIK mapping: ${Object.keys(secTickersByCik).length}`);
 }
 
 /**

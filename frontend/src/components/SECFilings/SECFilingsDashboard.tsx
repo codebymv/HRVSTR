@@ -39,9 +39,9 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
   // Shared state between tabs
   const [timeRange, setTimeRange] = useState<TimeRange>(() => {
     try {
-      return (localStorage.getItem('secFilings_timeRange') as TimeRange) || '1m';
+      return (localStorage.getItem('secFilings_timeRange') as TimeRange) || '3m';
     } catch (e) {
-      return '1m';
+      return '3m';
     }
   });
   const [activeTab, setActiveTab] = useState<'insider' | 'institutional'>(() => {
@@ -172,6 +172,52 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     localStorage.setItem('secFilings_activeTab', activeTab);
   }, [activeTab]);
   
+  // BACKUP: Monitor loading states and clear refresh state when all loading is complete
+  useEffect(() => {
+    if (isRefreshing) {
+      const insiderDone = !loadingState.insiderTrades.isLoading;
+      const institutionalDone = !hasInstitutionalAccess || !loadingState.institutionalHoldings.isLoading;
+      
+      console.log('🔄 BACKUP: Checking loading states:', { 
+        isRefreshing, 
+        insiderDone, 
+        institutionalDone, 
+        hasInstitutionalAccess,
+        insiderLoading: loadingState.insiderTrades.isLoading,
+        institutionalLoading: loadingState.institutionalHoldings.isLoading
+      });
+      
+      if (insiderDone && institutionalDone) {
+        console.log('🔄 BACKUP: All loading complete, clearing refresh state via useEffect');
+        // Clear refresh state immediately - no delay needed
+        setIsRefreshing(false);
+      }
+    }
+  }, [isRefreshing, loadingState.insiderTrades.isLoading, loadingState.institutionalHoldings.isLoading, hasInstitutionalAccess]);
+  
+  // Additional safety mechanism - clear refresh state after 5 seconds maximum
+  useEffect(() => {
+    if (isRefreshing) {
+      const timeout = setTimeout(() => {
+        console.warn('🔄 SAFETY: Force clearing refresh state after 5 seconds');
+        setIsRefreshing(false);
+      }, 5000); // Reduced from 10 seconds to 5 seconds
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [isRefreshing]);
+  
+  // Additional backup: Monitor the loading handlers directly
+  useEffect(() => {
+    // If we're refreshing but neither tab is actually loading, clear refresh state
+    if (isRefreshing && !loadingState.insiderTrades.isLoading && !loadingState.institutionalHoldings.isLoading) {
+      console.log('🔄 DIRECT: No tabs loading while refreshing, clearing refresh state');
+      setTimeout(() => {
+        setIsRefreshing(false);
+      }, 500); // Small delay to avoid race conditions
+    }
+  }, [isRefreshing, loadingState.insiderTrades.isLoading, loadingState.institutionalHoldings.isLoading]);
+  
   // Handle initial loading when component mounts
   useEffect(() => {
     console.log('🔄 DASHBOARD: Component mounted, checking if initial loading is needed');
@@ -239,10 +285,19 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
       }
     }
 
-    // Always stop refreshing when insider trades loading completes, regardless of active tab
+    // EXPLICIT: Clear refresh state when insider loading completes
     if (!isLoading && isRefreshing) {
-      console.log('✅ INSIDER LOADING: Loading completed, stopping refresh state');
-      setIsRefreshing(false);
+      console.log('✅ INSIDER LOADING: Insider loading complete, checking if we can clear refresh state');
+      
+      // Check if institutional also complete (or not needed)
+      const institutionalComplete = !hasInstitutionalAccess || !loadingState.institutionalHoldings.isLoading;
+      
+      if (institutionalComplete) {
+        console.log('✅ INSIDER LOADING: All loading complete, clearing refresh state immediately');
+        setIsRefreshing(false);
+      } else {
+        console.log('✅ INSIDER LOADING: Waiting for institutional loading to complete');
+      }
     }
   };
   
@@ -285,16 +340,55 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
       }
     }
 
-    // Always stop refreshing when institutional holdings loading completes, regardless of active tab
+    // EXPLICIT: Clear refresh state when institutional loading completes
     if (!isLoading && isRefreshing) {
-      console.log('✅ INSTITUTIONAL LOADING: Loading completed, stopping refresh state');
-      setIsRefreshing(false);
+      console.log('✅ INSTITUTIONAL LOADING: Institutional loading complete, checking if we can clear refresh state');
+      
+      // Check if insider also complete
+      const insiderComplete = !loadingState.insiderTrades.isLoading;
+      
+      if (insiderComplete) {
+        console.log('✅ INSTITUTIONAL LOADING: All loading complete, clearing refresh state immediately');
+        setIsRefreshing(false);
+      } else {
+        console.log('✅ INSTITUTIONAL LOADING: Waiting for insider loading to complete');
+      }
     }
   };
   
   // Handle time range changes
   const handleTimeRangeChange = (range: TimeRange) => {
+    console.log(`⏰ TIME RANGE: Changing from ${timeRange} to ${range}`);
+    
+    // Update the time range state
     setTimeRange(range);
+    
+    // Clear cached data when time range changes to force fresh fetch
+    console.log('⏰ TIME RANGE: Clearing localStorage cache for new time range');
+    localStorage.removeItem('secFilings_insiderTrades');
+    localStorage.removeItem('secFilings_institutionalHoldings');
+    localStorage.removeItem('secFilings_lastFetchTime');
+    
+    // Reset cached data in state
+    setInsiderTradesData([]);
+    setInstitutionalHoldingsData([]);
+    setLastFetchTime({
+      insiderTrades: null,
+      institutionalHoldings: null
+    });
+    
+    // Clear any existing errors
+    setErrors({
+      insiderTrades: null,
+      institutionalHoldings: null
+    });
+    
+    // Trigger fresh data loading for both tabs
+    console.log('⏰ TIME RANGE: Triggering fresh data loading for new time range');
+    setLoadingState({
+      insiderTrades: { isLoading: true, needsRefresh: true },
+      institutionalHoldings: { isLoading: true, needsRefresh: true }
+    });
   };
   
   // Function to refresh data with cache clearing
@@ -304,22 +398,6 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     try {
       setIsRefreshing(true);
       console.log('🔄 REFRESH: Set isRefreshing to true');
-      
-      // Set up a timeout to ensure refresh state is always cleared
-      const refreshTimeout = setTimeout(() => {
-        console.warn('⏰ REFRESH: Timeout reached (30s), forcing refresh state to false');
-        setIsRefreshing(false);
-        setLoadingState({
-          insiderTrades: { isLoading: false, needsRefresh: false },
-          institutionalHoldings: { isLoading: false, needsRefresh: false }
-        });
-      }, 30000); // 30 second timeout
-      
-      // Store timeout ID so we can clear it when refresh completes normally
-      const clearRefreshTimeout = () => {
-        console.log('🔄 REFRESH: Clearing timeout');
-        clearTimeout(refreshTimeout);
-      };
       
       // Update loading stage to show cache clearing operation
       setLoadingProgress(0);
@@ -336,6 +414,12 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
       await clearSecCache();
       console.log('🔄 REFRESH: Cache cleared successfully');
       
+      // Clear local storage cache as well
+      console.log('🔄 REFRESH: Clearing localStorage cache');
+      localStorage.removeItem('secFilings_insiderTrades');
+      localStorage.removeItem('secFilings_institutionalHoldings');
+      localStorage.removeItem('secFilings_lastFetchTime');
+      
       // Now that cache is cleared, set the stage to 25% before fetching fresh data
       setLoadingProgress(25);
       setLoadingStage('Fetching fresh data in parallel...');
@@ -351,7 +435,10 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
         insiderTrades: null,
         institutionalHoldings: null
       });
-      localStorage.removeItem('secFilings_lastFetchTime');
+      
+      // Reset cached data in state
+      setInsiderTradesData([]);
+      setInstitutionalHoldingsData([]);
       
       // Clear any previous errors
       setErrors({
@@ -366,23 +453,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
         institutionalHoldings: { isLoading: true, needsRefresh: true }
       });
       
-      // Clear the timeout since refresh has been initiated successfully
-      clearRefreshTimeout();
       console.log('🔄 REFRESH: Refresh initiated successfully, waiting for loading handlers...');
-      
-      // Add an additional safety check after 5 seconds
-      setTimeout(() => {
-        if (isRefreshing) {
-          console.warn('🔄 REFRESH: Still refreshing after 5 seconds, checking loading states...');
-          console.log('🔄 REFRESH: Current loading states:', {
-            insider: loadingState.insiderTrades,
-            institutional: loadingState.institutionalHoldings,
-            isRefreshing
-          });
-        }
-      }, 5000);
-      
-      // Note: setIsRefreshing(false) will be called by the loading handlers when data loading completes
       
     } catch (error) {
       console.error('❌ REFRESH: Error during refresh:', error);
@@ -410,6 +481,26 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
       }
     }
   };
+  
+  // Debug function to clear all cache - available in browser console as window.clearSecCache
+  useEffect(() => {
+    (window as any).clearSecFilingsCache = () => {
+      console.log('🧹 DEBUG: Clearing all SEC filings cache...');
+      localStorage.removeItem('secFilings_insiderTrades');
+      localStorage.removeItem('secFilings_institutionalHoldings');
+      localStorage.removeItem('secFilings_lastFetchTime');
+      localStorage.removeItem('secFilings_timeRange');
+      localStorage.removeItem('secFilings_activeTab');
+      
+      setInsiderTradesData([]);
+      setInstitutionalHoldingsData([]);
+      setLastFetchTime({ insiderTrades: null, institutionalHoldings: null });
+      setIsRefreshing(false);
+      setErrors({ insiderTrades: null, institutionalHoldings: null });
+      
+      console.log('🧹 DEBUG: Cache cleared! Reload the page to see fresh data.');
+    };
+  }, []);
   
   // Handle tab switching with tier restrictions
   const handleTabChange = (tab: 'insider' | 'institutional') => {
@@ -492,10 +583,10 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
               className={`py-1 px-2 rounded text-sm ${cardBg} ${textColor} border ${cardBorder}`}
               disabled={loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading}
             >
-              <option value="1d">1 Day</option>
               <option value="1w">1 Week</option>
               <option value="1m">1 Month</option>
               <option value="3m">3 Months</option>
+              <option value="6m">6 Months</option>
             </select>
             
             {/* Refresh button - now combines cache clearing and data refresh */}

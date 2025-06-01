@@ -112,6 +112,58 @@ const InstitutionalHoldingsTab: React.FC<InstitutionalHoldingsTabProps> = ({
     };
   };
   
+  // Filter function to exclude SEC administrative codes and non-tradeable identifiers
+  const filterTradeableSecurities = (holdings: InstitutionalHolding[]): InstitutionalHolding[] => {
+    return holdings.filter(holding => {
+      const ticker = holding.ticker;
+      if (!ticker || ticker === '-') return false;
+      
+      // Filter out SEC administrative codes
+      if (ticker.match(/^13[A-Z0-9]/)) return false; // 13XXX SEC identifiers
+      if (ticker.match(/^[0-9]{5,}/)) return false; // Long numeric codes (likely CUSIPs)
+      if (ticker.length > 5) return false; // Overly long identifiers
+      
+      // Keep only valid ticker-like symbols
+      const cleaned = ticker.replace(/[)\/]/g, '').trim();
+      return cleaned.match(/^[A-Z]{1,5}$/) || cleaned.match(/^[A-Z]+\.[A-Z]$/) || cleaned.match(/^\d{1,4}$/);
+    });
+  };
+  
+  // Helper function to filter holdings by timeRange
+  const filterHoldingsByTimeRange = (holdings: InstitutionalHolding[], range: TimeRange): InstitutionalHolding[] => {
+    if (!holdings || holdings.length === 0) return holdings;
+    
+    const now = new Date();
+    let cutoffDate: Date;
+    
+    switch (range) {
+      case '1w':
+        cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 days ago
+        break;
+      case '1m':
+        cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
+        break;
+      case '3m':
+        cutoffDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000); // 90 days ago
+        break;
+      case '6m':
+        cutoffDate = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000); // 180 days ago
+        break;
+      default:
+        return holdings; // Return all if unknown range
+    }
+    
+    console.log(`🗓️ FILTERING: Filtering ${holdings.length} holdings for timeRange ${range}, cutoff: ${cutoffDate.toISOString()}`);
+    
+    const filtered = holdings.filter(holding => {
+      const filingDate = new Date(holding.filingDate);
+      return filingDate >= cutoffDate;
+    });
+    
+    console.log(`🗓️ FILTERING: Filtered down to ${filtered.length} holdings within ${range} timeRange`);
+    return filtered;
+  };
+  
   // Load data from API
   const loadData = async (refresh: boolean = false) => {
     console.log(`Loading institutional holdings for time range: ${timeRange}, refresh: ${refresh}`);
@@ -132,25 +184,27 @@ const InstitutionalHoldingsTab: React.FC<InstitutionalHoldingsTabProps> = ({
     try {
       // Step 1: Fetch institutional holdings with refresh parameter
       updateProgress(1, 'Fetching institutional holdings data...');
-      const holdings = await fetchInstitutionalHoldings(timeRange, refresh);
-      console.log(`Received ${holdings.length} institutional holdings from API`);
+      const allHoldings = await fetchInstitutionalHoldings(timeRange, refresh);
+      console.log(`Received ${allHoldings.length} institutional holdings from API`);
+      
+      // Step 2: Apply frontend timeRange filtering
+      updateProgress(2, 'Filtering holdings by time range...');
+      const filteredHoldings = filterHoldingsByTimeRange(allHoldings, timeRange);
+      console.log(`Filtered to ${filteredHoldings.length} holdings for ${timeRange} range`);
       
       // Log a sample holding to help with debugging
-      if (holdings.length > 0) {
-        console.log('Sample institutional holding:', JSON.stringify(holdings[0], null, 2));
+      if (filteredHoldings.length > 0) {
+        console.log('Sample filtered institutional holding:', JSON.stringify(filteredHoldings[0], null, 2));
       }
       
-      // Step 2: Process data
-      updateProgress(2, 'Processing institutional holdings data...');
-      
-      // Step 3: Update state with holdings
+      // Step 3: Update state with filtered holdings
       updateProgress(3, 'Organizing holdings data...');
-      setInstitutionalHoldings(holdings);
+      setInstitutionalHoldings(filteredHoldings);
       
       // Step 4: Analyze for concentration patterns
       updateProgress(4, 'Finalizing institutional holdings display...');
       setTimeout(() => {
-        onLoadingChange(false, 100, 'Institutional holdings loaded successfully', holdings, null);
+        onLoadingChange(false, 100, 'Institutional holdings loaded successfully', filteredHoldings, null);
       }, 300);
     } catch (error) {
       console.error('Institutional holdings error:', error);
@@ -192,6 +246,16 @@ const InstitutionalHoldingsTab: React.FC<InstitutionalHoldingsTabProps> = ({
           const sharesA = a.sharesHeld || a.totalSharesHeld || 0;
           const sharesB = b.sharesHeld || b.totalSharesHeld || 0;
           return sortConfig.direction === 'ascending' ? sharesA - sharesB : sharesB - sharesA;
+          
+        case 'aum':
+          // Calculate AUM for each institution
+          const aumA = holdings
+            .filter(h => h.institutionName === a.institutionName)
+            .reduce((sum, h) => sum + (h.valueHeld || h.totalValueHeld || 0), 0);
+          const aumB = holdings
+            .filter(h => h.institutionName === b.institutionName)
+            .reduce((sum, h) => sum + (h.valueHeld || h.totalValueHeld || 0), 0);
+          return sortConfig.direction === 'ascending' ? aumA - aumB : aumB - aumA;
          
         default:
           return 0;
@@ -219,25 +283,27 @@ const InstitutionalHoldingsTab: React.FC<InstitutionalHoldingsTabProps> = ({
     // Create a unique key for the current load parameters
     const currentParams = { timeRange, forceReload };
     const paramsChanged = JSON.stringify(currentParams) !== JSON.stringify(lastLoadParamsRef.current);
+    const timeRangeChanged = timeRange !== lastLoadParamsRef.current.timeRange;
     
     // Only load if:
     // 1. We're supposed to be loading AND haven't started yet
-    // 2. OR the parameters have changed (timeRange or forceReload)
-    if ((isLoading && !isLoadingRef.current) || (paramsChanged && forceReload)) {
+    // 2. OR the parameters have changed (timeRange or forceReload) - this should trigger fresh data
+    if ((isLoading && !isLoadingRef.current) || (paramsChanged && (forceReload || timeRangeChanged))) {
       // Mark that we've started the loading process
       isLoadingRef.current = true;
       lastLoadParamsRef.current = currentParams;
       
       // Determine if we should use cached data or fetch fresh
-      const hasValidCache = initialData && initialData.length > 0 && !forceReload;
+      // Never use cache if forceReload is requested (manual refresh) OR timeRange changed
+      const hasValidCache = initialData && initialData.length > 0 && !forceReload && !timeRangeChanged;
       
-      if (hasValidCache) {
+      if (hasValidCache && !forceReload && !timeRangeChanged) {
         console.log('Using cached institutional holdings data, no API call needed');
         // Notify parent that loading is complete
         onLoadingChange(false, 100, 'Institutional holdings loaded from cache', initialData, null);
       } else {
-        console.log(`Loading fresh institutional holdings data: timeRange=${timeRange}, forceReload=${forceReload}`);
-        loadData(forceReload);
+        console.log(`Loading fresh institutional holdings data: timeRange=${timeRange}, forceReload=${forceReload}, timeRangeChanged=${timeRangeChanged}`);
+        loadData(forceReload || paramsChanged);
       }
     } else if (!isLoading && !forceReload) {
       // Reset the ref when loading is complete
@@ -245,7 +311,9 @@ const InstitutionalHoldingsTab: React.FC<InstitutionalHoldingsTabProps> = ({
     }
   }, [timeRange, isLoading, forceReload, initialData.length, onLoadingChange]);
   
-  const sortedHoldings = sortInstitutionalHoldings(institutionalHoldings);
+  // Filter out SEC administrative codes and then sort
+  const filteredHoldings = filterTradeableSecurities(institutionalHoldings);
+  const sortedHoldings = sortInstitutionalHoldings(filteredHoldings);
   
   return (
     <div className="space-y-4">
@@ -311,13 +379,37 @@ const InstitutionalHoldingsTab: React.FC<InstitutionalHoldingsTabProps> = ({
                         )}
                       </div>
                     </th>
-                    <th className={`p-3 text-right ${textColor}`}>% of Portfolio</th>
+                    <th className={`p-3 text-right ${textColor}`} onClick={() => handleSort('aum')}>
+                      <div className="flex items-center justify-end cursor-pointer">
+                        <span>Total AUM</span>
+                        {sortConfig.key === 'aum' && (
+                          <ArrowUpDown size={14} className="ml-1" />
+                        )}
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {sortedHoldings.map((holding, index) => {
                     // Process ticker for display
                     const tickerInfo = processTicker(holding.ticker);
+                    
+                    // Calculate total AUM for this institution (sum of all their holdings)
+                    const institutionAUM = sortedHoldings
+                      .filter(h => h.institutionName === holding.institutionName)
+                      .reduce((sum, h) => sum + (h.valueHeld || h.totalValueHeld || 0), 0);
+                    
+                    // Format AUM value
+                    const formatAUM = (value: number): string => {
+                      if (value >= 1000000000) {
+                        return `$${(value / 1000000000).toFixed(1)}B`;
+                      } else if (value >= 1000000) {
+                        return `$${(value / 1000000).toFixed(1)}M`;
+                      } else if (value >= 1000) {
+                        return `$${(value / 1000).toFixed(1)}K`;
+                      }
+                      return `$${value.toLocaleString()}`;
+                    };
                     
                     return (
                       <tr 
@@ -348,8 +440,8 @@ const InstitutionalHoldingsTab: React.FC<InstitutionalHoldingsTabProps> = ({
                           {typeof holding.valueHeld === 'number' ? `$${holding.valueHeld.toLocaleString()}` : 
                            typeof holding.totalValueHeld === 'number' ? `$${holding.totalValueHeld.toLocaleString()}` : '-'}
                         </td>
-                        <td className={`p-3 text-right ${textColor}`}>
-                          {typeof holding.percentageOwnership === 'number' ? `${holding.percentageOwnership.toFixed(2)}%` : '-'}
+                        <td className={`p-3 text-right font-medium ${institutionAUM > 10000000 ? 'text-blue-500' : textColor}`}>
+                          {institutionAUM > 0 ? formatAUM(institutionAUM) : '-'}
                         </td>
                       </tr>
                     );
@@ -380,7 +472,7 @@ const InstitutionalHoldingsTab: React.FC<InstitutionalHoldingsTabProps> = ({
             <div className={`p-4 rounded-lg bg-${isLight ? 'stone-400/50' : 'gray-800/70'}`}>
               <h3 className={`font-medium ${textColor} mb-2`}>Top Institutions by Value</h3>
               <div className="space-y-2">
-                {getTopInstitutionsByValue(sortedHoldings).map((inst, idx) => (
+                {getTopInstitutionsByValue(filteredHoldings).map((inst, idx) => (
                   <div key={idx} className="flex justify-between">
                     <span className={`${textColor}`}>{stripHtml(inst.name)}</span>
                     <span className={`${subTextColor}`}>${inst.value.toLocaleString()}</span>
@@ -392,7 +484,7 @@ const InstitutionalHoldingsTab: React.FC<InstitutionalHoldingsTabProps> = ({
             <div className={`p-4 rounded-lg bg-${isLight ? 'stone-400/50' : 'gray-800/70'}`}>
               <h3 className={`font-medium ${textColor} mb-2`}>Most Held Securities</h3>
               <div className="space-y-2">
-                {getTopHeldSecurities(sortedHoldings).map((sec, idx) => (
+                {getTopHeldSecurities(filteredHoldings).map((sec, idx) => (
                   <div key={idx} className="flex justify-between">
                     <span className={`${textColor}`}>{sec.ticker}</span>
                     <span className={`${subTextColor}`}>{sec.institutions} institutions</span>
