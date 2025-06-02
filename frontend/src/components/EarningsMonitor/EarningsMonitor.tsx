@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { TimeRange } from '../../types';
-import { EarningsEvent, EarningsAnalysis, fetchUpcomingEarnings, analyzeEarningsSurprise, fetchUpcomingEarningsWithProgress, ProgressUpdate } from '../../services/earningsService';
-import { RefreshCw, AlertTriangle, Info, ArrowUpDown, TrendingUp, TrendingDown, BarChart2, Loader2, Crown, Lock, Zap } from 'lucide-react';
+import { EarningsEvent, EarningsAnalysis, analyzeEarningsSurprise, fetchUpcomingEarningsWithProgress, ProgressUpdate } from '../../services/earningsService';
+import { RefreshCw, AlertTriangle, Info, TrendingUp, TrendingDown, BarChart2, Loader2, Crown, Zap } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTier } from '../../contexts/TierContext';
-import { useTierLimits } from '../../hooks/useTierLimits';
 import { useToast } from '../../contexts/ToastContext';
 import { 
   checkUnlockSession, 
@@ -21,13 +20,8 @@ interface EarningsMonitorProps {
 const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChange }) => {
   const { theme } = useTheme();
   const { tierInfo, refreshTierInfo } = useTier();
-  const { showTierLimitDialog } = useTierLimits();
   const { info } = useToast();
   const isLight = theme === 'light';
-  
-  // Tier checking
-  const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
-  const hasProAccess = currentTier !== 'free';
   
   // Component unlock state - session-based
   const [unlockedComponents, setUnlockedComponents] = useState<{
@@ -37,9 +31,6 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
     earningsTable: false,
     earningsAnalysis: false
   });
-
-  // Session state for time tracking
-  const [activeSessions, setActiveSessions] = useState<any[]>([]);
   
   // Check for existing unlock sessions on mount
   useEffect(() => {
@@ -53,14 +44,10 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
       });
 
       // Update active sessions for display
-      const sessions = getAllUnlockSessions();
-      setActiveSessions(sessions);
+      getAllUnlockSessions();
       
       if (tableSession || analysisSession) {
-        console.log('🔓 Restored earnings unlock sessions:', {
-          earningsTable: tableSession ? getSessionTimeRemainingFormatted(tableSession) : 'Locked',
-          earningsAnalysis: analysisSession ? getSessionTimeRemainingFormatted(analysisSession) : 'Locked'
-        });
+        // Session restoration logging removed for production
       }
     };
 
@@ -79,8 +66,6 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
 
   // Handlers for unlocking individual components
   const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
-    console.log(`🔓 Attempting to unlock ${component} for ${cost} credits`);
-    
     // Check if already unlocked in current session
     const existingSession = checkUnlockSession(component);
     if (existingSession) {
@@ -127,20 +112,13 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
         });
         
         // Update active sessions
-        const sessions = getAllUnlockSessions();
-        setActiveSessions(sessions);
+        getAllUnlockSessions();
         
         // Show appropriate toast message
         if (data.existingSession) {
           info(`${component} already unlocked (${data.timeRemaining}h remaining)`);
         } else {
           info(`${data.creditsUsed} credits used`);
-          console.log(`💳 Component unlocked successfully:`, {
-            component,
-            creditsUsed: data.creditsUsed,
-            sessionDuration: data.sessionDurationHours,
-            creditsRemaining: data.creditsRemaining
-          });
         }
         
         // Refresh tier info to update usage meter
@@ -150,10 +128,8 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
 
         // Auto-load data for newly unlocked components
         if (component === 'earningsTable') {
-          console.log('🔓 Earnings table unlocked - loading data automatically');
           loadData();
         } else if (component === 'earningsAnalysis' && selectedTicker) {
-          console.log('🔓 Earnings analysis unlocked - loading analysis automatically');
           loadAnalysis(selectedTicker);
         }
       }
@@ -226,27 +202,14 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
   
   // Calculate initial loading state based on cache freshness
   useEffect(() => {
-    console.log('🔄 EARNINGS: Component mounted, checking if initial loading is needed');
-    
     const hasData = upcomingEarnings.length > 0;
     const dataIsStale = isDataStale(lastFetchTime);
     const needsRefresh = !hasData || dataIsStale;
     
-    console.log('🔄 EARNINGS: Initial state calculation:', {
-      hasData,
-      dataLength: upcomingEarnings.length,
-      lastFetchTime: lastFetchTime ? new Date(lastFetchTime).toISOString() : null,
-      dataIsStale,
-      needsRefresh,
-      unlockedEarningsTable: unlockedComponents.earningsTable
-    });
-    
     // Set initial loading state based on cache freshness and unlock status
     if (unlockedComponents.earningsTable && needsRefresh) {
-      console.log('📊 EARNINGS: Initial loading needed - data is stale or missing');
       setLoading(prev => ({ ...prev, upcomingEarnings: true }));
     } else if (unlockedComponents.earningsTable && !needsRefresh) {
-      console.log('📊 EARNINGS: Using cached data, no initial loading needed');
       setLoading(prev => ({ ...prev, upcomingEarnings: false }));
     }
   }, []); // Only run on mount
@@ -264,41 +227,54 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
   
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [earningsAnalysis, setEarningsAnalysis] = useState<EarningsAnalysis | null>(null);
-  const [sortConfig, setSortConfig] = useState<{
-    key: string;
-    direction: 'ascending' | 'descending';
-  }>({
-    key: 'reportDate',
-    direction: 'ascending'
-  });
+
+  // Debug function to clear all earnings cache - available in browser console
+  useEffect(() => {
+    (window as any).clearEarningsCache = () => {
+      localStorage.removeItem('earnings_upcomingEarnings');
+      localStorage.removeItem('earnings_lastFetchTime');
+      
+      setUpcomingEarnings([]);
+      setLastFetchTime(null);
+      setErrors({ upcomingEarnings: null, analysis: null });
+      setLoading({ upcomingEarnings: false, analysis: false });
+    };
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [timeRange, unlockedComponents.earningsTable]);
+
+  const sortEarnings = (earnings: EarningsEvent[]): EarningsEvent[] => {
+    // Since we removed sorting functionality, just return the earnings as-is
+    // sorted by report date ascending by default
+    return [...earnings].sort((a, b) => {
+      const aDate = new Date(a.reportDate).getTime();
+      const bDate = new Date(b.reportDate).getTime();
+      return aDate - bDate;
+    });
+  };
+
+  const sortedEarnings = React.useMemo(() => {
+    return sortEarnings(upcomingEarnings);
+  }, [upcomingEarnings]);
 
   const loadData = async () => {
     // Only load if earnings table is unlocked
     if (!unlockedComponents.earningsTable) {
-      console.log('📊 Earnings table locked - skipping data load');
       return;
     }
 
     // Check if we have fresh cached data
     const hasData = upcomingEarnings.length > 0;
     const dataIsStale = isDataStale(lastFetchTime);
-    
-    console.log('📊 EARNINGS: Cache check:', {
-      hasData,
-      dataLength: upcomingEarnings.length,
-      lastFetchTime: lastFetchTime ? new Date(lastFetchTime).toISOString() : null,
-      dataIsStale,
-      timeRange
-    });
 
     // If we have fresh data, no need to fetch
     if (hasData && !dataIsStale) {
-      console.log('📊 EARNINGS: Using cached data, no fetch needed');
       setLoading(prev => ({ ...prev, upcomingEarnings: false }));
       return;
     }
 
-    console.log('📊 EARNINGS: Fetching fresh data...');
     setLoading({
       upcomingEarnings: true,
       analysis: false
@@ -329,9 +305,8 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
             onLoadingProgressChange(progress.percent, progress.message);
           }
           
-          console.log(`📊 Real-time progress: ${progress.percent}% - ${progress.message}`);
           if (progress.currentDate) {
-            console.log(`📅 Currently processing: ${progress.currentDate}`);
+            // Progress logging removed for production
           }
         }
       );
@@ -367,7 +342,6 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
   const loadAnalysis = async (ticker: string) => {
     // Only load if earnings analysis is unlocked
     if (!unlockedComponents.earningsAnalysis) {
-      console.log('📊 Earnings analysis locked - skipping analysis load');
       return;
     }
 
@@ -387,7 +361,6 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
     // Helper function to update progress
     const updateProgress = (step: number, stage: string) => {
       const progressPercentage = Math.round((step / totalSteps) * 100);
-      console.log(`Analysis loading progress: ${progressPercentage}%, Stage: ${stage}`);
       setLoadingProgress?.(progressPercentage);
       setLoadingStage?.(stage);
       
@@ -420,8 +393,6 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
   };
 
   const refreshData = () => {
-    console.log('🔄 EARNINGS: Refresh triggered - clearing cache and fetching fresh data');
-    
     // Clear cached data to force fresh fetch
     localStorage.removeItem('earnings_upcomingEarnings');
     localStorage.removeItem('earnings_lastFetchTime');
@@ -446,13 +417,10 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
 
   // Handle time range changes
   const handleTimeRangeChange = (range: TimeRange) => {
-    console.log(`⏰ EARNINGS: Changing time range from ${timeRange} to ${range}`);
-    
     // Update the time range state
     setTimeRange(range);
     
     // Clear cached data when time range changes to force fresh fetch
-    console.log('⏰ EARNINGS: Clearing cache for new time range');
     localStorage.removeItem('earnings_upcomingEarnings');
     localStorage.removeItem('earnings_lastFetchTime');
     
@@ -468,119 +436,8 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
     
     // Trigger fresh data loading if unlocked
     if (unlockedComponents.earningsTable) {
-      console.log('⏰ EARNINGS: Triggering fresh data load for new time range');
       loadData();
     }
-  };
-
-  // Debug function to clear all earnings cache - available in browser console
-  useEffect(() => {
-    (window as any).clearEarningsCache = () => {
-      console.log('🧹 DEBUG: Clearing all earnings cache...');
-      localStorage.removeItem('earnings_upcomingEarnings');
-      localStorage.removeItem('earnings_lastFetchTime');
-      
-      setUpcomingEarnings([]);
-      setLastFetchTime(null);
-      setErrors({ upcomingEarnings: null, analysis: null });
-      setLoading({ upcomingEarnings: false, analysis: false });
-      
-      console.log('🧹 DEBUG: Earnings cache cleared! Reload the page to see fresh data.');
-    };
-  }, []);
-
-  useEffect(() => {
-    loadData();
-  }, [timeRange, unlockedComponents.earningsTable]);
-
-  const handleSort = (key: string) => {
-    let direction: 'ascending' | 'descending' = 'ascending';
-    
-    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending';
-    }
-    
-    setSortConfig({ key, direction });
-  };
-
-  const sortEarnings = (earnings: EarningsEvent[]): EarningsEvent[] => {
-    if (!sortConfig.key) {
-      return earnings;
-    }
-
-    return [...earnings].sort((a, b) => {
-      if (sortConfig.key === 'reportDate') {
-        const aDate = new Date(a[sortConfig.key]).getTime();
-        const bDate = new Date(b[sortConfig.key]).getTime();
-        return sortConfig.direction === 'ascending' ? aDate - bDate : bDate - aDate;
-      }
-
-      const aValue = a[sortConfig.key as keyof EarningsEvent];
-      const bValue = b[sortConfig.key as keyof EarningsEvent];
-      
-      if (aValue === undefined || bValue === undefined) {
-        if (aValue === undefined && bValue === undefined) return 0;
-        if (aValue === undefined) return sortConfig.direction === 'ascending' ? -1 : 1;
-        return sortConfig.direction === 'ascending' ? 1 : -1;
-      }
-      
-      if (aValue < bValue) {
-        return sortConfig.direction === 'ascending' ? -1 : 1;
-      }
-      if (aValue > bValue) {
-        return sortConfig.direction === 'ascending' ? 1 : -1;
-      }
-      return 0;
-    });
-  };
-
-  const sortedEarnings = React.useMemo(() => {
-    return sortEarnings(upcomingEarnings);
-  }, [upcomingEarnings, sortConfig]);
-
-  // Pro Upgrade Card Component for Advanced Earnings Analysis
-  const EarningsProUpgradeCard: React.FC = () => {
-    const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-800';
-    const borderColor = isLight ? 'border-stone-400' : 'border-gray-700';
-    const gradientFrom = isLight ? 'from-blue-500' : 'from-blue-600';
-    const gradientTo = isLight ? 'to-purple-600' : 'to-purple-700';
-    const buttonBg = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
-
-    return (
-      <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} text-center`}>
-        <div className={`w-12 h-12 rounded-full bg-gradient-to-r ${gradientFrom} ${gradientTo} flex items-center justify-center mx-auto mb-4`}>
-          <Crown className="w-6 h-6 text-white" />
-        </div>
-        <h3 className={`text-lg font-semibold ${textColor} mb-2`}>Advanced Earnings Analysis</h3>
-        <p className={`${subTextColor} text-sm mb-6`}>
-          Unlock detailed company information, trading ranges, risk analysis, and professional-grade earnings insights.
-        </p>
-        
-        <div className={`${isLight ? 'bg-stone-200' : 'bg-gray-700'} rounded-lg p-4 mb-6`}>
-          <h4 className={`text-sm font-medium ${textColor} mb-2`}>Pro Features Include:</h4>
-          <div className={`text-xs ${subTextColor} space-y-1 text-left`}>
-            <div>• Sector & Industry Analysis</div>
-            <div>• Daily & 52-Week Trading Ranges</div>
-            <div>• Risk Level Assessment</div>
-            <div>• Analysis Score & Ratings</div>
-            <div>• Enhanced EPS Data</div>
-          </div>
-        </div>
-        
-        <button
-          onClick={() => showTierLimitDialog(
-            'Advanced Earnings Analysis',
-            'Advanced earnings analysis including company information, trading ranges, and risk assessment is a Pro feature. Upgrade to access detailed financial insights.',
-            'Unlock comprehensive earnings analysis, risk scoring, and professional trading insights with HRVSTR Pro.',
-            'general'
-          )}
-          className={`${buttonBg} text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center mx-auto`}
-        >
-          <Crown className="w-4 h-4 mr-2" />
-          Upgrade to Pro
-        </button>
-      </div>
-    );
   };
 
   // Component for locked overlays
@@ -714,28 +571,16 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
                   </thead>
                   <tbody className={`divide-y ${borderColor}`}>
                     {sortedEarnings
-                      .filter((earnings, index) => {
+                      .filter((earnings) => {
                         // Final UI-level validation - filter out any invalid tickers
                         if (!earnings.ticker || typeof earnings.ticker !== 'string' || earnings.ticker.trim() === '') {
-                          console.error('🚨 UI FILTER: Removing invalid ticker from render:', {
-                            index,
-                            earnings,
-                            ticker: earnings.ticker,
-                            type: typeof earnings.ticker
-                          });
                           return false;
                         }
                         return true;
                       })
                       .map((earnings, index) => {
-                      // Defensive logging for any remaining edge cases
+                      // Defensive check for any remaining edge cases
                       if (!earnings.ticker || typeof earnings.ticker !== 'string' || earnings.ticker.trim() === '') {
-                        console.error('🚨 RENDERING ITEM WITH INVALID TICKER:', {
-                          index,
-                          earnings,
-                          ticker: earnings.ticker,
-                          type: typeof earnings.ticker
-                        });
                         // Skip rendering this item
                         return null;
                       }
@@ -748,9 +593,9 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
                             // Validate ticker before processing
                             if (earnings.ticker && typeof earnings.ticker === 'string' && earnings.ticker.trim() !== '') {
                               setSelectedTicker(earnings.ticker);
-                                  if (unlockedComponents.earningsAnalysis) {
-                              loadAnalysis(earnings.ticker);
-                                  }
+                              if (unlockedComponents.earningsAnalysis) {
+                                loadAnalysis(earnings.ticker);
+                              }
                             } else {
                               console.warn('Invalid ticker symbol:', earnings.ticker);
                             }
@@ -776,7 +621,7 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
                 <Info className="mb-2" size={32} />
                 <p>No upcoming earnings found in the selected time range</p>
               </div>
-                )}
+            )}
               </>
             ) : (
               <LockedOverlay
@@ -869,80 +714,80 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
                     </div>
                   </div>
 
-                    <div className={`${analysisBg} rounded-lg p-4`}>
-                      <div className="flex items-center space-x-2 mb-2">
-                        {earningsAnalysis.priceChangePercent && earningsAnalysis.priceChangePercent > 0 ? (
-                          <TrendingUp size={20} className="text-green-500" />
-                        ) : (
-                          <TrendingDown size={20} className="text-red-500" />
-                        )}
-                        <span className="text-sm font-medium">Company & Trading Info</span>
+                  <div className={`${analysisBg} rounded-lg p-4`}>
+                    <div className="flex items-center space-x-2 mb-2">
+                      {earningsAnalysis.priceChangePercent && earningsAnalysis.priceChangePercent > 0 ? (
+                        <TrendingUp size={20} className="text-green-500" />
+                      ) : (
+                        <TrendingDown size={20} className="text-red-500" />
+                      )}
+                      <span className="text-sm font-medium">Company & Trading Info</span>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Sector:</span>
+                        <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
+                          {earningsAnalysis.sector || 'N/A'}
+                        </span>
                       </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Sector:</span>
-                          <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
-                            {earningsAnalysis.sector || 'N/A'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Day Range:</span>
-                          <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
-                            {earningsAnalysis.dayLow !== null && earningsAnalysis.dayHigh !== null
-                              ? `$${earningsAnalysis.dayLow.toFixed(2)} - $${earningsAnalysis.dayHigh.toFixed(2)}`
-                              : 'N/A'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>52W Range:</span>
-                          <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
-                            {earningsAnalysis.yearLow !== null && earningsAnalysis.yearHigh !== null
-                              ? `$${earningsAnalysis.yearLow.toFixed(2)} - $${earningsAnalysis.yearHigh.toFixed(2)}`
-                              : 'N/A'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>EPS:</span>
-                          <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
-                            {earningsAnalysis.eps !== null
-                              ? `$${earningsAnalysis.eps.toFixed(2)}`
-                              : 'N/A'}
-                          </span>
-                        </div>
+                      <div className="flex justify-between">
+                        <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>Day Range:</span>
+                        <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
+                          {earningsAnalysis.dayLow !== null && earningsAnalysis.dayHigh !== null
+                            ? `$${earningsAnalysis.dayLow.toFixed(2)} - $${earningsAnalysis.dayHigh.toFixed(2)}`
+                            : 'N/A'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>52W Range:</span>
+                        <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
+                          {earningsAnalysis.yearLow !== null && earningsAnalysis.yearHigh !== null
+                            ? `$${earningsAnalysis.yearLow.toFixed(2)} - $${earningsAnalysis.yearHigh.toFixed(2)}`
+                            : 'N/A'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className={isLight ? 'text-stone-800 font-medium' : 'text-gray-200 font-medium'}>EPS:</span>
+                        <span className={isLight ? 'text-blue-700 font-medium' : 'text-blue-300 font-medium'}>
+                          {earningsAnalysis.eps !== null
+                            ? `$${earningsAnalysis.eps.toFixed(2)}`
+                            : 'N/A'}
+                        </span>
                       </div>
                     </div>
+                  </div>
                 </div>
 
-                  <div className={`${analysisBg} rounded-lg p-4`}>
-                    <h3 className="text-sm font-medium mb-2">Analysis Summary</h3>
-                    <p className={`${isLight ? 'text-stone-800' : 'text-gray-200'} text-sm`}>
-                      {earningsAnalysis.companyName} ({earningsAnalysis.sector}) 
-                      {earningsAnalysis.analysisScore !== undefined && earningsAnalysis.riskLevel ? (
-                        <>
-                          {' '}has an analysis score of <span className="text-blue-500 font-medium">{earningsAnalysis.analysisScore}</span>
-                          {' '}with a <span className={
-                            earningsAnalysis.riskLevel === 'High' ? 'text-red-500' :
-                            earningsAnalysis.riskLevel === 'Medium' ? 'text-yellow-500' : 'text-green-500'
-                          }>{earningsAnalysis.riskLevel}</span> risk level.
-                        </>
-                      ) : ''}
-                      {earningsAnalysis.dataLimitations && earningsAnalysis.dataLimitations.length > 0 && (
-                        <>
-                          {' '}
-                          <span className={isLight ? 'text-stone-600' : 'text-gray-400'}>
-                            Note: {earningsAnalysis.dataLimitations.join(', ')}.
-                          </span>
-                        </>
-                      )}
-                    </p>
-                  </div>
+                <div className={`${analysisBg} rounded-lg p-4`}>
+                  <h3 className="text-sm font-medium mb-2">Analysis Summary</h3>
+                  <p className={`${isLight ? 'text-stone-800' : 'text-gray-200'} text-sm`}>
+                    {earningsAnalysis.companyName} ({earningsAnalysis.sector}) 
+                    {earningsAnalysis.analysisScore !== undefined && earningsAnalysis.riskLevel ? (
+                      <>
+                        {' '}has an analysis score of <span className="text-blue-500 font-medium">{earningsAnalysis.analysisScore}</span>
+                        {' '}with a <span className={
+                          earningsAnalysis.riskLevel === 'High' ? 'text-red-500' :
+                          earningsAnalysis.riskLevel === 'Medium' ? 'text-yellow-500' : 'text-green-500'
+                        }>{earningsAnalysis.riskLevel}</span> risk level.
+                      </>
+                    ) : ''}
+                    {earningsAnalysis.dataLimitations && earningsAnalysis.dataLimitations.length > 0 && (
+                      <>
+                        {' '}
+                        <span className={isLight ? 'text-stone-600' : 'text-gray-400'}>
+                          Note: {earningsAnalysis.dataLimitations.join(', ')}.
+                        </span>
+                      </>
+                    )}
+                  </p>
+                </div>
               </div>
             ) : (
               <div className={`flex flex-col items-center justify-center p-10 ${subTextColor} text-center`}>
                 <Info className="mb-2" size={32} />
                 <p>Select a ticker to view earnings analysis</p>
               </div>
-                )}
+            )}
               </>
             ) : (
               <LockedOverlay

@@ -125,35 +125,6 @@ const SentimentDashboard: React.FC = () => {
   // Ensure both tier info and API key check are complete before starting data loading
   const isSystemReady = !checkingApiKeys && tierInfo !== null;
   
-  // DEBUG: Log the Reddit access calculation with change detection
-  const prevAccessRef = useRef(hasFullRedditAccess);
-  useEffect(() => {
-    if (prevAccessRef.current !== hasFullRedditAccess) {
-      console.log('🔄 REDDIT ACCESS CHANGED:', {
-        from: prevAccessRef.current,
-        to: hasFullRedditAccess,
-        currentTier,
-        hasRedditTierAccess,
-        redditApiKeysConfigured,
-        checkingApiKeys,
-        isSystemReady,
-        timestamp: new Date().toISOString()
-      });
-      prevAccessRef.current = hasFullRedditAccess;
-    }
-  });
-  
-  // DEBUG: Log the Reddit access calculation on every render
-  console.log('🔑 REDDIT ACCESS DEBUG:', {
-    currentTier,
-    hasRedditTierAccess,
-    redditApiKeysConfigured,
-    hasFullRedditAccess,
-    checkingApiKeys,
-    tierInfoReady: tierInfo !== null,
-    isSystemReady
-  });
-  
   // Check API key status on component mount
   useEffect(() => {
     const checkApiKeyStatus = async () => {
@@ -175,16 +146,12 @@ const SentimentDashboard: React.FC = () => {
         
         if (response.ok) {
           const data = await response.json();
-          console.log('🔍 API Key Status Response:', data);
           if (data.success && data.dataSources) {
-            console.log('🔍 Reddit API Keys Status:', data.dataSources.reddit);
             setRedditApiKeysConfigured(data.dataSources.reddit || false);
           } else {
-            console.log('🔍 API Key Status - Invalid response format');
             setRedditApiKeysConfigured(false);
           }
         } else {
-          console.log('🔍 API Key Status - Response not OK:', response.status);
           setRedditApiKeysConfigured(false);
         }
       } catch (error) {
@@ -221,11 +188,7 @@ const SentimentDashboard: React.FC = () => {
       setActiveSessions(sessions);
       
       if (chartSession || scoresSession || redditSession) {
-        console.log('🔓 Restored unlock sessions:', {
-          chart: chartSession ? getSessionTimeRemainingFormatted(chartSession) : 'Locked',
-          scores: scoresSession ? getSessionTimeRemainingFormatted(scoresSession) : 'Locked',
-          reddit: redditSession ? getSessionTimeRemainingFormatted(redditSession) : 'Locked'
-        });
+        // Session logging removed for production
       }
     };
 
@@ -322,12 +285,7 @@ const SentimentDashboard: React.FC = () => {
           info(`${component} already unlocked (${data.timeRemaining}h remaining)`);
         } else {
           info(`${data.creditsUsed} credits used`);
-          console.log(`💳 Component unlocked successfully:`, {
-            component,
-            creditsUsed: data.creditsUsed,
-            sessionDuration: data.sessionDurationHours,
-            creditsRemaining: data.creditsRemaining
-          });
+          // Component unlock logging removed for production
         }
         
         // Refresh tier info to update usage meter

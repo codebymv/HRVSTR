@@ -62,14 +62,10 @@ const PremiumCreditControls: React.FC<PremiumCreditControlsProps> = ({
   
   const tier = tierInfo?.tier?.toLowerCase() || 'free';
   
-  // Debug logging
-  console.log('🔍 PremiumCreditControls Debug:', {
-    tier,
-    balance,
-    loading,
-    error,
-    tierInfo
-  });
+  // Debug effect - remove in production
+  useEffect(() => {
+    // Debug logging removed for production
+  }, [tier, balance, loading, error, tierInfo]);
   
   const handleStartResearchSession = () => {
     if (onStartResearch) {

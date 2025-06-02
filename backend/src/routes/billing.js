@@ -393,9 +393,9 @@ router.get('/pricing', async (req, res) => {
     // Real pricing data with actual Stripe Price IDs
     const pricingPlans = [
       {
-        id: process.env.STRIPE_PRICE_PRO_MONTHLY || 'price_1RU7GkRxBJaRlFvt0pcAxK8Q',
+        id: process.env.STRIPE_PRICE_PRO_MONTHLY || 'price_1RVeQnRxBJaRlFvtvP0hwPKG',
         product: 'HRVSTR Pro',
-        amount: 1900, // $19.00 in cents
+        amount: 1200, // $12.00 in cents
         currency: 'usd',
         interval: 'month',
         features: [
@@ -409,9 +409,9 @@ router.get('/pricing', async (req, res) => {
         ]
       },
       {
-        id: process.env.STRIPE_PRICE_PRO_YEARLY || 'price_1RU7HRRxBJaRlFvtmPFoZhmB',
+        id: process.env.STRIPE_PRICE_PRO_YEARLY || 'price_1RVeS6RxBJaRlFvtrsDYhukj',
         product: 'HRVSTR Pro',
-        amount: 19000, // $190.00 in cents (10% discount)
+        amount: 12000, // $120.00 in cents (17% discount)
         currency: 'usd',
         interval: 'year',
         features: [
@@ -425,9 +425,9 @@ router.get('/pricing', async (req, res) => {
         ]
       },
       {
-        id: process.env.STRIPE_PRICE_ELITE_MONTHLY || 'price_1RU7IIRxBJaRlFvtugLXLVDq',
+        id: process.env.STRIPE_PRICE_ELITE_MONTHLY || 'price_1RVeRaRxBJaRlFvtAeoHlznc',
         product: 'HRVSTR Elite',
-        amount: 4900, // $49.00 in cents
+        amount: 3000, // $30.00 in cents
         currency: 'usd',
         interval: 'month',
         features: [
@@ -442,9 +442,9 @@ router.get('/pricing', async (req, res) => {
         ]
       },
       {
-        id: process.env.STRIPE_PRICE_ELITE_YEARLY || 'price_1RU7IiRxBJaRlFvtvagv3s7J',
+        id: process.env.STRIPE_PRICE_ELITE_YEARLY || 'price_1RVeSgRxBJaRlFvtm4pgxpyh',
         product: 'HRVSTR Elite',
-        amount: 49000, // $490.00 in cents (10% discount)
+        amount: 30000, // $300.00 in cents (17% discount)
         currency: 'usd',
         interval: 'year',
         features: [

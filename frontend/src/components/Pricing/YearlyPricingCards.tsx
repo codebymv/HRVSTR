@@ -17,8 +17,8 @@ const YearlyPricingCards: React.FC<YearlyPricingCardsProps> = ({ onPurchaseClick
   const yearlyTiers: YearlyTier[] = [
     {
       name: 'Pro',
-      monthlyPrice: 19,
-      yearlyPrice: 190, // ~16.67/month (12% savings)
+      monthlyPrice: 12,
+      yearlyPrice: 120, // ~10/month (17% savings)
       icon: <Crown className="w-5 h-5" />,
       gradient: 'from-blue-400 to-blue-600',
       popular: true,
@@ -26,8 +26,8 @@ const YearlyPricingCards: React.FC<YearlyPricingCardsProps> = ({ onPurchaseClick
     },
     {
       name: 'Elite',
-      monthlyPrice: 49,
-      yearlyPrice: 490, // ~40.83/month (17% savings)
+      monthlyPrice: 30,
+      yearlyPrice: 300, // ~25/month (17% savings)
       icon: <Zap className="w-5 h-5" />,
       gradient: 'from-purple-400 to-purple-600',
       savings: '17%'

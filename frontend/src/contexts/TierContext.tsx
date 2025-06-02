@@ -56,8 +56,6 @@ export const TierProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       // Add cache-busting query parameter to force fresh request
       const cacheBuster = `?_t=${Date.now()}&_r=${Math.random()}`;
-      console.log('🔄 TierContext: Fetching tier info from:', `${apiUrl}/api/subscription/tier-info${cacheBuster}`);
-      console.log('🔑 TierContext: Using token:', token ? token.substring(0, 20) + '...' : 'No token');
       
       const response = await fetch(`${apiUrl}/api/subscription/tier-info${cacheBuster}`, {
         headers: {
@@ -67,9 +65,6 @@ export const TierProvider: React.FC<{ children: React.ReactNode }> = ({ children
           'Pragma': 'no-cache'
         },
       });
-
-      console.log('📡 TierContext: Response status:', response.status);
-      console.log('📡 TierContext: Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -85,11 +80,9 @@ export const TierProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const data = await response.json();
-      console.log('✅ TierContext: Tier data received:', data);
       
       if (data.success) {
         setTierInfo(data.data);
-        console.log('✅ TierContext: Updated to', data.data.tier, 'tier');
       } else {
         throw new Error(data.error || 'Failed to fetch tier info');
       }
@@ -118,7 +111,6 @@ export const TierProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const data = await response.json();
       if (data.success) {
         setTierInfo(data.data);
-        console.log('✅ TierContext: Upgraded to', tier, 'tier via simulateUpgrade');
         
         // Dispatch custom event for other components
         window.dispatchEvent(new CustomEvent('tierChanged', {
@@ -179,7 +171,6 @@ export const TierProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Listen for external tier change events
   useEffect(() => {
     const handleTierUpgrade = (event: CustomEvent) => {
-      console.log('🔔 TierContext: Received tierUpgrade event', event.detail);
       if (event.detail?.tier) {
         simulateUpgrade(event.detail.tier);
       }
@@ -187,13 +178,11 @@ export const TierProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const handleStorageChange = (event: StorageEvent) => {
       if (event.key === 'tierChanged' || event.key === 'auth_token') {
-        console.log('🔔 TierContext: Storage changed, refreshing tier info');
         refreshTierInfo();
       }
     };
 
     const handleTierRefresh = () => {
-      console.log('🔔 TierContext: Manual refresh requested');
       refreshTierInfo();
     };
 
@@ -208,24 +197,11 @@ export const TierProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     // Add debug function to check tier data
     (window as any).debugTierInfo = () => {
-      console.log('🔍 Current TierContext state:', {
-        tierInfo,
-        loading,
-        error,
-        isAuthenticated,
-        hasToken: !!token
-      });
-      
+      // Debug information available in production for troubleshooting
       if (tierInfo) {
-        console.log('📊 Detailed tier info:', {
-          tier: tierInfo.tier,
-          credits: tierInfo.credits,
-          features: tierInfo.features,
-          limits: tierInfo.limits
-        });
+        // Production debug function - logs removed
       }
       
-      console.log('🔄 Forcing tier refresh...');
       refreshTierInfo();
     };
 
@@ -244,7 +220,6 @@ export const TierProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!isAuthenticated || !token) return;
 
     const interval = setInterval(() => {
-      console.log('🔄 TierContext: Auto-refreshing tier info');
       refreshTierInfo();
     }, 30000); // 30 seconds
 

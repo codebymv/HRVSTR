@@ -70,13 +70,6 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
       // Update active sessions for display
       const sessions = getAllUnlockSessions();
       setActiveSessions(sessions);
-      
-      if (insiderSession || institutionalSession) {
-        console.log('🔓 Restored SEC filings unlock sessions:', {
-          insiderTrading: insiderSession ? getSessionTimeRemainingFormatted(insiderSession) : 'Locked',
-          institutionalHoldings: institutionalSession ? getSessionTimeRemainingFormatted(institutionalSession) : 'Locked'
-        });
-      }
     };
 
     checkExistingSessions();
@@ -94,8 +87,6 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
 
   // Handlers for unlocking individual components
   const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
-    console.log(`🔓 Attempting to unlock ${component} for ${cost} credits`);
-    
     // Check if already unlocked in current session
     const existingSession = checkUnlockSession(component);
     if (existingSession) {
@@ -150,12 +141,6 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
           info(`${component} already unlocked (${data.timeRemaining}h remaining)`);
         } else {
           info(`${data.creditsUsed} credits used`);
-          console.log(`💳 Component unlocked successfully:`, {
-            component,
-            creditsUsed: data.creditsUsed,
-            sessionDuration: data.sessionDurationHours,
-            creditsRemaining: data.creditsRemaining
-          });
         }
         
         // Refresh tier info to update usage meter
@@ -165,10 +150,8 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
 
         // Auto-trigger data refresh for newly unlocked components
         if (component === 'insiderTrading' && activeTab === 'insider') {
-          console.log('🔓 Insider trading unlocked - refreshing data automatically');
           handleRefresh();
         } else if (component === 'institutionalHoldings' && activeTab === 'institutional') {
-          console.log('🔓 Institutional holdings unlocked - refreshing data automatically');
           handleRefresh();
         }
       }
@@ -252,26 +235,13 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     // Only check institutional refresh for users with access
     const institutionalNeedsRefresh = hasInstitutionalAccess && (institutionalHoldingsData.length === 0 || isDataStale(lastFetchTime.institutionalHoldings));
     
-    console.log('🔄 DASHBOARD: Initial loading state calculation', {
-      insiderDataLength: insiderTradesData.length,
-      institutionalDataLength: institutionalHoldingsData.length,
-      insiderLastFetch: lastFetchTime.insiderTrades,
-      institutionalLastFetch: lastFetchTime.institutionalHoldings,
-      insiderStale: isDataStale(lastFetchTime.insiderTrades),
-      institutionalStale: isDataStale(lastFetchTime.institutionalHoldings),
-      insiderNeedsRefresh,
-      institutionalNeedsRefresh,
-      hasInstitutionalAccess,
-      currentTier
-    });
-    
     return {
       insiderTrades: { 
-        isLoading: insiderNeedsRefresh, 
+        isLoading: false, // Don't auto-load on mount - wait for unlock
         needsRefresh: insiderNeedsRefresh 
       },
       institutionalHoldings: { 
-        isLoading: institutionalNeedsRefresh, 
+        isLoading: false, // Don't auto-load on mount - wait for unlock
         needsRefresh: institutionalNeedsRefresh 
       }
     };
@@ -322,17 +292,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
       const insiderDone = !loadingState.insiderTrades.isLoading;
       const institutionalDone = !hasInstitutionalAccess || !loadingState.institutionalHoldings.isLoading;
       
-      console.log('🔄 BACKUP: Checking loading states:', { 
-        isRefreshing, 
-        insiderDone, 
-        institutionalDone, 
-        hasInstitutionalAccess,
-        insiderLoading: loadingState.insiderTrades.isLoading,
-        institutionalLoading: loadingState.institutionalHoldings.isLoading
-      });
-      
       if (insiderDone && institutionalDone) {
-        console.log('🔄 BACKUP: All loading complete, clearing refresh state via useEffect');
         // Clear refresh state immediately - no delay needed
         setIsRefreshing(false);
       }
@@ -343,8 +303,12 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
   useEffect(() => {
     if (isRefreshing) {
       const timeout = setTimeout(() => {
-        console.warn('🔄 SAFETY: Force clearing refresh state after 5 seconds');
         setIsRefreshing(false);
+        // Also force clear loading states if they're stuck
+        setLoadingState({
+          insiderTrades: { isLoading: false, needsRefresh: false },
+          institutionalHoldings: { isLoading: false, needsRefresh: false }
+        });
       }, 5000); // Reduced from 10 seconds to 5 seconds
       
       return () => clearTimeout(timeout);
@@ -355,7 +319,6 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
   useEffect(() => {
     // If we're refreshing but neither tab is actually loading, clear refresh state
     if (isRefreshing && !loadingState.insiderTrades.isLoading && !loadingState.institutionalHoldings.isLoading) {
-      console.log('🔄 DIRECT: No tabs loading while refreshing, clearing refresh state');
       setTimeout(() => {
         setIsRefreshing(false);
       }, 500); // Small delay to avoid race conditions
@@ -364,17 +327,12 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
   
   // Handle initial loading when component mounts
   useEffect(() => {
-    console.log('🔄 DASHBOARD: Component mounted, checking if initial loading is needed');
-    console.log('🔄 DASHBOARD: Current loading state:', loadingState);
-    
-    // If we need to load data and haven't started loading yet, ensure loading states are correct
-    const needsInsiderRefresh = loadingState.insiderTrades.needsRefresh;
-    const needsInstitutionalRefresh = hasInstitutionalAccess && loadingState.institutionalHoldings.needsRefresh;
+    // Only set loading states for unlocked components that need refresh
+    const needsInsiderRefresh = unlockedComponents.insiderTrading && loadingState.insiderTrades.needsRefresh;
+    const needsInstitutionalRefresh = unlockedComponents.institutionalHoldings && hasInstitutionalAccess && loadingState.institutionalHoldings.needsRefresh;
     
     if (needsInsiderRefresh || needsInstitutionalRefresh) {
-      console.log(`🔄 DASHBOARD: Initial loading needed - insider: ${needsInsiderRefresh}, institutional: ${needsInstitutionalRefresh}`);
-      
-      // Ensure the loading states are properly set to trigger the child components
+      // Only set loading state for components that are unlocked AND need refresh
       setLoadingState({
         insiderTrades: { 
           isLoading: needsInsiderRefresh, 
@@ -385,15 +343,11 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
           needsRefresh: needsInstitutionalRefresh 
         }
       });
-    } else {
-      console.log('🔄 DASHBOARD: No initial loading needed, using cached data');
     }
-  }, []); // Only run on mount
+  }, [unlockedComponents.insiderTrading, unlockedComponents.institutionalHoldings]); // Depend on unlock state
   
   // Handle loading updates from child components - simplified
   const handleInsiderTradesLoading = (isLoading: boolean, progress: number, stage: string, data?: any[], error?: string | null) => {
-    console.log(`📊 INSIDER LOADING: isLoading=${isLoading}, progress=${progress}, stage="${stage}", dataLength=${data?.length || 0}, error=${error}, isRefreshing=${isRefreshing}`);
-    
     setLoadingState(prev => ({
       ...prev,
       insiderTrades: { 
@@ -404,7 +358,6 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     
     // When loading completes successfully, update data and timestamps
     if (!isLoading && data) {
-      console.log(`📊 INSIDER LOADING: Loading completed with ${data.length} items, updating data and timestamp`);
       setInsiderTradesData(data);
       setLastFetchTime(prev => ({
         ...prev,
@@ -414,7 +367,6 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     
     // Update error state if provided
     if (error !== undefined) {
-      console.log(`📊 INSIDER LOADING: Error state updated: ${error}`);
       setErrors(prev => ({ ...prev, insiderTrades: error }));
     }
     
@@ -431,24 +383,17 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
 
     // EXPLICIT: Clear refresh state when insider loading completes
     if (!isLoading && isRefreshing) {
-      console.log('✅ INSIDER LOADING: Insider loading complete, checking if we can clear refresh state');
-      
       // Check if institutional also complete (or not needed)
       const institutionalComplete = !hasInstitutionalAccess || !loadingState.institutionalHoldings.isLoading;
       
       if (institutionalComplete) {
-        console.log('✅ INSIDER LOADING: All loading complete, clearing refresh state immediately');
         setIsRefreshing(false);
-      } else {
-        console.log('✅ INSIDER LOADING: Waiting for institutional loading to complete');
       }
     }
   };
   
   // Handle loading updates from institutional holdings tab - simplified
   const handleInstitutionalHoldingsLoading = (isLoading: boolean, progress: number, stage: string, data?: any[], error?: string | null) => {
-    console.log(`🏛️ INSTITUTIONAL LOADING: isLoading=${isLoading}, progress=${progress}, stage="${stage}", dataLength=${data?.length || 0}, error=${error}, isRefreshing=${isRefreshing}`);
-    
     setLoadingState(prev => ({
       ...prev,
       institutionalHoldings: { 
@@ -459,7 +404,6 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     
     // When loading completes successfully, update data and timestamps
     if (!isLoading && data) {
-      console.log(`🏛️ INSTITUTIONAL LOADING: Loading completed with ${data.length} items, updating data and timestamp`);
       setInstitutionalHoldingsData(data);
       setLastFetchTime(prev => ({
         ...prev,
@@ -469,7 +413,6 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     
     // Update error state if provided
     if (error !== undefined) {
-      console.log(`🏛️ INSTITUTIONAL LOADING: Error state updated: ${error}`);
       setErrors(prev => ({ ...prev, institutionalHoldings: error }));
     }
     
@@ -486,29 +429,21 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
 
     // EXPLICIT: Clear refresh state when institutional loading completes
     if (!isLoading && isRefreshing) {
-      console.log('✅ INSTITUTIONAL LOADING: Institutional loading complete, checking if we can clear refresh state');
-      
       // Check if insider also complete
       const insiderComplete = !loadingState.insiderTrades.isLoading;
       
       if (insiderComplete) {
-        console.log('✅ INSTITUTIONAL LOADING: All loading complete, clearing refresh state immediately');
         setIsRefreshing(false);
-      } else {
-        console.log('✅ INSTITUTIONAL LOADING: Waiting for insider loading to complete');
       }
     }
   };
   
   // Handle time range changes
   const handleTimeRangeChange = (range: TimeRange) => {
-    console.log(`⏰ TIME RANGE: Changing from ${timeRange} to ${range}`);
-    
     // Update the time range state
     setTimeRange(range);
     
     // Clear cached data when time range changes to force fresh fetch
-    console.log('⏰ TIME RANGE: Clearing localStorage cache for new time range');
     localStorage.removeItem('secFilings_insiderTrades');
     localStorage.removeItem('secFilings_institutionalHoldings');
     localStorage.removeItem('secFilings_lastFetchTime');
@@ -527,26 +462,27 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
       institutionalHoldings: null
     });
     
-    // Trigger fresh data loading for both tabs
-    console.log('⏰ TIME RANGE: Triggering fresh data loading for new time range');
+    // Set loading states to trigger data refresh with streaming
     setLoadingState({
-      insiderTrades: { isLoading: true, needsRefresh: true },
-      institutionalHoldings: { isLoading: true, needsRefresh: true }
+      insiderTrades: { 
+        isLoading: unlockedComponents.insiderTrading, 
+        needsRefresh: unlockedComponents.insiderTrading 
+      },
+      institutionalHoldings: { 
+        isLoading: unlockedComponents.institutionalHoldings && hasInstitutionalAccess, 
+        needsRefresh: unlockedComponents.institutionalHoldings && hasInstitutionalAccess 
+      }
     });
   };
   
   // Function to refresh data with cache clearing
   const handleRefresh = async () => {
-    console.log('🔄 REFRESH: Starting refresh process...');
-    
     try {
       setIsRefreshing(true);
-      console.log('🔄 REFRESH: Set isRefreshing to true');
       
       // Update loading stage to show cache clearing operation
       setLoadingProgress(0);
       setLoadingStage('Refreshing SEC data...');
-      console.log('🔄 REFRESH: Set loading stage to cache clearing');
       
       // Propagate to parent if callback exists
       if (onLoadingProgressChange) {
@@ -554,12 +490,9 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
       }
       
       // Call the API function to clear cache
-      console.log('🔄 REFRESH: Calling clearSecCache...');
       await clearSecCache();
-      console.log('🔄 REFRESH: Cache cleared successfully');
       
       // Clear local storage cache as well
-      console.log('🔄 REFRESH: Clearing localStorage cache');
       localStorage.removeItem('secFilings_insiderTrades');
       localStorage.removeItem('secFilings_institutionalHoldings');
       localStorage.removeItem('secFilings_lastFetchTime');
@@ -567,14 +500,12 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
       // Now that cache is cleared, set the stage to 25% before fetching fresh data
       setLoadingProgress(25);
       setLoadingStage('Fetching fresh data in parallel...');
-      console.log('🔄 REFRESH: Set loading stage to fetching fresh data');
       
       if (onLoadingProgressChange) {
         onLoadingProgressChange(25, 'Fetching fresh data in parallel...');
       }
       
       // Clear cached last fetch time to force fresh data
-      console.log('🔄 REFRESH: Clearing cached fetch times');
       setLastFetchTime({
         insiderTrades: null,
         institutionalHoldings: null
@@ -591,13 +522,16 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
       });
       
       // Set loading states to trigger data refresh with streaming
-      console.log('🔄 REFRESH: Setting loading states to trigger refresh');
       setLoadingState({
-        insiderTrades: { isLoading: true, needsRefresh: true },
-        institutionalHoldings: { isLoading: true, needsRefresh: true }
+        insiderTrades: { 
+          isLoading: unlockedComponents.insiderTrading, 
+          needsRefresh: unlockedComponents.insiderTrading 
+        },
+        institutionalHoldings: { 
+          isLoading: unlockedComponents.institutionalHoldings && hasInstitutionalAccess, 
+          needsRefresh: unlockedComponents.institutionalHoldings && hasInstitutionalAccess 
+        }
       });
-      
-      console.log('🔄 REFRESH: Refresh initiated successfully, waiting for loading handlers...');
       
     } catch (error) {
       console.error('❌ REFRESH: Error during refresh:', error);
@@ -629,7 +563,6 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
   // Debug function to clear all cache - available in browser console as window.clearSecCache
   useEffect(() => {
     (window as any).clearSecFilingsCache = () => {
-      console.log('🧹 DEBUG: Clearing all SEC filings cache...');
       localStorage.removeItem('secFilings_insiderTrades');
       localStorage.removeItem('secFilings_institutionalHoldings');
       localStorage.removeItem('secFilings_lastFetchTime');
@@ -641,8 +574,17 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
       setLastFetchTime({ insiderTrades: null, institutionalHoldings: null });
       setIsRefreshing(false);
       setErrors({ insiderTrades: null, institutionalHoldings: null });
-      
-      console.log('🧹 DEBUG: Cache cleared! Reload the page to see fresh data.');
+    };
+    
+    // Emergency function to clear stuck loading states
+    (window as any).clearSecLoadingStates = () => {
+      setIsRefreshing(false);
+      setLoadingState({
+        insiderTrades: { isLoading: false, needsRefresh: false },
+        institutionalHoldings: { isLoading: false, needsRefresh: false }
+      });
+      setLoadingProgress(0);
+      setLoadingStage('Ready');
     };
   }, []);
   
@@ -772,41 +714,42 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
             {/* Refresh button - now combines cache clearing and data refresh */}
             <button
               onClick={() => {
-                console.log('🔄 DASHBOARD: Refresh button clicked!');
-                console.log('🔄 DASHBOARD: Current states before refresh:', {
-                  isRefreshing,
-                  loadingState,
-                  activeTab,
-                  unlockedComponents
-                });
+                // Only refresh if any component is unlocked
+                const hasUnlockedComponents = unlockedComponents.insiderTrading || unlockedComponents.institutionalHoldings;
                 
-                // Only refresh if the active tab component is unlocked
-                const canRefresh = (activeTab === 'insider' && unlockedComponents.insiderTrading) || 
-                                 (activeTab === 'institutional' && unlockedComponents.institutionalHoldings);
-                
-                if (canRefresh) {
-                handleRefresh();
+                if (hasUnlockedComponents) {
+                  handleRefresh();
                 } else {
-                  info(`Please unlock ${activeTab === 'insider' ? 'Insider Trading' : 'Institutional Holdings'} first`);
+                  info('Please unlock a component first to refresh data');
                 }
               }}
               disabled={isRefreshing || 
-                       (activeTab === 'insider' && (loadingState.insiderTrades.isLoading || !unlockedComponents.insiderTrading)) ||
-                       (activeTab === 'institutional' && (loadingState.institutionalHoldings.isLoading || !unlockedComponents.institutionalHoldings))}
-              className={`p-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white ${
-                (isRefreshing || 
-                 (activeTab === 'insider' && (loadingState.insiderTrades.isLoading || !unlockedComponents.insiderTrading)) ||
-                 (activeTab === 'institutional' && (loadingState.institutionalHoldings.isLoading || !unlockedComponents.institutionalHoldings))) 
-                ? 'opacity-50' : ''
-              }`}
-              title="Refresh SEC data"
+                       loadingState.insiderTrades.isLoading || 
+                       loadingState.institutionalHoldings.isLoading ||
+                       !(unlockedComponents.insiderTrading || unlockedComponents.institutionalHoldings)}
+              className={`p-2 rounded-full transition-colors ${
+                // Show different styling based on unlock state
+                (unlockedComponents.insiderTrading || unlockedComponents.institutionalHoldings)
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white' // Unlocked: normal blue
+                  : 'bg-gray-400 cursor-not-allowed text-gray-200' // Locked: grayed out
+              } ${(isRefreshing || loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading) ? 'opacity-50' : ''}`}
+              title={
+                (unlockedComponents.insiderTrading || unlockedComponents.institutionalHoldings)
+                  ? 'Refresh SEC data'
+                  : 'Unlock components to refresh data'
+              }
             >
-              {(isRefreshing || 
-                (activeTab === 'insider' && loadingState.insiderTrades.isLoading) || 
-                (activeTab === 'institutional' && loadingState.institutionalHoldings.isLoading)) ? (
+              {/* Only show spinner if components are unlocked AND loading */}
+              {(unlockedComponents.insiderTrading || unlockedComponents.institutionalHoldings) && 
+               (isRefreshing || loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading) ? (
                 <Loader2 size={18} className="text-white animate-spin" />
               ) : (
-                <RefreshCw size={18} className="text-white" />
+                <RefreshCw size={18} className={
+                  // Gray icon when locked, white when unlocked
+                  !(unlockedComponents.insiderTrading || unlockedComponents.institutionalHoldings)
+                    ? 'text-gray-200' 
+                    : 'text-white'
+                } />
               )}
             </button>
           </div>

@@ -75,9 +75,7 @@ export const useRecentActivityInfiniteScroll = (): UseRecentActivityInfiniteScro
 
     const pageToFetch = pageOverride || (forceRefresh ? 1 : currentPage);
     
-    // Simple race condition prevention using just loading state
     if (isLoadingRef.current) {
-      console.log(`🚫 Request already in progress, skipping`);
       return;
     }
 
@@ -86,7 +84,6 @@ export const useRecentActivityInfiniteScroll = (): UseRecentActivityInfiniteScro
       resetPagination();
     }
     
-    console.log(`🚀 Starting request for page ${pageToFetch}`);
     isLoadingRef.current = true;
     setLoading(true);
     setError(null);
@@ -121,21 +118,11 @@ export const useRecentActivityInfiniteScroll = (): UseRecentActivityInfiniteScro
       let newActivities: ActivityItem[] = [];
       let paginationInfo: PaginationInfo | null = null;
 
-      // Add debug logging
-      console.log(`🔍 Activity API Debug - Page ${pageToFetch}:`, {
-        status: response.status,
-        dataType: typeof responseData,
-        isArray: Array.isArray(responseData),
-        responseStructure: responseData ? Object.keys(responseData) : 'null'
-      });
-
       // Check if response has pagination structure
       if (responseData && responseData.activities && responseData.pagination) {
         // New paginated response structure
         newActivities = responseData.activities;
         paginationInfo = responseData.pagination;
-        
-        console.log(`📊 Page ${pageToFetch}: ${newActivities.length} activities, hasMore: ${paginationInfo?.hasMore}`);
       } else if (Array.isArray(responseData)) {
         // Backward compatibility - treat as array of activities
         newActivities = responseData;
@@ -149,7 +136,6 @@ export const useRecentActivityInfiniteScroll = (): UseRecentActivityInfiniteScro
         };
       } else {
         // Empty or unexpected response
-        console.log('Empty or unexpected response structure:', responseData);
         newActivities = [];
         paginationInfo = {
           currentPage: pageToFetch,
@@ -170,20 +156,15 @@ export const useRecentActivityInfiniteScroll = (): UseRecentActivityInfiniteScro
         // Only append if we actually have new activities and avoid duplicates
         if (newActivities.length > 0) {
           setActivities(prev => {
-            console.log(`🔄 Current: ${prev.length} activities, attempting to add: ${newActivities.length}`);
-            
             // Create a Set of existing activity IDs for fast lookup
             const existingIds = new Set(prev.map(activity => activity.id));
             
             // Filter out activities that already exist
             const uniqueNewActivities = newActivities.filter(activity => !existingIds.has(activity.id));
             
-            console.log(`🔄 Unique new activities: ${uniqueNewActivities.length}, duplicates filtered: ${newActivities.length - uniqueNewActivities.length}`);
-            
             // If no new unique activities, don't append but don't stop infinite scroll
             // Only stop infinite scroll when backend tells us hasMore is false
             if (uniqueNewActivities.length === 0) {
-              console.log('🔄 No new unique activities from this request (likely race condition), but keeping infinite scroll active');
               return prev;
             }
             
@@ -195,14 +176,6 @@ export const useRecentActivityInfiniteScroll = (): UseRecentActivityInfiniteScro
 
       // Update pagination state
       if (paginationInfo) {
-        console.log(`🎯 Updating pagination state:`, {
-          oldHasMore: hasMore,
-          newHasMore: paginationInfo.hasMore,
-          currentPage: paginationInfo.currentPage,
-          totalPages: paginationInfo.totalPages,
-          totalActivities: paginationInfo.totalActivities
-        });
-        
         setHasMore(paginationInfo.hasMore);
         setTotalActivities(paginationInfo.totalActivities);
         setCurrentPage(paginationInfo.currentPage);
@@ -245,19 +218,16 @@ export const useRecentActivityInfiniteScroll = (): UseRecentActivityInfiniteScro
   const handleLoadMore = useCallback(() => {
     // Don't load if already loading, no more activities, or too soon since last load
     if (isLoadingRef.current || !hasMore || loading) {
-      console.log(`🚫 Hook handleLoadMore blocked: loading=${loading}, hasMore=${hasMore}, isLoadingRef=${isLoadingRef.current}, currentPage=${currentPage}`);
       return;
     }
 
     const now = Date.now();
     if (now - lastLoadTimeRef.current < THROTTLE_MS) {
-      console.log(`🚫 Hook throttling: too soon since last request (${now - lastLoadTimeRef.current}ms < ${THROTTLE_MS}ms), currentPage=${currentPage}`);
       return;
     }
 
     // Calculate next page and fetch directly to avoid race condition
     const nextPage = currentPage + 1;
-    console.log(`📖 Hook loading more: current page ${currentPage} → next page ${nextPage}, total activities: ${activities.length}`);
     
     // Update page state and fetch
     setCurrentPage(nextPage);

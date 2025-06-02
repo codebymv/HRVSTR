@@ -58,17 +58,14 @@ const RecentActivitySection: React.FC<RecentActivitySectionProps> = ({
   const handleLoadMore = useCallback(() => {
     // Don't load if already loading, no more activities, or too soon since last load
     if (isLoadingMoreRef.current || !hasMore || isLoading) {
-      console.log(`🚫 Component handleLoadMore blocked: isLoadingMoreRef=${isLoadingMoreRef.current}, hasMore=${hasMore}, isLoading=${isLoading}`);
       return;
     }
 
     const now = Date.now();
     if (now - lastLoadTimeRef.current < 300) { // Reduced from 500ms to 300ms
-      console.log(`🚫 Component handleLoadMore throttled: time since last=${now - lastLoadTimeRef.current}ms`);
       return;
     }
 
-    console.log(`📖 Component handleLoadMore calling onLoadMore`);
     isLoadingMoreRef.current = true;
     lastLoadTimeRef.current = now;
 
@@ -77,7 +74,6 @@ const RecentActivitySection: React.FC<RecentActivitySectionProps> = ({
     // Reset loading state after a shorter delay
     setTimeout(() => {
       isLoadingMoreRef.current = false;
-      console.log(`✅ Component throttle reset`);
     }, 300);
   }, [onLoadMore, isLoading, hasMore]);
 
@@ -105,22 +101,15 @@ const RecentActivitySection: React.FC<RecentActivitySectionProps> = ({
       // Update scrollable state
       setIsScrollable(containerIsScrollable);
       
-      console.log(`📊 Scroll: ${Math.round(scrollPercentage * 100)}%, ${distanceFromBottom}px from bottom, scrollable: ${containerIsScrollable}`);
-      
       // If container isn't scrollable and we have more content, auto-load
       if (!containerIsScrollable && hasMore && !isLoading && !isLoadingMoreRef.current) {
-        console.log(`📖 Auto-loading: container not scrollable but has more content`);
         handleLoadMore();
         return;
       }
       
       // For scrollable containers: trigger when within 200px of bottom OR when 85% scrolled
       if (containerIsScrollable && (distanceFromBottom < 200 || scrollPercentage > 0.85) && hasMore && !isLoading && !isLoadingMoreRef.current) {
-        console.log(`📖 Scroll detection triggered: distance=${distanceFromBottom}px, percentage=${Math.round(scrollPercentage * 100)}%`);
         handleLoadMore();
-      } else if (containerIsScrollable && (distanceFromBottom < 200 || scrollPercentage > 0.85)) {
-        // Log why we're not triggering
-        console.log(`🚫 Scroll trigger blocked: hasMore=${hasMore}, isLoading=${isLoading}, isLoadingMoreRef=${isLoadingMoreRef.current}, distance=${distanceFromBottom}px`);
       }
     };
 

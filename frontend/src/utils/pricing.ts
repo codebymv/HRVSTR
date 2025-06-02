@@ -15,12 +15,12 @@ export interface YearlyTier {
 export const getPriceIdForTier = (tierName: string, isYearly: boolean = false): string => {
   const priceIds = {
     'pro': {
-      monthly: import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY || 'price_1RU7GkRxBJaRlFvt0pcAxK8Q',
-      yearly: import.meta.env.VITE_STRIPE_PRICE_PRO_YEARLY || 'price_1RU7HRRxBJaRlFvtmPFoZhmB'
+      monthly: import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY || 'price_1RVeQnRxBJaRlFvtvP0hwPKG',
+      yearly: import.meta.env.VITE_STRIPE_PRICE_PRO_YEARLY || 'price_1RVeS6RxBJaRlFvtrsDYhukj'
     },
     'elite': {
-      monthly: import.meta.env.VITE_STRIPE_PRICE_ELITE_MONTHLY || 'price_1RU7IIRxBJaRlFvtugLXLVDq',
-      yearly: import.meta.env.VITE_STRIPE_PRICE_ELITE_YEARLY || 'price_1RU7IiRxBJaRlFvtvagv3s7J'
+      monthly: import.meta.env.VITE_STRIPE_PRICE_ELITE_MONTHLY || 'price_1RVeRaRxBJaRlFvtAeoHlznc',
+      yearly: import.meta.env.VITE_STRIPE_PRICE_ELITE_YEARLY || 'price_1RVeSgRxBJaRlFvtm4pgxpyh'
     },
     'institutional': {
       monthly: import.meta.env.VITE_STRIPE_PRICE_INSTITUTIONAL_MONTHLY || 'price_1RU7JLRxBJaRlFvtcQWSwReg',
@@ -29,7 +29,21 @@ export const getPriceIdForTier = (tierName: string, isYearly: boolean = false): 
   };
 
   const tierKey = tierName.toLowerCase() as keyof typeof priceIds;
-  return priceIds[tierKey]?.[isYearly ? 'yearly' : 'monthly'] || '';
+  const selectedPriceId = priceIds[tierKey]?.[isYearly ? 'yearly' : 'monthly'] || '';
+  
+  // Temporary debug logging
+  console.log('🔍 Pricing Debug:', {
+    tierName,
+    isYearly,
+    tierKey,
+    envVars: {
+      VITE_STRIPE_PRICE_PRO_MONTHLY: import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY,
+      VITE_STRIPE_PRICE_ELITE_MONTHLY: import.meta.env.VITE_STRIPE_PRICE_ELITE_MONTHLY,
+    },
+    selectedPriceId
+  });
+  
+  return selectedPriceId;
 };
 
 // Shared purchase click handler logic

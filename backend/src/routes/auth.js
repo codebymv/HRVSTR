@@ -88,23 +88,27 @@ router.get('/profile', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     
-    // Fetch user profile data from the users table
+    // Fetch user profile data using the credit summary view for accurate credit calculations
     const userResult = await pool.query(
       `SELECT 
-        id, 
-        email, 
-        name, 
-        created_at, 
-        updated_at, 
-        tier, 
-        credits_remaining, 
-        credits_monthly_limit, 
-        credits_reset_date, 
-        subscription_status, 
-        stripe_customer_id, 
-        stripe_subscription_id 
-      FROM users 
-      WHERE id = $1`,
+        u.id, 
+        u.email, 
+        u.name, 
+        u.created_at, 
+        u.updated_at, 
+        u.tier, 
+        u.credits_used,
+        u.monthly_credits, 
+        u.credits_purchased,
+        u.credits_reset_date, 
+        u.subscription_status, 
+        u.stripe_customer_id, 
+        u.stripe_subscription_id,
+        cs.remaining_credits,
+        cs.total_credits
+      FROM users u
+      LEFT JOIN user_credit_summary cs ON u.id = cs.user_id
+      WHERE u.id = $1`,
       [userId]
     );
 

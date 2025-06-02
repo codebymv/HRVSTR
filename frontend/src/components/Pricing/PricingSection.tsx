@@ -54,7 +54,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
     },
     {
       name: 'Pro',
-      price: '$19',
+      price: '$12',
       period: 'month',
       description: 'For active traders',
       icon: <Crown className="w-5 h-5" />,
@@ -75,7 +75,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
     },
     {
       name: 'Elite',
-      price: '$49',
+      price: '$30',
       period: 'month',
       description: 'For serious analysts',
       icon: <Zap className="w-5 h-5" />,
@@ -96,7 +96,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
     // TODO: Re-enable for post-1.0 release
     // {
     //   name: 'Institutional',
-    //   price: '$199',
+    //   price: '$60',
     //   period: 'month',
     //   description: 'For teams & businesses',
     //   icon: <Building className="w-5 h-5" />,

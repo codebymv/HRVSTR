@@ -196,7 +196,6 @@ const UserHome: React.FC = () => {
       };
       const tierLimit = defaultLimits[tierInfo.tier.toLowerCase() as keyof typeof defaultLimits] || 3;
       setWatchlistLimit(tierLimit);
-      console.log(`Set default watchlist limit for ${tierInfo.tier} tier: ${tierLimit}`);
     }
   }, [watchlistLimit, tierInfo?.tier]);
 
@@ -465,7 +464,6 @@ const UserHome: React.FC = () => {
 
       // Check for tier limit response
       if (response.status === 202 && response.data.tierLimitReached) {
-        console.log('Tier limit reached during watchlist add, showing tier limit dialog');
         
         // Check if this was an Alpha Vantage limit (external API limit)
         if (response.data.alphaVantageLimit) {
@@ -515,7 +513,6 @@ const UserHome: React.FC = () => {
       
       // Check for tier limit error responses
       if (error.response?.status === 202 && error.response?.data?.tierLimitReached) {
-        console.log('Tier limit reached, showing tier limit dialog');
         
         // Check if this was an Alpha Vantage limit
         if (error.response.data.alphaVantageLimit) {
