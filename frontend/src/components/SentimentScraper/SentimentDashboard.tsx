@@ -2,8 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTier } from '../../contexts/TierContext';
 import { useTierLimits } from '../../hooks/useTierLimits';
+import { useToast } from '../../contexts/ToastContext';
+import { 
+  checkUnlockSession, 
+  storeUnlockSession, 
+  getAllUnlockSessions,
+  getSessionTimeRemainingFormatted 
+} from '../../utils/sessionStorage';
 import { TimeRange } from '../../types';
-import { RefreshCw, Loader2, Crown, Lock, Settings, Key } from 'lucide-react';
+import { RefreshCw, Loader2, Crown, Lock, Settings, Key, TrendingUp, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // Custom hooks
@@ -15,27 +22,83 @@ import SentimentChartCard from './SentimentChartCard';
 import SentimentScoresSection from './SentimentScoresSection';
 import RedditPostsSection from './RedditPostsSection';
 import TierLimitDialog from '../UI/TierLimitDialog';
+import PremiumCreditControls from './PremiumCreditControls';
 
 const SentimentDashboard: React.FC = () => {
   const { theme } = useTheme();
-  const { tierInfo } = useTier();
-  const { showTierLimitDialog, tierLimitDialog, closeTierLimitDialog } = useTierLimits();
+  const { tierInfo, refreshTierInfo } = useTier();
+  const { showTierLimitDialog, closeTierLimitDialog, tierLimitDialog } = useTierLimits();
+  const { info } = useToast();
   const navigate = useNavigate();
   const isLight = theme === 'light';
-  
-  // Theme-specific styling
   const textColor = isLight ? 'text-stone-800' : 'text-white';
   const mutedTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
   
-  // State for time range selection
-  const [timeRange, setTimeRange] = useState<TimeRange>('1w');
+  // Add state to control when data should be loaded
+  const [hasRequestedData, setHasRequestedData] = useState(false);
+  const [isManualLoading, setIsManualLoading] = useState(false);
   
-  // State to track if tier limit dialog has been shown for this session
+  // Component unlock state - now managed by sessions
+  const [unlockedComponents, setUnlockedComponents] = useState<{
+    chart: boolean;
+    scores: boolean;
+    reddit: boolean;
+  }>({
+    chart: false,
+    scores: false,
+    reddit: false
+  });
+
+  // Session state for time tracking
+  const [activeSessions, setActiveSessions] = useState<any[]>([]);
+  
+  // Current selected symbol for research
+  const [currentSymbol, setCurrentSymbol] = useState('AAPL');
+  
+  // Time range state
+  const [timeRange, setTimeRange] = useState<TimeRange>('1w');
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  
+  // Dialog state for tier limits
   const [tierLimitDialogShown, setTierLimitDialogShown] = useState(false);
   
   // State for API key status
   const [redditApiKeysConfigured, setRedditApiKeysConfigured] = useState<boolean>(false);
   const [checkingApiKeys, setCheckingApiKeys] = useState<boolean>(true);
+  
+  // Get tier info
+  const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
+  const redditPostLimit = currentTier === 'free' ? 5 : -1; // Free users: 5 posts, others: unlimited
+  
+  // Use sentiment data hook - always load but conditionally show
+  const {
+    topSentiments,
+    finvizSentiments,
+    yahooSentiments,
+    combinedSentiments,
+    redditPosts,
+    chartData,
+    loading,
+    errors,
+    hasMorePosts,
+    loadingProgress,
+    loadingStage,
+    handleLoadMorePosts: originalHandleLoadMorePosts,
+    isDataLoading,
+    refreshData: originalRefreshData
+  } = useSentimentData(timeRange, true, true); // Always load data
+
+  // Refresh data handler
+  const refreshData = () => {
+    originalRefreshData();
+  };
+
+  // Handle time range changes
+  const handleTimeRangeChange = (range: TimeRange) => {
+    setTimeRange(range);
+    setIsTransitioning(true);
+    setTimeout(() => setIsTransitioning(false), 300);
+  };
   
   // Reddit posts tier limits (posts per page = 10)
   const REDDIT_TIER_LIMITS = {
@@ -45,8 +108,6 @@ const SentimentDashboard: React.FC = () => {
     institutional: -1 // unlimited
   };
   
-  const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
-  const redditPostLimit = REDDIT_TIER_LIMITS[currentTier as keyof typeof REDDIT_TIER_LIMITS] || REDDIT_TIER_LIMITS.free;
   const hasRedditTierAccess = currentTier !== 'free';
   
   // Combined access: needs both tier access AND API keys configured
@@ -133,56 +194,38 @@ const SentimentDashboard: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
   
-  // Use sentiment data hook for all data management
-  const {
-    // Data states
-    redditPosts,
-    chartData,
-    topSentiments,
-    finvizSentiments,
-    yahooSentiments,
-    combinedSentiments,
-    
-    // Loading states
-    loading,
-    loadingProgress,
-    loadingStage,
-    isDataLoading,
-    isTransitioning: dataTransitioning,
-    
-    // Error states
-    errors,
-    
-    // Pagination
-    redditPage,
-    hasMorePosts,
-    
-    // Actions
-    refreshData,
-    handleLoadMorePosts: originalHandleLoadMorePosts,
-  } = useSentimentData(timeRange, hasFullRedditAccess, isSystemReady);
-  
-  // Effect to refresh data when Reddit access is gained
+  // Check for existing unlock sessions on mount
   useEffect(() => {
-    // Only trigger refresh when access changes from false to true and the system is ready
-    if (hasFullRedditAccess && isSystemReady && prevAccessRef.current === false) {
-      console.log('🚀 Reddit access gained - refreshing data to fetch real Reddit sentiment');
-      // Small delay to ensure state has settled
-      setTimeout(() => {
-        refreshData();
-      }, 100);
-    }
-  }, [hasFullRedditAccess, isSystemReady, refreshData]);
+    const checkExistingSessions = () => {
+      const chartSession = checkUnlockSession('chart');
+      const scoresSession = checkUnlockSession('scores');
+      const redditSession = checkUnlockSession('reddit');
+
+      setUnlockedComponents({
+        chart: !!chartSession,
+        scores: !!scoresSession,
+        reddit: !!redditSession
+      });
+
+      // Update active sessions for display
+      const sessions = getAllUnlockSessions();
+      setActiveSessions(sessions);
+      
+      if (chartSession || scoresSession || redditSession) {
+        console.log('🔓 Restored unlock sessions:', {
+          chart: chartSession ? getSessionTimeRemainingFormatted(chartSession) : 'Locked',
+          scores: scoresSession ? getSessionTimeRemainingFormatted(scoresSession) : 'Locked',
+          reddit: redditSession ? getSessionTimeRemainingFormatted(redditSession) : 'Locked'
+        });
+      }
+    };
+
+    checkExistingSessions();
   
-  // Use time range debounce hook for smooth transitions
-  const {
-    isTransitioning: uiTransitioning,
-    handleTimeRangeChange,
-    setIsTransitioning,
-  } = useTimeRangeDebounce();
-  
-  // Combined transitioning state
-  const isTransitioning = dataTransitioning || uiTransitioning;
+    // Check for expired sessions every minute
+    const interval = setInterval(checkExistingSessions, 60000);
+    return () => clearInterval(interval);
+  }, []);
   
   // Custom handleLoadMorePosts with tier limit checking
   const handleLoadMorePosts = () => {
@@ -205,22 +248,158 @@ const SentimentDashboard: React.FC = () => {
     }
   };
 
-  // Handle time range changes with debouncing
-  const onTimeRangeChange = (range: TimeRange) => {
-    // Prevent unnecessary changes if the range is the same
-    if (range === timeRange) {
+  // Credit costs for each component
+  const COMPONENT_COSTS = {
+    sentimentChart: 8,    // Market sentiment timeline
+    sentimentScores: 12,  // Individual ticker sentiment analysis
+    redditPosts: 5,       // Reddit posts access
+  };
+
+  // Handlers for unlocking individual components
+  const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
+    console.log(`🔓 Attempting to unlock ${component} for ${cost} credits`);
+    
+    // Check if already unlocked in current session
+    const existingSession = checkUnlockSession(component);
+    if (existingSession) {
+      const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
+      info(`${component} already unlocked (${timeRemaining})`);
       return;
     }
     
-    // Reset tier limit dialog state when changing time ranges
-    setTierLimitDialogShown(false);
-    
-    handleTimeRangeChange(range, (newRange) => {
-      setTimeRange(newRange);
-      // Reset transitioning state after a short delay to allow data to load
-      setTimeout(() => setIsTransitioning(false), 300);
-    });
+    try {
+      const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
+      const token = localStorage.getItem('auth_token');
+      
+      const response = await fetch(`${proxyUrl}/api/credits/unlock-component`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          component,
+          cost
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to unlock component');
+      }
+      
+      if (data.success) {
+        // Update component state
+        setUnlockedComponents(prev => ({
+          ...prev,
+          [component]: true
+        }));
+        
+        // Store session in localStorage
+        storeUnlockSession(component, {
+          sessionId: data.sessionId,
+          expiresAt: data.expiresAt,
+          creditsUsed: data.creditsUsed,
+          tier: tierInfo?.tier || 'free'
+        });
+        
+        // Update active sessions
+        const sessions = getAllUnlockSessions();
+        setActiveSessions(sessions);
+        
+        // Show appropriate toast message
+        if (data.existingSession) {
+          info(`${component} already unlocked (${data.timeRemaining}h remaining)`);
+        } else {
+          info(`${data.creditsUsed} credits used`);
+          console.log(`💳 Component unlocked successfully:`, {
+            component,
+            creditsUsed: data.creditsUsed,
+            sessionDuration: data.sessionDurationHours,
+            creditsRemaining: data.creditsRemaining
+          });
+        }
+        
+        // Refresh tier info to update usage meter
+        if (refreshTierInfo) {
+          await refreshTierInfo();
+        }
+      }
+      
+    } catch (error) {
+      console.error(`Error unlocking ${component}:`, error);
+      info(`Failed to unlock ${component}. Please try again.`);
+    }
   };
+
+  // Legacy handler for full research (unlocks everything)
+  const handleStartResearch = (symbol: string) => {
+    console.log(`🔬 Starting full research session for ${symbol}`);
+    setCurrentSymbol(symbol);
+    
+    // Unlock all components for full research
+    setUnlockedComponents({
+      chart: true,
+      scores: true,
+      reddit: true,
+    });
+    
+    // Calculate total cost (would be discounted in production)
+    const totalCost = COMPONENT_COSTS.sentimentChart + COMPONENT_COSTS.sentimentScores + COMPONENT_COSTS.redditPosts;
+    console.log(`💳 Full research bundle cost: ${totalCost} credits (discounted from individual purchases)`);
+  };
+  
+  const handlePurchaseCredits = () => {
+    console.log('💰 Navigating to credit purchase');
+    navigate('/billing/credits');
+  };
+
+  // Component for locked overlays
+  const LockedOverlay: React.FC<{
+    title: string;
+    description: string;
+    cost: number;
+    componentKey: keyof typeof unlockedComponents;
+    icon: React.ReactNode;
+  }> = ({ title, description, cost, componentKey, icon }) => (
+    <div className={`${isLight ? 'bg-white border-gray-200' : 'bg-gray-800 border-gray-700'} rounded-lg border p-8 text-center relative overflow-hidden`}>
+      {/* Background Pattern */}
+      <div className="absolute inset-0 opacity-5">
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-600" />
+      </div>
+      
+      {/* Content */}
+      <div className="relative z-10">
+        <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          {icon}
+        </div>
+        
+        <h3 className={`text-xl font-bold ${textColor} mb-2`}>
+          {title}
+        </h3>
+        
+        <p className={`${mutedTextColor} mb-6 max-w-sm mx-auto`}>
+          {description}
+        </p>
+        
+        <div className={`${isLight ? 'bg-blue-50 border-blue-200' : 'bg-blue-900/20 border-blue-800'} rounded-lg p-4 border mb-6`}>
+          <div className="flex items-center justify-center gap-2 text-sm font-medium">
+            <Zap className="w-4 h-4 text-blue-500" />
+            <span className={textColor}>{cost} credits</span>
+          </div>
+        </div>
+        
+        <button
+          onClick={() => handleUnlockComponent(componentKey, cost)}
+          className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-6 py-3 rounded-lg font-medium transition-all flex items-center justify-center mx-auto gap-2"
+        >
+          <Crown className="w-4 h-4" />
+          Unlock for {cost} Credits
+        </button>
+      </div>
+    </div>
+  );
 
   // Reddit Upgrade Card Component for free users
   const RedditUpgradeCard: React.FC = () => {
@@ -354,14 +533,25 @@ const SentimentDashboard: React.FC = () => {
           <p className={`${mutedTextColor}`}>Track real-time sentiment across social platforms</p>
         </div>
         
+        {/* Dashboard Layout - Show components with locked overlays */}
+        <div className="space-y-6">
+          {/* Credit Balance - Full width row */}
+          <PremiumCreditControls 
+            onStartResearch={handleStartResearch}
+            onPurchaseCredits={handlePurchaseCredits}
+            currentSymbol={currentSymbol}
+          />
+          
+          {/* Main Content Grid */}
         <div className="flex flex-col xl:flex-row gap-6">
           {/* Main Content Area */}
           <div className="flex-1 space-y-6">
             {/* Sentiment Overview Chart */}
+              {unlockedComponents.chart ? (
             <SentimentChartCard
               chartData={chartData}
               timeRange={timeRange}
-              onTimeRangeChange={onTimeRangeChange}
+                  onTimeRangeChange={handleTimeRangeChange}
               loading={loading.chart}
               isTransitioning={isTransitioning}
               loadingProgress={loadingProgress}
@@ -374,9 +564,19 @@ const SentimentDashboard: React.FC = () => {
               onRefresh={refreshData}
               hasRedditAccess={hasFullRedditAccess}
             />
+              ) : (
+                <LockedOverlay
+                  title="Market Sentiment Chart"
+                  description="Unlock real-time market sentiment timeline showing bullish, bearish, and neutral trends across multiple timeframes."
+                  cost={COMPONENT_COSTS.sentimentChart}
+                  componentKey="chart"
+                  icon={<TrendingUp className="w-8 h-8 text-white" />}
+                />
+              )}
             
             {/* Sentiment Scores Section - Show on mobile between chart and reddit */}
             <div className="xl:hidden">
+                {unlockedComponents.scores ? (
               <SentimentScoresSection 
                 redditSentiments={topSentiments}
                 finvizSentiments={finvizSentiments}
@@ -391,6 +591,15 @@ const SentimentDashboard: React.FC = () => {
                 hasRedditTierAccess={hasRedditTierAccess}
                 redditApiKeysConfigured={redditApiKeysConfigured}
               />
+                ) : (
+                  <LockedOverlay
+                    title="Sentiment Scores"
+                    description="Unlock real-time sentiment analysis for individual stocks from Reddit, FinViz, and Yahoo Finance."
+                    cost={COMPONENT_COSTS.sentimentScores}
+                    componentKey="scores"
+                    icon={<TrendingUp className="w-8 h-8 text-white" />}
+                  />
+                )}
             </div>
             
             {/* Reddit Posts Section - Now appears last on mobile */}
@@ -407,7 +616,8 @@ const SentimentDashboard: React.FC = () => {
               // Pro users without API keys - show setup card
               <RedditSetupCard />
             ) : (
-              // Pro users with API keys - show normal Reddit posts
+                // Pro users with API keys - show normal Reddit posts or locked overlay
+                unlockedComponents.reddit ? (
               <RedditPostsSection
                 posts={redditPosts}
                 isLoading={loading.posts}
@@ -417,12 +627,22 @@ const SentimentDashboard: React.FC = () => {
                 hasMore={redditPostLimit === -1 ? hasMorePosts : (hasMorePosts && (!tierLimitDialogShown || redditPosts.length < redditPostLimit))}
                 onLoadMore={handleLoadMorePosts}
               />
+                ) : (
+                  <LockedOverlay
+                    title="Reddit Posts"
+                    description="Access real-time Reddit posts and community discussions about market trends and stock sentiment."
+                    cost={COMPONENT_COSTS.redditPosts}
+                    componentKey="reddit"
+                    icon={<Lock className="w-8 h-8 text-white" />}
+                  />
+                )
             )}
           </div>
           
           {/* Sidebar - Hidden on mobile, shown on xl+ */}
           <div className="hidden xl:block xl:w-1/3 space-y-6">
             {/* Sentiment Scores Section */}
+              {unlockedComponents.scores ? (
             <SentimentScoresSection 
               redditSentiments={topSentiments}
               finvizSentiments={finvizSentiments}
@@ -437,6 +657,16 @@ const SentimentDashboard: React.FC = () => {
               hasRedditTierAccess={hasRedditTierAccess}
               redditApiKeysConfigured={redditApiKeysConfigured}
             />
+              ) : (
+                <LockedOverlay
+                  title="Sentiment Scores"
+                  description="Unlock detailed sentiment analysis for individual stocks with confidence scores and trend data."
+                  cost={COMPONENT_COSTS.sentimentScores}
+                  componentKey="scores"
+                  icon={<TrendingUp className="w-8 h-8 text-white" />}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>

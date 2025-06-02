@@ -3,6 +3,26 @@ import { X, Search, Loader2, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTierLimits } from '../../hooks/useTierLimits';
+import { useLimitToasts } from '../../utils/limitToasts';
+import { useTier } from '../../contexts/TierContext';
+
+interface SearchResult {
+  symbol: string;
+  name: string;
+  type: string;
+  region: string;
+  marketOpen: string;
+  marketClose: string;
+  timezone: string;
+  currency: string;
+  matchScore: string;
+}
+
+interface SearchUsage {
+  current: number;
+  limit: number | null;
+  unlimited: boolean;
+}
 
 interface AddTickerModalProps {
   isOpen: boolean;
@@ -14,12 +34,14 @@ interface AddTickerModalProps {
 const AddTickerModal: React.FC<AddTickerModalProps> = ({ isOpen, onClose, onAdd, isAdding = false }) => {
   const { user } = useAuth();
   const { showTierLimitDialog } = useTierLimits();
+  const { showSearchLimitReached } = useLimitToasts();
+  const { tierInfo } = useTier();
   const [searchTerm, setSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState<Array<{ symbol: string; name: string }>>([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
-  const [searchUsage, setSearchUsage] = useState<{current: number; limit: number | null; unlimited: boolean} | null>(null);
+  const [searchUsage, setSearchUsage] = useState<SearchUsage | null>(null);
   const [loadingUsage, setLoadingUsage] = useState(false);
 
   // Fetch search usage when modal opens
@@ -54,49 +76,31 @@ const AddTickerModal: React.FC<AddTickerModalProps> = ({ isOpen, onClose, onAdd,
 
   const handleSearch = async () => {
     if (!searchTerm.trim()) return;
-
+    
     setIsSearching(true);
     setError(null);
     setHasSearched(true);
-    setSearchResults([]);
 
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const timestamp = Date.now();
-      const response = await axios.get(`${apiUrl}/api/stocks/search?query=${encodeURIComponent(searchTerm)}&_t=${timestamp}`, {
-        headers: {
-          Authorization: `Bearer ${user?.token}`,
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      const token = localStorage.getItem('auth_token');
       
-      // Debug logging
-      console.log('Search API response:', {
-        status: response.status,
-        data: response.data,
-        dataType: typeof response.data,
-        isArray: Array.isArray(response.data),
-        length: Array.isArray(response.data) ? response.data.length : 'N/A'
-      });
-      
-      // Additional detailed logging
-      if (Array.isArray(response.data) && response.data.length > 0) {
-        console.log('First search result:', response.data[0]);
-        console.log('All search results:', response.data);
+      if (!token) {
+        setError('Authentication required. Please log in and try again.');
+        return;
       }
       
-      if (response.status === 304) {
-        setError(`Search results for "${searchTerm}" are cached. Please try again or search for a different ticker.`);
-        setSearchResults([]);
-      } else if (response.data && Array.isArray(response.data)) {
-        setSearchResults(response.data);
-        if (response.data.length === 0) {
-          setError(`No results found for "${searchTerm}". This could be due to:
-• The ticker symbol doesn't exist
-• Alpha Vantage API issues - try again in a moment
-• API rate limits - wait a few seconds and retry`);
+      const response = await axios.get(`${apiUrl}/api/search/stocks`, {
+        params: {
+          query: searchTerm.trim()
+        },
+        headers: {
+          'Authorization': `Bearer ${token}`
         }
+      });
+      
+      if (response.data && Array.isArray(response.data.bestMatches)) {
+        setSearchResults(response.data.bestMatches);
         // Refresh usage after successful search
         fetchSearchUsage();
       } else {
@@ -106,16 +110,16 @@ const AddTickerModal: React.FC<AddTickerModalProps> = ({ isOpen, onClose, onAdd,
     } catch (err: any) {
       console.error('Error searching stocks:', err);
       
-      // Check for tier limit error (status 402)
+      // Check for tier limit error (status 402) - Use new toast system
       if (err.response?.status === 402 && err.response?.data?.error === 'tier_limit') {
-        console.log('Tier limit reached for search, showing tier limit dialog');
-        showTierLimitDialog(
-          'Stock Search',
-          'You\'ve reached the daily search limit for the free tier.',
-          'Upgrade to Pro for unlimited stock searches and real-time data.'
-        );
+        console.log('Tier limit reached for search, showing limit toast');
+        const usage = err.response.data.usage;
+        const currentTier = tierInfo?.tier || 'free';
+        
+        // Use new toast system for search limits
+        showSearchLimitReached(usage?.current, usage?.limit, currentTier);
         onClose(); // Close the search modal
-        return; // Don't set error message, let the tier dialog handle it
+        return; // Don't set error message, the toast handles it
       }
       
       if (err.response?.status === 429) {

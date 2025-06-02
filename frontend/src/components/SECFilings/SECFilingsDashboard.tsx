@@ -1,11 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { TimeRange } from '../../types';
 import { clearSecCache, fetchSecDataParallel } from '../../services/api';
-import { RefreshCw, Loader2, Crown, Lock } from 'lucide-react';
+import { RefreshCw, Loader2, Crown, Lock, Zap } from 'lucide-react';
 import ProgressBar from '../ProgressBar';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTier } from '../../contexts/TierContext';
 import { useTierLimits } from '../../hooks/useTierLimits';
+import { useToast } from '../../contexts/ToastContext';
+import { 
+  checkUnlockSession, 
+  storeUnlockSession, 
+  getAllUnlockSessions,
+  getSessionTimeRemainingFormatted 
+} from '../../utils/sessionStorage';
 import InsiderTradesTab from './InsiderTradesTab.tsx';
 import InstitutionalHoldingsTab from './InstitutionalHoldingsTab.tsx';
 import TierLimitDialog from '../UI/TierLimitDialog';
@@ -18,8 +25,9 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
   onLoadingProgressChange 
 }) => {
   const { theme } = useTheme();
-  const { tierInfo } = useTier();
+  const { tierInfo, refreshTierInfo } = useTier();
   const { showTierLimitDialog, tierLimitDialog, closeTierLimitDialog } = useTierLimits();
+  const { info } = useToast();
   const isLight = theme === 'light';
   
   // Theme specific styling
@@ -36,12 +44,148 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
   const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
   const hasInstitutionalAccess = currentTier !== 'free'; // Pro+ feature
   
+  // Component unlock state - session-based
+  const [unlockedComponents, setUnlockedComponents] = useState<{
+    insiderTrading: boolean;
+    institutionalHoldings: boolean;
+  }>({
+    insiderTrading: false,
+    institutionalHoldings: false
+  });
+
+  // Session state for time tracking
+  const [activeSessions, setActiveSessions] = useState<any[]>([]);
+  
+  // Check for existing unlock sessions on mount
+  useEffect(() => {
+    const checkExistingSessions = () => {
+      const insiderSession = checkUnlockSession('insiderTrading');
+      const institutionalSession = checkUnlockSession('institutionalHoldings');
+
+      setUnlockedComponents({
+        insiderTrading: !!insiderSession,
+        institutionalHoldings: !!institutionalSession
+      });
+
+      // Update active sessions for display
+      const sessions = getAllUnlockSessions();
+      setActiveSessions(sessions);
+      
+      if (insiderSession || institutionalSession) {
+        console.log('🔓 Restored SEC filings unlock sessions:', {
+          insiderTrading: insiderSession ? getSessionTimeRemainingFormatted(insiderSession) : 'Locked',
+          institutionalHoldings: institutionalSession ? getSessionTimeRemainingFormatted(institutionalSession) : 'Locked'
+        });
+      }
+    };
+
+    checkExistingSessions();
+
+    // Check for expired sessions every minute
+    const interval = setInterval(checkExistingSessions, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Credit costs for each component
+  const COMPONENT_COSTS = {
+    insiderTrading: 8,          // Insider trading data
+    institutionalHoldings: 12,  // Institutional holdings data (13F filings)
+  };
+
+  // Handlers for unlocking individual components
+  const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
+    console.log(`🔓 Attempting to unlock ${component} for ${cost} credits`);
+    
+    // Check if already unlocked in current session
+    const existingSession = checkUnlockSession(component);
+    if (existingSession) {
+      const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
+      info(`${component} already unlocked (${timeRemaining})`);
+      return;
+    }
+    
+    try {
+      const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
+      const token = localStorage.getItem('auth_token');
+      
+      const response = await fetch(`${proxyUrl}/api/credits/unlock-component`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          component,
+          cost
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to unlock component');
+      }
+      
+      if (data.success) {
+        // Update component state
+        setUnlockedComponents(prev => ({
+          ...prev,
+          [component]: true
+        }));
+        
+        // Store session in localStorage
+        storeUnlockSession(component, {
+          sessionId: data.sessionId,
+          expiresAt: data.expiresAt,
+          creditsUsed: data.creditsUsed,
+          tier: tierInfo?.tier || 'free'
+        });
+        
+        // Update active sessions
+        const sessions = getAllUnlockSessions();
+        setActiveSessions(sessions);
+        
+        // Show appropriate toast message
+        if (data.existingSession) {
+          info(`${component} already unlocked (${data.timeRemaining}h remaining)`);
+        } else {
+          info(`${data.creditsUsed} credits used`);
+          console.log(`💳 Component unlocked successfully:`, {
+            component,
+            creditsUsed: data.creditsUsed,
+            sessionDuration: data.sessionDurationHours,
+            creditsRemaining: data.creditsRemaining
+          });
+        }
+        
+        // Refresh tier info to update usage meter
+        if (refreshTierInfo) {
+          await refreshTierInfo();
+        }
+
+        // Auto-trigger data refresh for newly unlocked components
+        if (component === 'insiderTrading' && activeTab === 'insider') {
+          console.log('🔓 Insider trading unlocked - refreshing data automatically');
+          handleRefresh();
+        } else if (component === 'institutionalHoldings' && activeTab === 'institutional') {
+          console.log('🔓 Institutional holdings unlocked - refreshing data automatically');
+          handleRefresh();
+        }
+      }
+      
+    } catch (error) {
+      console.error(`Error unlocking ${component}:`, error);
+      info(`Failed to unlock ${component}. Please try again.`);
+    }
+  };
+  
   // Shared state between tabs
   const [timeRange, setTimeRange] = useState<TimeRange>(() => {
     try {
-      return (localStorage.getItem('secFilings_timeRange') as TimeRange) || '3m';
+      const saved = localStorage.getItem('secFilings_timeRange') as TimeRange;
+      return saved && ['1d', '1w', '1m', '3m', '6m', '1y'].includes(saved) ? saved : ('1w' as TimeRange);
     } catch (e) {
-      return '3m';
+      return '1w' as TimeRange;
     }
   });
   const [activeTab, setActiveTab] = useState<'insider' | 'institutional'>(() => {
@@ -502,18 +646,8 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     };
   }, []);
   
-  // Handle tab switching with tier restrictions
+  // Handle tab switching - no more tier restrictions, use session unlocks instead
   const handleTabChange = (tab: 'insider' | 'institutional') => {
-    if (tab === 'institutional' && !hasInstitutionalAccess) {
-      // Show tier limit dialog for institutional holdings
-      showTierLimitDialog(
-        'Institutional Holdings',
-        'Institutional holdings analysis is a Pro feature. Upgrade to access comprehensive 13F filing data and institutional investment tracking.',
-        'Unlock institutional holdings, advanced SEC analysis, and comprehensive regulatory filing insights with HRVSTR Pro.',
-        'general'
-      );
-      return;
-    }
     setActiveTab(tab);
   };
 
@@ -566,6 +700,52 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     );
   };
 
+  // Component for locked overlays
+  const LockedOverlay: React.FC<{
+    title: string;
+    description: string;
+    cost: number;
+    componentKey: keyof typeof unlockedComponents;
+    icon: React.ReactNode;
+  }> = ({ title, description, cost, componentKey, icon }) => (
+    <div className={`${isLight ? 'bg-white border-gray-200' : 'bg-gray-800 border-gray-700'} rounded-lg border p-8 text-center relative overflow-hidden h-full flex flex-col justify-center`}>
+      {/* Background Pattern */}
+      <div className="absolute inset-0 opacity-5">
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-600" />
+      </div>
+      
+      {/* Content */}
+      <div className="relative z-10">
+        <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          {icon}
+        </div>
+        
+        <h3 className={`text-xl font-bold ${textColor} mb-2`}>
+          {title}
+        </h3>
+        
+        <p className={`${subTextColor} mb-6 max-w-sm mx-auto`}>
+          {description}
+        </p>
+        
+        <div className={`${isLight ? 'bg-blue-50 border-blue-200' : 'bg-blue-900/20 border-blue-800'} rounded-lg p-4 border mb-6`}>
+          <div className="flex items-center justify-center gap-2 text-sm font-medium">
+            <Zap className="w-4 h-4 text-blue-500" />
+            <span className={textColor}>{cost} credits</span>
+          </div>
+        </div>
+        
+        <button
+          onClick={() => handleUnlockComponent(componentKey, cost)}
+          className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-6 py-3 rounded-lg font-medium transition-all flex items-center justify-center mx-auto gap-2"
+        >
+          <Crown className="w-4 h-4" />
+          Unlock for {cost} Credits
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <>
       <div className="flex flex-col h-full">
@@ -596,15 +776,34 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
                 console.log('🔄 DASHBOARD: Current states before refresh:', {
                   isRefreshing,
                   loadingState,
-                  activeTab
+                  activeTab,
+                  unlockedComponents
                 });
+                
+                // Only refresh if the active tab component is unlocked
+                const canRefresh = (activeTab === 'insider' && unlockedComponents.insiderTrading) || 
+                                 (activeTab === 'institutional' && unlockedComponents.institutionalHoldings);
+                
+                if (canRefresh) {
                 handleRefresh();
+                } else {
+                  info(`Please unlock ${activeTab === 'insider' ? 'Insider Trading' : 'Institutional Holdings'} first`);
+                }
               }}
-              disabled={isRefreshing || loadingState.insiderTrades.isLoading || (hasInstitutionalAccess && loadingState.institutionalHoldings.isLoading)}
-              className={`p-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white ${(isRefreshing || loadingState.insiderTrades.isLoading || (hasInstitutionalAccess && loadingState.institutionalHoldings.isLoading)) ? 'opacity-50' : ''}`}
+              disabled={isRefreshing || 
+                       (activeTab === 'insider' && (loadingState.insiderTrades.isLoading || !unlockedComponents.insiderTrading)) ||
+                       (activeTab === 'institutional' && (loadingState.institutionalHoldings.isLoading || !unlockedComponents.institutionalHoldings))}
+              className={`p-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white ${
+                (isRefreshing || 
+                 (activeTab === 'insider' && (loadingState.insiderTrades.isLoading || !unlockedComponents.insiderTrading)) ||
+                 (activeTab === 'institutional' && (loadingState.institutionalHoldings.isLoading || !unlockedComponents.institutionalHoldings))) 
+                ? 'opacity-50' : ''
+              }`}
               title="Refresh SEC data"
             >
-              {(isRefreshing || loadingState.insiderTrades.isLoading || (hasInstitutionalAccess && loadingState.institutionalHoldings.isLoading)) ? (
+              {(isRefreshing || 
+                (activeTab === 'insider' && loadingState.insiderTrades.isLoading) || 
+                (activeTab === 'institutional' && loadingState.institutionalHoldings.isLoading)) ? (
                 <Loader2 size={18} className="text-white animate-spin" />
               ) : (
                 <RefreshCw size={18} className="text-white" />
@@ -626,18 +825,16 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
           <button
             className={`py-2 px-4 rounded-t-lg font-medium text-sm flex-1 text-center relative ${
               activeTab === 'institutional' ? `${tabActiveBg} ${tabActiveText}` : `${tabInactiveBg} ${tabInactiveText}`
-            } ${!hasInstitutionalAccess ? 'opacity-75' : ''}`}
+            }`}
             onClick={() => handleTabChange('institutional')}
           >
             Institutional Holdings
-            {!hasInstitutionalAccess && (
-              <Lock className="w-4 h-4 inline-block ml-1" />
-            )}
           </button>
         </div>
         
-        {/* Loading progress bar - shown only when active tab is loading */}
-        {(activeTab === 'insider' && loadingState.insiderTrades.isLoading) || (activeTab === 'institutional' && loadingState.institutionalHoldings.isLoading && hasInstitutionalAccess) ? (
+        {/* Loading progress bar - shown only when active tab is loading and unlocked */}
+        {((activeTab === 'insider' && unlockedComponents.insiderTrading && loadingState.insiderTrades.isLoading) || 
+          (activeTab === 'institutional' && unlockedComponents.institutionalHoldings && loadingState.institutionalHoldings.isLoading)) ? (
           <div className={`${cardBg} rounded-lg p-4 mb-4 border ${cardBorder}`}>
             <div className="flex flex-col items-center">
               <p className={`text-sm font-medium ${textColor} mb-2`}>{loadingStage}</p>
@@ -652,6 +849,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
         {/* Active tab content */}
         <div className="flex-1">
           {activeTab === 'insider' ? (
+            unlockedComponents.insiderTrading ? (
             <InsiderTradesTab
               timeRange={timeRange}
               isLoading={loadingState.insiderTrades.isLoading}
@@ -660,7 +858,17 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
               initialData={insiderTradesData}
               error={errors.insiderTrades}
             />
-          ) : activeTab === 'institutional' && hasInstitutionalAccess ? (
+            ) : (
+              <LockedOverlay
+                title="Insider Trading"
+                description="Access real-time insider trading data, transaction details, and regulatory filing insights to track smart money movements."
+                cost={COMPONENT_COSTS.insiderTrading}
+                componentKey="insiderTrading"
+                icon={<Lock className="w-8 h-8 text-white" />}
+              />
+            )
+          ) : activeTab === 'institutional' ? (
+            unlockedComponents.institutionalHoldings ? (
             <InstitutionalHoldingsTab
               timeRange={timeRange}
               isLoading={loadingState.institutionalHoldings.isLoading}
@@ -669,6 +877,15 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
               initialData={institutionalHoldingsData}
               error={errors.institutionalHoldings}
             />
+            ) : (
+              <LockedOverlay
+                title="Institutional Holdings"
+                description="Unlock comprehensive 13F filing data, institutional ownership trends, and smart money tracking for professional investment research."
+                cost={COMPONENT_COSTS.institutionalHoldings}
+                componentKey="institutionalHoldings"
+                icon={<Crown className="w-8 h-8 text-white" />}
+              />
+            )
           ) : (
             <InstitutionalUpgradeCard />
           )}

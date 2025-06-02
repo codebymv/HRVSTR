@@ -4,39 +4,241 @@ This document examines the caching implementation for the Sentiment Analysis fea
 
 ## 1. Sentiment Data Hook Implementation
 
-The primary caching mechanism for sentiment data is implemented in the `useSentimentData` hook with an in-memory Map cache:
+The sentiment caching system has been updated to use localStorage persistence, matching the approach used by earnings and SEC filings components:
 
 ```typescript
-interface CacheEntry {
-  data: SentimentResponse;
-  timestamp: number;
-  expiresAt: number;
-}
+// Cached data state with localStorage persistence - matching earnings approach
+const [allSentiments, setAllSentiments] = useState<SentimentData[]>(() => {
+  try {
+    const cached = localStorage.getItem('sentiment_allSentiments');
+    return cached ? JSON.parse(cached) : [];
+  } catch (e) {
+    console.error('Error loading cached sentiments:', e);
+    return [];
+  }
+});
 
-// In-memory cache for client-side
-const cache = new Map<string, CacheEntry>();
+const [allTickerSentiments, setAllTickerSentiments] = useState<SentimentData[]>(() => {
+  try {
+    const cached = localStorage.getItem('sentiment_allTickerSentiments');
+    return cached ? JSON.parse(cached) : [];
+  } catch (e) {
+    console.error('Error loading cached ticker sentiments:', e);
+    return [];
+  }
+});
 
-/**
- * Hook for fetching and caching sentiment data
- * Coordinates with backend caching to avoid unnecessary reloads
- */
-export function useSentimentData(
-  endpoint: string,
-  options: UseSentimentDataOptions = {}
-) {
-  const { 
-    timeRange = '1w', 
-    refreshInterval = 0, // 0 means no auto-refresh
-    forceRefresh = false 
-  } = options;
-  
-  // ...
+const [cachedRedditPosts, setCachedRedditPosts] = useState<RedditPostType[]>(() => {
+  try {
+    const cached = localStorage.getItem('sentiment_cachedRedditPosts');
+    return cached ? JSON.parse(cached) : [];
+  } catch (e) {
+    console.error('Error loading cached Reddit posts:', e);
+    return [];
+  }
+});
+```
+
+This approach creates a persistent caching system that survives browser sessions and page reloads.
+
+## 2. Cache Freshness Management
+
+The sentiment caching system now implements a 30-minute staleness threshold, consistent with other components:
+
+```typescript
+// Helper function to check if data is stale (older than 30 minutes) - matching earnings/SEC approach
+const isDataStale = (timestamp: number | null): boolean => {
+  if (!timestamp) return true;
+  const thirtyMinutesInMs = 30 * 60 * 1000;
+  return Date.now() - timestamp > thirtyMinutesInMs;
+};
+
+// Track the last fetch time - matching earnings approach
+const [lastFetchTime, setLastFetchTime] = useState<number | null>(() => {
+  try {
+    const cached = localStorage.getItem('sentiment_lastFetchTime');
+    return cached ? JSON.parse(cached) : null;
+  } catch (e) {
+    console.error('Error loading cached fetch time:', e);
+    return null;
+  }
+});
+```
+
+Key features:
+- Uses consistent 30-minute cache window across all components
+- Automatically triggers reload for stale data
+- Persists timestamps in localStorage for cross-session persistence
+
+## 3. Cache Storage and Persistence
+
+The sentiment system now automatically saves data to localStorage whenever it changes:
+
+```typescript
+// Save data to localStorage whenever it changes - matching earnings approach
+useEffect(() => {
+  if (allSentiments.length > 0) {
+    localStorage.setItem('sentiment_allSentiments', JSON.stringify(allSentiments));
+  }
+}, [allSentiments]);
+
+useEffect(() => {
+  if (allTickerSentiments.length > 0) {
+    localStorage.setItem('sentiment_allTickerSentiments', JSON.stringify(allTickerSentiments));
+  }
+}, [allTickerSentiments]);
+
+useEffect(() => {
+  if (cachedRedditPosts.length > 0) {
+    localStorage.setItem('sentiment_cachedRedditPosts', JSON.stringify(cachedRedditPosts));
+  }
+}, [cachedRedditPosts]);
+
+// Save last fetch time to localStorage
+useEffect(() => {
+  if (lastFetchTime) {
+    localStorage.setItem('sentiment_lastFetchTime', JSON.stringify(lastFetchTime));
+  }
+}, [lastFetchTime]);
+```
+
+This ensures data persistence without manual intervention.
+
+## 4. Time Range-Based Cache Invalidation
+
+The sentiment system implements intelligent cache invalidation when time ranges change:
+
+```typescript
+// Handle time range changes - clear cache when time range changes
+useEffect(() => {
+  if (lastTimeRange !== timeRange) {
+    console.log(`⏰ SENTIMENT: Changing time range from ${lastTimeRange} to ${timeRange}`);
+    
+    // Clear cached data when time range changes to force fresh fetch
+    console.log('⏰ SENTIMENT: Clearing cache for new time range');
+    localStorage.removeItem('sentiment_allSentiments');
+    localStorage.removeItem('sentiment_allTickerSentiments');
+    localStorage.removeItem('sentiment_cachedRedditPosts');
+    localStorage.removeItem('sentiment_lastFetchTime');
+    
+    // Reset cached data in state
+    setAllSentiments([]);
+    setAllTickerSentiments([]);
+    setCachedRedditPosts([]);
+    setLastFetchTime(null);
+    
+    console.log('⏰ SENTIMENT: Triggering fresh data load for new time range');
+    loadData();
+  }
+}, [timeRange, lastTimeRange, loadData]);
+```
+
+This ensures users get appropriate data for their selected time range.
+
+## 5. Cache Validation and Loading Logic
+
+The hook implements explicit cache validation logic to determine initial loading states:
+
+```typescript
+// Calculate initial loading state based on cache freshness
+const hasData = allSentiments.length > 0;
+const dataIsStale = isDataStale(lastFetchTime);
+const needsRefresh = !hasData || dataIsStale;
+
+console.log('🔄 SENTIMENT: Initial state calculation:', {
+  hasData,
+  dataLength: allSentiments.length,
+  lastFetchTime: lastFetchTime ? new Date(lastFetchTime).toISOString() : null,
+  dataIsStale,
+  needsRefresh
+});
+
+// Check if we have fresh cached data - matching earnings approach
+const hasData = allSentiments.length > 0;
+const dataIsStale = isDataStale(lastFetchTime);
+const timeRangeChanged = lastTimeRange !== timeRange;
+
+// If we have fresh data and time range hasn't changed, use cached data
+if (hasData && !dataIsStale && !timeRangeChanged) {
+  console.log('📊 SENTIMENT: Using cached data, no fetch needed');
+  setLoading({ sentiment: false, posts: false, chart: false });
+  setIsDataLoading(false);
+  return;
 }
 ```
 
-This approach creates a sophisticated in-memory caching system that persists during the application's lifecycle.
+This ensures that expired cache entries are bypassed automatically while providing immediate data display for fresh cache.
 
-## 2. Time-Based Cache Expiration
+## 6. Cache Refresh Functionality
+
+The hook provides comprehensive cache clearing functionality:
+
+```typescript
+const refreshData = useCallback(() => {
+  // Clear ALL caches then reload - including market timeline data
+  setAllSentiments([]);
+  setAllTickerSentiments([]);
+  setCachedRedditPosts([]);
+  setLastFetchTime(null);
+  
+  // Clear localStorage cache to force fresh fetch - matching earnings approach
+  localStorage.removeItem('sentiment_allSentiments');
+  localStorage.removeItem('sentiment_allTickerSentiments');
+  localStorage.removeItem('sentiment_cachedRedditPosts');
+  localStorage.removeItem('sentiment_lastFetchTime');
+  
+  // Force reload of data with current access level
+  loadData();
+}, [loadData]);
+```
+
+Key features:
+- Clears both state and localStorage
+- Forces fresh data fetch
+- Maintains user access level settings
+
+## 7. Debug and Development Tools
+
+The sentiment caching implementation includes developer debugging tools:
+
+```typescript
+// Debug function to clear all sentiment cache - available in browser console
+useEffect(() => {
+  (window as any).clearSentimentCache = () => {
+    console.log('🧹 DEBUG: Clearing all sentiment cache...');
+    localStorage.removeItem('sentiment_allSentiments');
+    localStorage.removeItem('sentiment_allTickerSentiments');
+    localStorage.removeItem('sentiment_cachedRedditPosts');
+    localStorage.removeItem('sentiment_lastFetchTime');
+    
+    setAllSentiments([]);
+    setAllTickerSentiments([]);
+    setCachedRedditPosts([]);
+    setLastFetchTime(null);
+    setErrors({ sentiment: null, posts: null, chart: null, rateLimited: false });
+    setLoading({ sentiment: false, posts: false, chart: false });
+    
+    console.log('🧹 DEBUG: Sentiment cache cleared! Reload the page to see fresh data.');
+  };
+}, []);
+```
+
+This provides developers with easy cache clearing via browser console: `clearSentimentCache()`.
+
+## 8. Consistent Architecture
+
+The updated sentiment caching now provides:
+
+1. **Cross-Session Persistence**: Data persists across browser sessions using localStorage
+2. **Consistent Staleness Threshold**: 30-minute cache window matching other components
+3. **Intelligent Loading States**: Calculates initial loading based on cache freshness
+4. **Automatic Cache Invalidation**: Clears cache when time ranges change
+5. **Comprehensive Refresh**: Both state and localStorage clearing capabilities
+6. **Developer Debugging**: Console-accessible cache clearing functions
+
+This architecture ensures consistent performance and user experience across all HRVSTR premium features while maintaining optimal API usage and response times.
+
+## 9. Time-Based Cache Expiration
 
 The sentiment caching system implements variable TTL (Time-To-Live) based on the selected time range:
 
@@ -56,7 +258,7 @@ This intelligent approach:
 - Allows longer caching for more stable historical data (3-month)
 - Balances freshness with performance optimization
 
-## 3. Cache Key Generation
+## 10. Cache Key Generation
 
 The caching system uses logical cache keys based on endpoint and parameters:
 
@@ -70,7 +272,7 @@ This key structure:
 - Includes time range to separate different data views
 - Creates unique identifiers for each API request
 
-## 4. Cache Validation Logic
+## 11. Cache Validation Logic
 
 The hook implements explicit cache validation logic:
 
@@ -97,7 +299,7 @@ if (!skipCache) {
 
 This ensures that expired cache entries are bypassed automatically.
 
-## 5. Cache-Busting Options
+## 12. Cache-Busting Options
 
 The hook provides several mechanisms to bypass or refresh cache:
 
@@ -122,7 +324,7 @@ Key features:
 - Auto-refresh interval for background updates
 - Manual refresh function for user-triggered updates
 
-## 6. Progressive Loading with Cache
+## 13. Progressive Loading with Cache
 
 The sentiment caching implementation includes detailed progress tracking:
 
@@ -144,7 +346,7 @@ This provides:
 - Granular progress updates for data-intensive operations
 - Better user experience during cache refreshes
 
-## 7. Error Handling with Cache Fallback
+## 14. Error Handling with Cache Fallback
 
 The caching system implements fallback to cached data during API failures:
 
@@ -169,7 +371,7 @@ This approach:
 - Prioritizes showing some data over showing none
 - Informs users about the cached state
 
-## 8. Proxy Server Integration
+## 15. Proxy Server Integration
 
 The sentiment caching coordinates with a proxy server for additional server-side caching:
 
@@ -187,7 +389,7 @@ This multi-layered approach:
 - Centralizes rate limiting and error handling
 - Creates a coordinated client-server caching architecture
 
-## 9. Cache Visibility for Users
+## 16. Cache Visibility for Users
 
 The hook exposes cache-related information to the user interface:
 
@@ -220,7 +422,7 @@ The UI can display:
 - Time until automatic refresh
 - Loading progress during cache misses
 
-## 10. Reddit Client Implementation
+## 17. Reddit Client Implementation
 
 The sentiment caching is supported by the Reddit client implementation, which fetches and processes Reddit posts:
 
@@ -265,7 +467,7 @@ export async function fetchRedditPosts(signal?: AbortSignal): Promise<RedditPost
 
 This implementation focuses on efficient data retrieval and transformation.
 
-## 11. Future Improvements
+## 18. Future Improvements
 
 The sentiment caching system could be enhanced with:
 

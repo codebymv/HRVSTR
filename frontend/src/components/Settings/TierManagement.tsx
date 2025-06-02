@@ -202,9 +202,6 @@ const TierManagement: React.FC = () => {
               style={{ width: `${Math.min(usagePercentage, 100)}%` }}
             />
           </div>
-          <p className={`text-xs ${secondaryTextColor}`}>
-            Credit cost varies by operation: Basic sentiment (1), Reddit sentiment (3), SEC filings (2)
-          </p>
         </div>
 
         {/* Watchlist Usage */}

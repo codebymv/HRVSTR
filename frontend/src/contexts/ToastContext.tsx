@@ -5,16 +5,19 @@ export interface Toast {
   message: string;
   type: 'success' | 'error' | 'info' | 'warning';
   duration?: number;
+  clickable?: boolean;
+  linkTo?: string;
+  onToastClick?: () => void;
 }
 
 interface ToastContextType {
   toasts: Toast[];
-  addToast: (message: string, type: Toast['type'], duration?: number) => void;
+  addToast: (message: string, type: Toast['type'], duration?: number, options?: { clickable?: boolean; linkTo?: string; onToastClick?: () => void }) => void;
   removeToast: (id: string) => void;
-  success: (message: string, duration?: number) => void;
-  error: (message: string, duration?: number) => void;
-  info: (message: string, duration?: number) => void;
-  warning: (message: string, duration?: number) => void;
+  success: (message: string, duration?: number, options?: { clickable?: boolean; linkTo?: string; onToastClick?: () => void }) => void;
+  error: (message: string, duration?: number, options?: { clickable?: boolean; linkTo?: string; onToastClick?: () => void }) => void;
+  info: (message: string, duration?: number, options?: { clickable?: boolean; linkTo?: string; onToastClick?: () => void }) => void;
+  warning: (message: string, duration?: number, options?: { clickable?: boolean; linkTo?: string; onToastClick?: () => void }) => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
@@ -26,9 +29,22 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setToasts(prev => prev.filter(toast => toast.id !== id));
   }, []);
 
-  const addToast = useCallback((message: string, type: Toast['type'], duration = 4000) => {
+  const addToast = useCallback((
+    message: string, 
+    type: Toast['type'], 
+    duration = 4000,
+    options?: { clickable?: boolean; linkTo?: string; onToastClick?: () => void }
+  ) => {
     const id = Math.random().toString(36).substring(2) + Date.now().toString(36);
-    const toast: Toast = { id, message, type, duration };
+    const toast: Toast = { 
+      id, 
+      message, 
+      type, 
+      duration,
+      clickable: options?.clickable,
+      linkTo: options?.linkTo,
+      onToastClick: options?.onToastClick
+    };
     
     setToasts(prev => [...prev, toast]);
 
@@ -41,20 +57,36 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [removeToast]);
 
   // Convenience methods
-  const success = useCallback((message: string, duration?: number) => {
-    addToast(message, 'success', duration);
+  const success = useCallback((
+    message: string, 
+    duration?: number, 
+    options?: { clickable?: boolean; linkTo?: string; onToastClick?: () => void }
+  ) => {
+    addToast(message, 'success', duration, options);
   }, [addToast]);
 
-  const error = useCallback((message: string, duration?: number) => {
-    addToast(message, 'error', duration);
+  const error = useCallback((
+    message: string, 
+    duration?: number, 
+    options?: { clickable?: boolean; linkTo?: string; onToastClick?: () => void }
+  ) => {
+    addToast(message, 'error', duration, options);
   }, [addToast]);
 
-  const info = useCallback((message: string, duration?: number) => {
-    addToast(message, 'info', duration);
+  const info = useCallback((
+    message: string, 
+    duration?: number, 
+    options?: { clickable?: boolean; linkTo?: string; onToastClick?: () => void }
+  ) => {
+    addToast(message, 'info', duration, options);
   }, [addToast]);
 
-  const warning = useCallback((message: string, duration?: number) => {
-    addToast(message, 'warning', duration);
+  const warning = useCallback((
+    message: string, 
+    duration?: number, 
+    options?: { clickable?: boolean; linkTo?: string; onToastClick?: () => void }
+  ) => {
+    addToast(message, 'warning', duration, options);
   }, [addToast]);
 
   const value = {

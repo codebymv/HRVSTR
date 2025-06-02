@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, Info, AlertTriangle, ExternalLink } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Toast as ToastType, useToast } from '../../contexts/ToastContext';
 
@@ -10,6 +11,7 @@ interface ToastItemProps {
 const ToastItem: React.FC<ToastItemProps> = ({ toast }) => {
   const { theme } = useTheme();
   const { removeToast } = useToast();
+  const navigate = useNavigate();
   const [isVisible, setIsVisible] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
 
@@ -29,6 +31,20 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast }) => {
     }, 300);
   };
 
+  // Handle toast click
+  const handleToastClick = () => {
+    if (!toast.clickable) return;
+    
+    if (toast.onToastClick) {
+      toast.onToastClick();
+    } else if (toast.linkTo) {
+      navigate(toast.linkTo);
+    }
+    
+    // Remove toast after click
+    handleRemove();
+  };
+
   // Auto-remove on duration
   useEffect(() => {
     if (toast.duration && toast.duration > 0) {
@@ -46,6 +62,7 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast }) => {
       transform transition-all duration-300 ease-in-out
       ${isVisible && !isLeaving ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}
       ${isLeaving ? 'scale-95' : 'scale-100'}
+      ${toast.clickable ? 'cursor-pointer hover:scale-105' : ''}
     `;
 
     switch (toast.type) {
@@ -94,13 +111,25 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast }) => {
   };
 
   return (
-    <div className={getToastStyles()}>
+    <div 
+      className={getToastStyles()}
+      onClick={toast.clickable ? handleToastClick : undefined}
+      title={toast.clickable ? 'Click to view usage details' : undefined}
+    >
       {getIcon()}
       <div className="flex-1 text-sm font-medium">
         {toast.message}
       </div>
+      {toast.clickable && (
+        <ExternalLink className={`w-4 h-4 flex-shrink-0 ${
+          isLight ? 'text-gray-500' : 'text-gray-400'
+        }`} />
+      )}
       <button
-        onClick={handleRemove}
+        onClick={(e) => {
+          e.stopPropagation(); // Prevent toast click when closing
+          handleRemove();
+        }}
         className={`
           flex-shrink-0 p-1 rounded-full transition-colors
           ${isLight 

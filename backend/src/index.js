@@ -38,6 +38,7 @@ const settingsRoutes = require('./routes/settings');
 const docsRoutes = require('./routes/docs');
 const subscriptionRoutes = require('./routes/subscription');
 const billingRoutes = require('./routes/billing');
+const creditsRoutes = require('./routes/credits');
 
 // Create Express app
 const app = express();
@@ -263,6 +264,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/docs', docsRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/billing', billingRoutes);
+app.use('/api/credits', creditsRoutes);
 
 // Serve static files from the frontend build directory in production
 if (process.env.NODE_ENV === 'production') {

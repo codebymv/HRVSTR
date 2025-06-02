@@ -117,11 +117,11 @@ router.post('/simulate-upgrade', authenticateToken, async (req, res) => {
     await pool.query(
       `UPDATE users SET 
         tier = $1,
-        credits_remaining = $2,
-        credits_monthly_limit = $3,
-        credits_reset_date = $4
-      WHERE id = $5`,
-      [tier, tierLimits.monthlyCredits, tierLimits.monthlyCredits, newResetDate, userId]
+        credits_used = 0,
+        monthly_credits = $2,
+        credits_reset_date = $3
+      WHERE id = $4`,
+      [tier, tierLimits.monthlyCredits, newResetDate, userId]
     );
 
     // Log the tier change
@@ -163,9 +163,9 @@ router.post('/add-credits', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid credit amount' });
     }
 
-    // Add credits to user's account
+    // Add credits to user's account (as purchased credits)
     await pool.query(
-      'UPDATE users SET credits_remaining = credits_remaining + $1 WHERE id = $2',
+      'UPDATE users SET credits_purchased = COALESCE(credits_purchased, 0) + $1 WHERE id = $2',
       [amount, userId]
     );
 

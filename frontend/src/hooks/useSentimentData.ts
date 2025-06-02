@@ -99,29 +99,115 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
   const requestManager = useAbortableRequests();
   const { tierInfo } = useTier();
   
-  // Cache expiration time - 5 minutes
-  const CACHE_EXPIRY = 5 * 60 * 1000;
+  // Helper function to check if data is stale (older than 30 minutes) - matching earnings/SEC approach
+  const isDataStale = (timestamp: number | null): boolean => {
+    if (!timestamp) return true;
+    const thirtyMinutesInMs = 30 * 60 * 1000;
+    return Date.now() - timestamp > thirtyMinutesInMs;
+  };
+  
   const POSTS_PER_PAGE = 10;
   
   // Ref to prevent double loading in React StrictMode
   const loadingRef = useRef(false);
   
-  // Refs to access current cached data without triggering re-renders
-  const allSentimentsRef = useRef<SentimentData[]>([]);
-  const allTickerSentimentsRef = useRef<SentimentData[]>([]);
-  const cachedRedditPostsRef = useRef<RedditPostType[]>([]);
-  const cacheTimestampRef = useRef<number>(0);
+  // Cached data state with localStorage persistence - matching earnings approach
+  const [allSentiments, setAllSentiments] = useState<SentimentData[]>(() => {
+    try {
+      const cached = localStorage.getItem('sentiment_allSentiments');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      console.error('Error loading cached sentiments:', e);
+      return [];
+    }
+  });
+  
+  const [allTickerSentiments, setAllTickerSentiments] = useState<SentimentData[]>(() => {
+    try {
+      const cached = localStorage.getItem('sentiment_allTickerSentiments');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      console.error('Error loading cached ticker sentiments:', e);
+      return [];
+    }
+  });
+  
+  const [cachedRedditPosts, setCachedRedditPosts] = useState<RedditPostType[]>(() => {
+    try {
+      const cached = localStorage.getItem('sentiment_cachedRedditPosts');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      console.error('Error loading cached Reddit posts:', e);
+      return [];
+    }
+  });
+  
+  // Track the last fetch time - matching earnings approach
+  const [lastFetchTime, setLastFetchTime] = useState<number | null>(() => {
+    try {
+      const cached = localStorage.getItem('sentiment_lastFetchTime');
+      return cached ? JSON.parse(cached) : null;
+    } catch (e) {
+      console.error('Error loading cached fetch time:', e);
+      return null;
+    }
+  });
+  
+  // Save data to localStorage whenever it changes - matching earnings approach
+  useEffect(() => {
+    if (allSentiments.length > 0) {
+      localStorage.setItem('sentiment_allSentiments', JSON.stringify(allSentiments));
+    }
+  }, [allSentiments]);
+  
+  useEffect(() => {
+    if (allTickerSentiments.length > 0) {
+      localStorage.setItem('sentiment_allTickerSentiments', JSON.stringify(allTickerSentiments));
+    }
+  }, [allTickerSentiments]);
+  
+  useEffect(() => {
+    if (cachedRedditPosts.length > 0) {
+      localStorage.setItem('sentiment_cachedRedditPosts', JSON.stringify(cachedRedditPosts));
+    }
+  }, [cachedRedditPosts]);
+  
+  // Save last fetch time to localStorage
+  useEffect(() => {
+    if (lastFetchTime) {
+      localStorage.setItem('sentiment_lastFetchTime', JSON.stringify(lastFetchTime));
+    }
+  }, [lastFetchTime]);
   
   // Loading states
-  const [loading, setLoading] = useState({
-    sentiment: true,
-    posts: true,
-    chart: true
+  const [loading, setLoading] = useState(() => {
+    // Calculate initial loading state based on cache freshness
+    const hasData = allSentiments.length > 0;
+    const dataIsStale = isDataStale(lastFetchTime);
+    const needsRefresh = !hasData || dataIsStale;
+    
+    console.log('🔄 SENTIMENT: Initial state calculation:', {
+      hasData,
+      dataLength: allSentiments.length,
+      lastFetchTime: lastFetchTime ? new Date(lastFetchTime).toISOString() : null,
+      dataIsStale,
+      needsRefresh
+    });
+    
+    return {
+      sentiment: needsRefresh,
+      posts: needsRefresh,
+      chart: needsRefresh
+    };
   });
   
   // Unified loading progress tracking
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const [isDataLoading, setIsDataLoading] = useState(true);
+  const [isDataLoading, setIsDataLoading] = useState(() => {
+    const hasData = allSentiments.length > 0;
+    const dataIsStale = isDataStale(lastFetchTime);
+    return !hasData || dataIsStale;
+  });
   const [loadingStage, setLoadingStage] = useState<string>('Initializing...');
   const [isTransitioning, setIsTransitioning] = useState<boolean>(false);
   
@@ -146,11 +232,8 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
   const [yahooSentiments, setYahooSentiments] = useState<SentimentData[]>([]);
   const [combinedSentiments, setCombinedSentiments] = useState<SentimentData[]>([]);
   
-  // Cached datasets (also stored as state for UI access)
-  const [allSentiments, setAllSentiments] = useState<SentimentData[]>([]);
-  const [allTickerSentiments, setAllTickerSentiments] = useState<SentimentData[]>([]);
-  const [cachedRedditPosts, setCachedRedditPosts] = useState<RedditPostType[]>([]);
-  const [cacheTimestamp, setCacheTimestamp] = useState<number>(0);
+  // Track the last time range used for cache invalidation
+  const [lastTimeRange, setLastTimeRange] = useState<TimeRange>(timeRange);
   
   // Pagination state for Reddit posts
   const [redditPage, setRedditPage] = useState(1);
@@ -192,6 +275,36 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
       // Cancel all pending requests
       requestManager.abort();
       
+      // Check if we have fresh cached data - matching earnings approach
+      const hasData = allSentiments.length > 0;
+      const dataIsStale = isDataStale(lastFetchTime);
+      const timeRangeChanged = lastTimeRange !== timeRange;
+      
+      console.log('📊 SENTIMENT: Cache check:', {
+        hasData,
+        dataLength: allSentiments.length,
+        lastFetchTime: lastFetchTime ? new Date(lastFetchTime).toISOString() : null,
+        dataIsStale,
+        timeRangeChanged,
+        timeRange,
+        lastTimeRange
+      });
+
+      // If we have fresh data and time range hasn't changed, use cached data
+      if (hasData && !dataIsStale && !timeRangeChanged) {
+        console.log('📊 SENTIMENT: Using cached data, no fetch needed');
+        setLoading({
+          sentiment: false,
+          posts: false,
+          chart: false
+        });
+        setIsDataLoading(false);
+        loadingRef.current = false;
+        return;
+      }
+
+      console.log('📊 SENTIMENT: Fetching fresh data...');
+      
       // Request keys for different data fetching operations
       const REQUEST_KEYS = {
         sentimentData: 'sentiment-data',
@@ -221,7 +334,6 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
       
       try {
         // Step 1: Fetch market sentiment timeline data for chart visualization
-        if (allSentimentsRef.current.length === 0 || Date.now() - cacheTimestampRef.current > CACHE_EXPIRY) {
           updateProgress(15, hasRedditAccess ? 'Downloading sentiment timeline from all sources...' : 'Downloading sentiment timeline (FinViz + Yahoo)...');
           const sentimentSignal = requestManager.getSignal(REQUEST_KEYS.sentimentData);
           
@@ -240,13 +352,10 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
             }
           }
           
-          allSentimentsRef.current = sentimentData;
           setAllSentiments(sentimentData);
-          cacheTimestampRef.current = Date.now();
-          setCacheTimestamp(Date.now());
-        } else {
-          updateProgress(15, 'Using cached sentiment timeline data...');
-        }
+        setLastFetchTime(Date.now());
+        setLastTimeRange(timeRange);
+        
       } catch (error: unknown) {
         if (error instanceof DOMException && error.name === 'AbortError') return;
         logger.error('Market sentiment error for chart:', error);
@@ -256,13 +365,12 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
       try {
         // Step 2: Fetch Reddit posts with pagination (only for Pro+ users)
         if (hasRedditAccess) {
-          if (cachedRedditPostsRef.current.length === 0 || Date.now() - cacheTimestampRef.current > CACHE_EXPIRY) {
+          if (cachedRedditPosts.length === 0 || (lastFetchTime && Date.now() - lastFetchTime > 30 * 60 * 1000)) {
             updateProgress(30, 'Fetching Reddit posts...');
             const postsSignal = requestManager.getSignal(REQUEST_KEYS.redditPosts);
             
             try {
               const posts = await fetchRedditPosts(postsSignal);
-              cachedRedditPostsRef.current = posts;
               setCachedRedditPosts(posts);
               setRedditPosts(posts.slice(0, POSTS_PER_PAGE));
               setHasMorePosts(posts.length > POSTS_PER_PAGE);
@@ -275,8 +383,8 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
               }));
             }
           } else {
-            setRedditPosts(cachedRedditPostsRef.current.slice(0, POSTS_PER_PAGE));
-            setHasMorePosts(cachedRedditPostsRef.current.length > POSTS_PER_PAGE);
+            setRedditPosts(cachedRedditPosts.slice(0, POSTS_PER_PAGE));
+            setHasMorePosts(cachedRedditPosts.length > POSTS_PER_PAGE);
             setRedditPage(1);
           }
         } else {
@@ -306,21 +414,21 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
       
       try {
         // Step 3: Fetch ticker sentiment data (Reddit for Pro+ users, FinViz/Yahoo for all)
-        let tickerSentimentData: SentimentData[] = allTickerSentimentsRef.current;
+        let tickerSentimentData: SentimentData[] = allTickerSentiments;
         
         // Check if we need to fetch Reddit ticker sentiment data
-        const hasRealRedditData = allTickerSentimentsRef.current.length > 0 && 
-          allTickerSentimentsRef.current.some(item => item.source === 'reddit');
+        const hasRealRedditData = allTickerSentiments.length > 0 && 
+          allTickerSentiments.some(item => item.source === 'reddit');
         const needsRedditData = hasRedditAccess && !hasRealRedditData;
-        const needsDefaultData = !hasRedditAccess && allTickerSentimentsRef.current.length === 0;
+        const needsDefaultData = !hasRedditAccess && allTickerSentiments.length === 0;
         
         console.log('[REDDIT TICKER DEBUG] Data check:', {
-          currentDataLength: allTickerSentimentsRef.current.length,
+          currentDataLength: allTickerSentiments.length,
           hasRedditAccess,
           hasRealRedditData,
           needsRedditData,
           needsDefaultData,
-          firstItemSource: allTickerSentimentsRef.current[0]?.source || 'none'
+          firstItemSource: allTickerSentiments[0]?.source || 'none'
         });
         
         if (needsRedditData) {
@@ -328,7 +436,6 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
           updateProgress(45, `Fetching ${timeRange} Reddit ticker sentiment data...`);
           const tickerSignal = requestManager.getSignal(REQUEST_KEYS.tickerSentiment);
           tickerSentimentData = await fetchWatchlistRedditSentiment(timeRange, tickerSignal);
-          allTickerSentimentsRef.current = tickerSentimentData;
           setAllTickerSentiments(tickerSentimentData);
         } else if (needsDefaultData) {
           console.log('[REDDIT TICKER DEBUG] Creating default ticker data - fetching user watchlist...');
@@ -364,12 +471,11 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
             tickerSentimentData = [];
           }
           
-          allTickerSentimentsRef.current = tickerSentimentData;
           setAllTickerSentiments(tickerSentimentData);
         } else {
           console.log('[REDDIT TICKER DEBUG] Using existing ticker sentiment data:', {
-            length: allTickerSentimentsRef.current.length,
-            sources: allTickerSentimentsRef.current.map(item => item.source)
+            length: allTickerSentiments.length,
+            sources: allTickerSentiments.map(item => item.source)
           });
         }
         
@@ -431,12 +537,12 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
             updateProgress(85, 'Generating sentiment charts from market data...');
             
             console.log('[CHART DEBUG] Using market sentiment timeline data for chart generation');
-            console.log('[CHART DEBUG] Market sentiment timeline length:', allSentimentsRef.current.length);
+            console.log('[CHART DEBUG] Market sentiment timeline length:', allSentiments.length);
             
             // Use market sentiment timeline data as the primary source for chart (provides time-series data)
-            if (allSentimentsRef.current.length > 0) {
-              console.log(`[CHART DEBUG] Generating chart from ${allSentimentsRef.current.length} market sentiment timeline data points`);
-              const chartDataResult = generateChartData(allSentimentsRef.current, timeRange);
+            if (allSentiments.length > 0) {
+              console.log(`[CHART DEBUG] Generating chart from ${allSentiments.length} market sentiment timeline data points`);
+              const chartDataResult = generateChartData(allSentiments, timeRange);
               setChartData(chartDataResult);
               console.log(`[CHART DEBUG] Generated ${chartDataResult.length} chart data points from market timeline`);
             } else {
@@ -495,14 +601,16 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
   
   const refreshData = useCallback(() => {
     // Clear ALL caches then reload - including market timeline data
-    allSentimentsRef.current = [];
     setAllSentiments([]);
-    allTickerSentimentsRef.current = [];
     setAllTickerSentiments([]);
-    cachedRedditPostsRef.current = [];
     setCachedRedditPosts([]);
-    cacheTimestampRef.current = 0;
-    setCacheTimestamp(0);
+    setLastFetchTime(null);
+    
+    // Clear localStorage cache to force fresh fetch - matching earnings approach
+    localStorage.removeItem('sentiment_allSentiments');
+    localStorage.removeItem('sentiment_allTickerSentiments');
+    localStorage.removeItem('sentiment_cachedRedditPosts');
+    localStorage.removeItem('sentiment_lastFetchTime');
     
     // Force reload of data with current access level
     loadData();
@@ -579,78 +687,63 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
     }
   }, [redditPage, hasMorePosts, loading.posts, cachedRedditPosts, timeRange, updateLoadingState]);
   
-  // Effect to load data when timeRange or Reddit access changes
+  // Debug function to clear all sentiment cache - available in browser console
   useEffect(() => {
-    // Don't start loading until API key check is complete
-    if (!apiKeysReady) {
-      logger.log('Waiting for API key check to complete before loading data...');
-      return;
-    }
-    
-    logger.log(`Time range changed to: ${timeRange}, triggering data load (hasRedditAccess: ${hasRedditAccess})`);
-    
-    // Cancel all pending requests
-    requestManager.abort();
-    
-    // Small delay to allow for UI updates and debounce rapid changes
-    const timeoutId = setTimeout(() => {
-      loadData();
-    }, 100); // Increased from 50ms to 100ms for better debouncing
-    
-    return () => {
-      clearTimeout(timeoutId);
+    (window as any).clearSentimentCache = () => {
+      console.log('🧹 DEBUG: Clearing all sentiment cache...');
+      localStorage.removeItem('sentiment_allSentiments');
+      localStorage.removeItem('sentiment_allTickerSentiments');
+      localStorage.removeItem('sentiment_cachedRedditPosts');
+      localStorage.removeItem('sentiment_lastFetchTime');
+      
+      setAllSentiments([]);
+      setAllTickerSentiments([]);
+      setCachedRedditPosts([]);
+      setLastFetchTime(null);
+      setErrors({ sentiment: null, posts: null, chart: null, rateLimited: false });
+      setLoading({ sentiment: false, posts: false, chart: false });
+      
+      console.log('🧹 DEBUG: Sentiment cache cleared! Reload the page to see fresh data.');
     };
-  }, [timeRange, hasRedditAccess, apiKeysReady]); // Added apiKeysReady to dependencies
-  
-  // Effect to clear fake data when Reddit access changes
+  }, []);
+
+  // Handle time range changes - clear cache when time range changes
   useEffect(() => {
-    // If the user gained Reddit access, clear any existing fake ticker data
-    // so that real Reddit ticker sentiment data gets fetched
-    if (hasRedditAccess && allTickerSentimentsRef.current.length > 0) {
-      const hasFakeData = allTickerSentimentsRef.current.some(item => 
-        item.source === 'finviz' && item.confidence === 0 && item.postCount === 0
-      );
+    if (lastTimeRange !== timeRange) {
+      console.log(`⏰ SENTIMENT: Changing time range from ${lastTimeRange} to ${timeRange}`);
       
-      if (hasFakeData) {
-        console.log('[REDDIT TICKER DEBUG] Reddit access gained - clearing fake ticker data to fetch real Reddit data');
-        allTickerSentimentsRef.current = [];
+      // Clear cached data when time range changes to force fresh fetch
+      console.log('⏰ SENTIMENT: Clearing cache for new time range');
+      localStorage.removeItem('sentiment_allSentiments');
+      localStorage.removeItem('sentiment_allTickerSentiments');
+      localStorage.removeItem('sentiment_cachedRedditPosts');
+      localStorage.removeItem('sentiment_lastFetchTime');
+      
+      // Reset cached data in state
+      setAllSentiments([]);
         setAllTickerSentiments([]);
-        // Don't need to call loadData() here as the previous useEffect will handle it
-      }
-    }
-  }, [hasRedditAccess]);
+      setCachedRedditPosts([]);
+      setLastFetchTime(null);
   
-  // Effect to filter Reddit posts when cached posts or timeRange changes
-  useEffect(() => {
-    if (cachedRedditPosts.length > 0) {
-      const now = new Date();
-      let cutoffDate: Date;
-      
-      switch (timeRange as string) {
-        case '1d':
-          cutoffDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-          break;
-        case '3d':
-          cutoffDate = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
-          break;
-        case '1w':
-          cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          break;
-        default:
-          cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          break;
-      }
-      
-      const filteredPosts = cachedRedditPosts.filter(post => {
-        const postDate = new Date(post.created);
-        return postDate >= cutoffDate;
+      // Clear any existing errors
+      setErrors({
+        sentiment: null,
+        posts: null,
+        chart: null,
+        rateLimited: false
       });
       
-      setRedditPage(1);
-      setRedditPosts(filteredPosts.slice(0, POSTS_PER_PAGE));
-      setHasMorePosts(filteredPosts.length > POSTS_PER_PAGE);
+      console.log('⏰ SENTIMENT: Triggering fresh data load for new time range');
+      loadData();
     }
-  }, [cachedRedditPosts, timeRange]); // Need to depend on cachedRedditPosts for the UI
+  }, [timeRange, lastTimeRange, loadData]);
+
+  // Load data when component mounts or when access changes
+  useEffect(() => {
+    if (apiKeysReady) {
+      loadData();
+    }
+  }, [loadData, apiKeysReady, hasRedditAccess]);
   
   // Cleanup effect
   useEffect(() => {

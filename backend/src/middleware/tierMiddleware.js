@@ -177,7 +177,7 @@ const checkCreditsForOperation = (operationType) => {
 
       // Get user's current credit status with row locking
       const userResult = await pool.query(
-        'SELECT tier, credits_remaining, credits_reset_date, credits_monthly_limit FROM users WHERE id = $1 FOR UPDATE',
+        'SELECT tier, monthly_credits, credits_used, credits_purchased, credits_reset_date FROM users WHERE id = $1 FOR UPDATE',
         [userId]
       );
 
@@ -190,6 +190,10 @@ const checkCreditsForOperation = (operationType) => {
       }
 
       const user = userResult.rows[0];
+      
+      // Calculate remaining credits using new schema
+      const totalCredits = user.monthly_credits + (user.credits_purchased || 0);
+      const remainingCredits = totalCredits - user.credits_used;
 
       // Check if credits need to be reset (monthly cycle)
       const now = new Date();
@@ -202,22 +206,29 @@ const checkCreditsForOperation = (operationType) => {
         newResetDate.setMonth(newResetDate.getMonth() + 1);
 
         await pool.query(
-          'UPDATE users SET credits_remaining = $1, credits_reset_date = $2 WHERE id = $3',
+          'UPDATE users SET credits_used = 0, monthly_credits = $1, credits_reset_date = $2 WHERE id = $3',
           [tierLimits.monthlyCredits, newResetDate, userId]
         );
 
-        user.credits_remaining = tierLimits.monthlyCredits;
+        user.credits_used = 0;
+        user.monthly_credits = tierLimits.monthlyCredits;
+        const newRemainingCredits = user.monthly_credits + (user.credits_purchased || 0);
         console.log(`🔄 Credits reset for user ${userId}: ${tierLimits.monthlyCredits} credits`);
       }
 
+      // Use calculated remaining credits
+      const currentRemaining = now >= resetDate ? 
+        (user.monthly_credits + (user.credits_purchased || 0)) : 
+        remainingCredits;
+
       // Check if user has sufficient credits
-      if (user.credits_remaining < creditCost) {
-        console.error(`[TIER ERROR] Insufficient credits for user ${userId}: has ${user.credits_remaining}, needs ${creditCost}`);
+      if (currentRemaining < creditCost) {
+        console.error(`[TIER ERROR] Insufficient credits for user ${userId}: has ${currentRemaining}, needs ${creditCost}`);
         return res.status(402).json({ 
           error: 'Insufficient credits',
           code: 'INSUFFICIENT_CREDITS',
           required: creditCost,
-          remaining: user.credits_remaining,
+          remaining: currentRemaining,
           tier: user.tier,
           operation: operationType,
           details: operationDetails
@@ -231,10 +242,10 @@ const checkCreditsForOperation = (operationType) => {
         type: operationType,
         details: operationDetails,
         tier: user.tier,
-        remainingBefore: user.credits_remaining
+        remainingBefore: currentRemaining
       };
 
-      console.log(`💳 Credit check passed - User: ${userId}, Operation: ${operationType}, Cost: ${creditCost}, Remaining: ${user.credits_remaining}`);
+      console.log(`💳 Credit check passed - User: ${userId}, Operation: ${operationType}, Cost: ${creditCost}, Remaining: ${currentRemaining}`);
       next();
 
     } catch (error) {
@@ -269,11 +280,13 @@ const deductCredits = async (req, res, next) => {
       
       // Deduct credits
       const result = await client.query(
-        'UPDATE users SET credits_remaining = credits_remaining - $1 WHERE id = $2 RETURNING credits_remaining',
+        'UPDATE users SET credits_used = credits_used + $1 WHERE id = $2 RETURNING monthly_credits, credits_used, credits_purchased',
         [cost, userId]
       );
       
-      const newBalance = result.rows[0]?.credits_remaining;
+      const user = result.rows[0];
+      const totalCredits = user.monthly_credits + (user.credits_purchased || 0);
+      const newBalance = totalCredits - user.credits_used;
       
       // Log the credit deduction in activities
       await client.query(
@@ -434,7 +447,7 @@ const checkWatchlistLimit = async (req, res, next) => {
 const getUserTierInfo = async (userId) => {
   try {
     const userResult = await pool.query(
-      'SELECT tier, credits_remaining, credits_monthly_limit, credits_reset_date FROM users WHERE id = $1',
+      'SELECT tier, monthly_credits, credits_used, credits_purchased, credits_reset_date FROM users WHERE id = $1',
       [userId]
     );
 
@@ -444,12 +457,19 @@ const getUserTierInfo = async (userId) => {
 
     const user = userResult.rows[0];
     const tierLimits = TIER_LIMITS[user.tier];
+    
+    // Calculate remaining credits using new schema
+    const totalCredits = user.monthly_credits + (user.credits_purchased || 0);
+    const remainingCredits = totalCredits - user.credits_used;
 
     return {
       tier: user.tier,
       credits: {
-        remaining: user.credits_remaining,
-        monthly: user.credits_monthly_limit,
+        remaining: remainingCredits,
+        monthly: user.monthly_credits,
+        purchased: user.credits_purchased || 0,
+        used: user.credits_used,
+        total: totalCredits,
         resetDate: user.credits_reset_date
       },
       limits: tierLimits,

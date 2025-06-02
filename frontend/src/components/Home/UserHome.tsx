@@ -36,6 +36,7 @@ import { useWatchlistInfiniteScroll } from '../../hooks/useWatchlistInfiniteScro
 import { useRecentActivityInfiniteScroll } from '../../hooks/useRecentActivityInfiniteScroll';
 import { useUpcomingEventsInfiniteScroll } from '../../hooks/useUpcomingEventsInfiniteScroll';
 import UpcomingEventsSection from './UpcomingEventsSection';
+import { useLimitToasts } from '../../utils/limitToasts';
 
 interface WatchlistItem {
   id: string;
@@ -68,6 +69,12 @@ const UserHome: React.FC = () => {
   const { user } = useAuth();
   const { tierInfo } = useTier();
   const { showTierLimitDialog, tierLimitDialog, closeTierLimitDialog } = useTierLimits();
+  const { 
+    showWatchlistLimitReached, 
+    showSearchLimitReached, 
+    showPriceUpdateLimitReached,
+    showCreditLimitExceeded
+  } = useLimitToasts();
   
   // Infinite scroll watchlist hook
   const {
@@ -529,27 +536,26 @@ const UserHome: React.FC = () => {
         return;
       }
       
-      // Check for other tier limit types (402 status)
+      // Check for other tier limit types (402 status) - Use new toast system for some cases
       if (error.response?.status === 402 && error.response?.data?.error === 'tier_limit') {
         const tierLimitType = error.response.data.tierLimitType;
         const usage = error.response.data.usage;
+        const currentTier = tierInfo?.tier || 'free';
         
         if (tierLimitType === 'search') {
-          showTierLimitDialog(
-            'Stock Search Limit',
-            `You've reached the daily search limit (${usage?.current || 25}/${usage?.limit || 25} for Free tier). Try again tomorrow or upgrade for unlimited searches.`,
-            'Upgrade to Pro for unlimited stock searches, real-time data, and advanced market analysis tools.',
-            'watchlist'
-          );
+          // Use new toast system for search limits
+          showSearchLimitReached(usage?.current, usage?.limit, currentTier);
+        } else if (tierLimitType === 'watchlist') {
+          // Use new toast system for watchlist limits
+          showWatchlistLimitReached(usage?.current, usage?.limit, currentTier);
         } else if (tierLimitType === 'price_updates') {
-          showTierLimitDialog(
-            'Price Update Limit',
-            `You've reached the daily price update limit (${usage?.current || 25}/${usage?.limit || 25} for Free tier). Stocks can still be added but pricing will be unavailable.`,
-            'Upgrade to Pro for unlimited price updates and real-time market data access.',
-            'watchlist'
-          );
+          // Use new toast system for price update limits
+          showPriceUpdateLimitReached(usage?.current, usage?.limit, currentTier);
+        } else if (tierLimitType === 'credit') {
+          // Use new toast system for credit limits
+          showCreditLimitExceeded(usage?.remaining || 0);
         } else {
-          // Generic tier limit message
+          // Keep existing tier limit dialog for other types
           showTierLimitDialog(
             'Daily Limit Reached',
             `You've reached your daily limit for this feature (Free tier: ${usage?.current || 25}/${usage?.limit || 25}). Upgrade for unlimited access.`,
