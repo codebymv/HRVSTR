@@ -90,4 +90,48 @@ router.get('/aggregate',
   deductCredits
 );
 
+/**
+ * Clear sentiment cache
+ */
+router.post('/clear-cache', async (req, res) => {
+  try {
+    console.log('🗑️ Clearing sentiment caches...');
+    
+    // Import cache manager
+    const cacheManager = require('../../utils/cacheManager');
+    
+    // Clear FinViz sentiment cache
+    const finvizCleared = cacheManager.clearCacheByPattern('finviz-sentiment-*');
+    console.log(`Cleared ${finvizCleared} FinViz sentiment cache entries`);
+    
+    // Clear Yahoo sentiment cache  
+    const yahooCleared = cacheManager.clearCacheByPattern('yahoo-sentiment-*');
+    console.log(`Cleared ${yahooCleared} Yahoo sentiment cache entries`);
+    
+    // Clear market sentiment caches
+    const marketCleared = cacheManager.clearCacheByPattern('*-market-sentiment');
+    console.log(`Cleared ${marketCleared} market sentiment cache entries`);
+    
+    const totalCleared = finvizCleared + yahooCleared + marketCleared;
+    
+    res.json({
+      success: true,
+      message: `Cleared ${totalCleared} sentiment cache entries`,
+      details: {
+        finviz: finvizCleared,
+        yahoo: yahooCleared,
+        market: marketCleared,
+        total: totalCleared
+      }
+    });
+  } catch (error) {
+    console.error('Error clearing sentiment cache:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to clear sentiment cache',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

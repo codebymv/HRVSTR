@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { SentimentData, ChartData, TimeRange, RedditPost } from '../types';
 import { fetchSentimentData, fetchRedditPosts, fetchTickerSentiments } from '../services/api';
-import { fetchFinvizSentiment } from '../services/finvizClient';
-import { fetchYahooSentiment } from '../services/yahooFinanceClient';
+import { 
+  fetchWatchlistFinvizSentiment, 
+  fetchWatchlistYahooSentiment,
+  fetchWatchlistRedditSentiment 
+} from '../services/watchlistSentimentClient';
 import { mergeSentimentData, aggregateByTicker } from '../services/sentimentMerger';
 import { ensureTickerDiversity } from '../services/tickerUtils';
 import { generateChartData } from '../services/chartUtils';
@@ -197,15 +200,15 @@ export const useSentimentDashboardData = (timeRange: TimeRange): UseSentimentDas
         updateProgress(15, 'Downloading sentiment timeline...');
         const sentimentSignal = requestManagerRef.current.getSignal(REQUEST_KEYS.sentimentData);
         
-        let sentimentData = await fetchSentimentData('3m', sentimentSignal);
-        logger.log(`First fetch: ${sentimentData.length} 3M sentiment data points from Reddit`);
+        let sentimentData = await fetchSentimentData(timeRange, sentimentSignal);
+        logger.log(`First fetch: ${sentimentData.length} sentiment data points from Reddit`);
         
         // If we only got a single data point, try again with a different timeframe
         if (sentimentData.length <= 1) {
           logger.log('Initial fetch returned minimal data, trying alternate timeframes...');
           try {
             const sentimentSignal2 = requestManagerRef.current.getSignal(REQUEST_KEYS.sentimentData + '-alt');
-            const alternateData = await fetchSentimentData('1m', sentimentSignal2);
+            const alternateData = await fetchSentimentData('1w', sentimentSignal2);
             if (alternateData.length > sentimentData.length) {
               logger.log(`Found more data with alternate timeframe: ${alternateData.length} points`);
               sentimentData = alternateData;
@@ -274,7 +277,8 @@ export const useSentimentDashboardData = (timeRange: TimeRange): UseSentimentDas
       if (allTickerSentiments.length === 0) {
         updateProgress(45, `Fetching ${timeRange} ticker sentiment data...`);
         const tickerSignal = requestManagerRef.current.getSignal(REQUEST_KEYS.tickerSentiment);
-        redditTickerData = await fetchTickerSentiments(timeRange, tickerSignal);
+        // Use watchlist-based Reddit sentiment instead of generic fetchTickerSentiments
+        redditTickerData = await fetchWatchlistRedditSentiment(timeRange, tickerSignal);
         setAllTickerSentiments(redditTickerData);
       }
       
@@ -284,29 +288,28 @@ export const useSentimentDashboardData = (timeRange: TimeRange): UseSentimentDas
         const diverseSentiments = ensureTickerDiversity(redditTickerData, 10);
         setTopSentiments(diverseSentiments);
         
-        // Extract just the ticker symbols for other sources
-        const tickersToFetch = diverseSentiments.map(item => item.ticker);
-        
-        // Now fetch FinViz sentiment data using just the ticker symbols
+        // Now fetch FinViz sentiment data using watchlist-based API
         let finvizData: SentimentData[] = [];
         try {
-          updateProgress(60, 'Fetching FinViz sentiment data...');
+          updateProgress(60, 'Fetching FinViz sentiment data from your watchlist...');
           
           const finvizSignal = requestManagerRef.current.getSignal(REQUEST_KEYS.finviz);
-          finvizData = await fetchFinvizSentiment(tickersToFetch, finvizSignal);
+          // Use watchlist-based FinViz sentiment instead of hardcoded tickers
+          finvizData = await fetchWatchlistFinvizSentiment(finvizSignal);
           
           setFinvizSentiments(finvizData);
         } catch (finvizError) {
           logger.error('FinViz data error:', finvizError);
         }
         
-        // Fetch Yahoo Finance sentiment for the same tickers
+        // Fetch Yahoo Finance sentiment using watchlist-based API
         let yahooData: SentimentData[] = [];
         try {
-          updateProgress(75, 'Fetching Yahoo Finance sentiment data...');
+          updateProgress(75, 'Fetching Yahoo Finance sentiment data from your watchlist...');
           
           const yahooSignal = requestManagerRef.current.getSignal(REQUEST_KEYS.yahoo);
-          yahooData = await fetchYahooSentiment(tickersToFetch, yahooSignal);
+          // Use watchlist-based Yahoo sentiment instead of hardcoded tickers
+          yahooData = await fetchWatchlistYahooSentiment(yahooSignal);
           
           setYahooSentiments(yahooData);
         } catch (yahooError) {
@@ -351,8 +354,8 @@ export const useSentimentDashboardData = (timeRange: TimeRange): UseSentimentDas
         logger.log('No sentiment data in state, attempting comprehensive direct fetch...');
         try {
           const directSentimentSignal = requestManagerRef.current.getSignal(REQUEST_KEYS.sentimentData + '-direct');
-          let directSentimentData = await fetchSentimentData('3m', directSentimentSignal);
-          logger.log(`Direct fetch (3m) returned ${directSentimentData.length} data points`);
+          let directSentimentData = await fetchSentimentData(timeRange, directSentimentSignal);
+          logger.log(`Direct fetch returned ${directSentimentData.length} data points`);
           
           if (directSentimentData.length > 0) {
             setAllSentiments(directSentimentData);
@@ -389,15 +392,14 @@ export const useSentimentDashboardData = (timeRange: TimeRange): UseSentimentDas
         case '1d':
           cutoffDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
           break;
+        case '3d':
+          cutoffDate = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+          break;
         case '1w':
           cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
           break;
-        case '1m':
-          cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          break;
-        case '3m':
         default:
-          cutoffDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+          cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
           break;
       }
       
@@ -439,15 +441,14 @@ export const useSentimentDashboardData = (timeRange: TimeRange): UseSentimentDas
         case '1d':
           cutoffDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
           break;
+        case '3d':
+          cutoffDate = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+          break;
         case '1w':
           cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
           break;
-        case '1m':
-          cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          break;
-        case '3m':
         default:
-          cutoffDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+          cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
           break;
       }
       

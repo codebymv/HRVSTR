@@ -56,19 +56,38 @@ export const fetchTickerSentiments = async (timeRange: TimeRange = '1w', signal?
       return []; // Return empty array instead of throwing
     }
     
-    console.log(`[REDDIT API DEBUG] Successfully received ${data.sentimentData.length} sentiment items`);
+    // 🔧 FIX: Add additional validation and logging
+    const sentimentArray = data.sentimentData as SentimentData[];
+    console.log(`[REDDIT API DEBUG] Successfully received ${sentimentArray.length} sentiment items`);
     
-    // Debug log to see what data is coming from the API
-    data.sentimentData.forEach((item: {ticker: string, confidence?: number}) => {
-      console.log(`[REDDIT API DEBUG] TICKER ${item.ticker} - confidence: ${item.confidence}, typeof: ${typeof item.confidence}`);
+    // 🔧 FIX: Validate each item has required fields
+    const validatedData = sentimentArray.filter((item, index) => {
+      const isValid = item && 
+                     typeof item.ticker === 'string' && 
+                     typeof item.score === 'number' && 
+                     typeof item.sentiment === 'string' &&
+                     typeof item.source === 'string';
+      
+      if (!isValid) {
+        console.warn(`[REDDIT API WARNING] Invalid sentiment item at index ${index}:`, item);
+        return false;
+      }
+      
+      console.log(`[REDDIT API DEBUG] Valid sentiment item: ${item.ticker} - score: ${item.score}, confidence: ${item.confidence}`);
+      return true;
     });
     
-    return data.sentimentData as SentimentData[];
+    console.log(`[REDDIT API DEBUG] Returning ${validatedData.length} validated sentiment items`);
+    
+    return validatedData;
   } catch (error) {
     console.error('[REDDIT API ERROR] Ticker sentiment API error:', error);
     console.error('[REDDIT API ERROR] Error type:', typeof error);
     console.error('[REDDIT API ERROR] Error message:', error instanceof Error ? error.message : 'Unknown error');
     console.error('[REDDIT API ERROR] Error stack:', error instanceof Error ? error.stack : 'No stack');
+    
+    // 🔧 FIX: Return empty array but also log this as a critical issue
+    console.error('[REDDIT API ERROR] CRITICAL: Returning empty array due to API failure');
     return []; // Return empty array instead of throwing
   }
 };
@@ -79,35 +98,44 @@ export const fetchTickerSentiments = async (timeRange: TimeRange = '1w', signal?
  */
 export const fetchSentimentData = async (timeRange: TimeRange = '1w', signal?: AbortSignal): Promise<SentimentData[]> => {
   try {
-    console.log(`Fetching Reddit sentiment data for timeRange: ${timeRange}`);
+    console.log(`[REDDIT MARKET SENTIMENT DEBUG] Starting fetchSentimentData for timeRange: ${timeRange}`);
     const proxyUrl = getProxyUrl();
-    console.log(`Using proxy URL: ${proxyUrl}`);
+    console.log(`[REDDIT MARKET SENTIMENT DEBUG] Using proxy URL: ${proxyUrl}`);
     
     // Add authentication header like the ticker sentiment function does
     const token = localStorage.getItem('auth_token');
     const headers: HeadersInit = {};
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
-      console.log(`[REDDIT MARKET DEBUG] Using auth token for market sentiment`);
+      console.log(`[REDDIT MARKET SENTIMENT DEBUG] Using auth token for market sentiment`);
     } else {
-      console.warn(`[REDDIT MARKET DEBUG] No auth token found for market sentiment`);
+      console.warn(`[REDDIT MARKET SENTIMENT DEBUG] No auth token found for market sentiment`);
     }
     
-    const response = await fetch(`${proxyUrl}/api/sentiment/reddit/market?timeRange=${timeRange}`, { 
+    const url = `${proxyUrl}/api/sentiment/reddit/market?timeRange=${timeRange}`;
+    console.log(`[REDDIT MARKET SENTIMENT DEBUG] Making request to: ${url}`);
+    console.log(`[REDDIT MARKET SENTIMENT DEBUG] Request headers:`, headers);
+    
+    const response = await fetch(url, { 
       signal,
       headers
     });
     
+    console.log(`[REDDIT MARKET SENTIMENT DEBUG] Response status: ${response.status}`);
+    console.log(`[REDDIT MARKET SENTIMENT DEBUG] Response headers:`, response.headers);
+    
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`API error ${response.status}: ${errorText}`);
-      throw new Error(`API request failed with status ${response.status}`);
+      console.error(`[REDDIT MARKET SENTIMENT ERROR] API error ${response.status}: ${errorText}`);
+      throw new Error(`API request failed with status ${response.status}: ${errorText}`);
     }
     
     const data = await response.json();
+    console.log(`[REDDIT MARKET SENTIMENT DEBUG] Response data:`, data);
     
     // Validate the response contains the expected data structure
     if (!data) {
+      console.error('[REDDIT MARKET SENTIMENT ERROR] Empty response from sentiment API');
       throw new Error('Empty response from sentiment API');
     }
     
@@ -117,7 +145,7 @@ export const fetchSentimentData = async (timeRange: TimeRange = '1w', signal?: A
         data.bearish && Array.isArray(data.bearish) &&
         data.neutral && Array.isArray(data.neutral)) {
       
-      console.log('=== REDDIT SENTIMENT BREAKDOWN ===');
+      console.log('=== REDDIT MARKET SENTIMENT BREAKDOWN ===');
       console.log('Timestamps:', data.timestamps);
       console.log('Bullish percentages:', data.bullish);
       console.log('Bearish percentages:', data.bearish);
@@ -171,46 +199,43 @@ export const fetchSentimentData = async (timeRange: TimeRange = '1w', signal?: A
       });
       
       if (sentimentData.length === 0) {
-        console.warn('No data points in time series response');
+        console.warn('[REDDIT MARKET SENTIMENT WARNING] No data points in time series response');
       } else {
-        console.log(`Fetched ${sentimentData.length} sentiment data points from time series`);
+        console.log(`[REDDIT MARKET SENTIMENT SUCCESS] Fetched ${sentimentData.length} sentiment data points from time series`);
       }
       
       return sentimentData;
     }
     
-    // Handle the preferred response format with sentimentData array
-    if (data.sentimentData && Array.isArray(data.sentimentData)) {
-      if (data.sentimentData.length === 0) {
-        console.warn('Received empty sentiment data array from API');
-      } else {
-        console.log(`Fetched ${data.sentimentData.length} sentiment data points`);
-      }
-      return data.sentimentData;
+    // Handle single point data format (fallback)
+    console.log('[REDDIT MARKET SENTIMENT DEBUG] Checking for single point data format...');
+    if (data.sentiment || data.score !== undefined) {
+      console.log('[REDDIT MARKET SENTIMENT DEBUG] Using single point data format');
+      return [{
+        ticker: 'MARKET',
+        score: data.score || 0,
+        sentiment: data.sentiment || 'neutral',
+        source: 'reddit',
+        timestamp: data.timestamp || new Date().toISOString(),
+        confidence: data.confidence || 0,
+        postCount: data.postCount || 0,
+        commentCount: data.commentCount || 0,
+        upvotes: data.upvotes || 0
+      }];
     }
     
-    // Handle direct array response (legacy format)
-    if (Array.isArray(data)) {
-      if (data.length === 0) {
-        console.warn('Received empty array from sentiment API');
-      } else {
-        console.log(`Fetched ${data.length} sentiment data points (legacy format)`);
-      }
-      return data;
-    }
-    
-    // If we get a single sentiment object, it's not what we expect
-    if (data.sentiment !== undefined) {
-      throw new Error('Received single sentiment point instead of time series. Backend should always return full timeline.');
-    }
-    
-    // If we get here, the response format is unexpected
-    console.error('Unexpected response format from sentiment API:', data);
-    throw new Error('Unexpected response format from API');
+    console.error('[REDDIT MARKET SENTIMENT ERROR] Unexpected response format:', data);
+    throw new Error('Unexpected response format from Reddit market sentiment API');
     
   } catch (error) {
-    console.error('Failed to fetch sentiment data:', error);
-    throw error; // Re-throw to let the caller handle it
+    console.error('[REDDIT MARKET SENTIMENT ERROR] Full error details:', error);
+    console.error('[REDDIT MARKET SENTIMENT ERROR] Error type:', typeof error);
+    console.error('[REDDIT MARKET SENTIMENT ERROR] Error message:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('[REDDIT MARKET SENTIMENT ERROR] Error stack:', error instanceof Error ? error.stack : 'No stack');
+    
+    // 🔧 FIX: Return empty array but also log this as a critical issue
+    console.error('[REDDIT MARKET SENTIMENT ERROR] CRITICAL: Reddit market sentiment timeline unavailable - returning empty array');
+    return []; // Return empty array instead of throwing
   }
 };
 
@@ -331,7 +356,7 @@ export const fetchWatchlist = async (): Promise<WatchlistItem[]> => {
  * Fetch insider trades from SEC Form 4 filings
  * Returns insider trading data for the specified time range
  */
-export const fetchInsiderTrades = async (timeRange: TimeRange = '1m', refresh: boolean = false, signal?: AbortSignal): Promise<InsiderTrade[]> => {
+export const fetchInsiderTrades = async (timeRange: TimeRange = '1w', refresh: boolean = false, signal?: AbortSignal): Promise<InsiderTrade[]> => {
   try {
     const proxyUrl = getProxyUrl();
     const refreshParam = refresh ? '&refresh=true' : '';
@@ -450,7 +475,7 @@ export const fetchInsiderTrades = async (timeRange: TimeRange = '1m', refresh: b
  * Fetch institutional holdings from SEC 13F filings
  * Returns institutional holdings data for the specified time range
  */
-export const fetchInstitutionalHoldings = async (timeRange: TimeRange = '1m', refresh: boolean = false, signal?: AbortSignal): Promise<InstitutionalHolding[]> => {
+export const fetchInstitutionalHoldings = async (timeRange: TimeRange = '1w', refresh: boolean = false, signal?: AbortSignal): Promise<InstitutionalHolding[]> => {
   try {
     const proxyUrl = getProxyUrl();
     const refreshParam = refresh ? '&refresh=true' : '';
@@ -609,6 +634,7 @@ export const fetchFinvizMarketSentiment = async (signal?: AbortSignal): Promise<
  */
 export const fetchAggregatedMarketSentiment = async (timeRange: TimeRange = '1w', signal?: AbortSignal, hasRedditAccess: boolean = true): Promise<SentimentData[]> => {
   try {
+    console.log(`[AGGREGATED MARKET DEBUG] Starting fetchAggregatedMarketSentiment with timeRange=${timeRange}, hasRedditAccess=${hasRedditAccess}`);
     console.log(`Fetching aggregated market sentiment from ${hasRedditAccess ? 'all sources' : 'FinViz + Yahoo only'}...`);
     
     // Conditionally fetch data based on tier access
@@ -619,11 +645,18 @@ export const fetchAggregatedMarketSentiment = async (timeRange: TimeRange = '1w'
     
     // Only include Reddit if user has access
     if (hasRedditAccess) {
+      console.log(`[AGGREGATED MARKET DEBUG] Adding Reddit market sentiment to promises`);
       promises.unshift(fetchSentimentData(timeRange, signal));
+    } else {
+      console.log(`[AGGREGATED MARKET DEBUG] Skipping Reddit market sentiment - no access`);
     }
+    
+    console.log(`[AGGREGATED MARKET DEBUG] About to fetch from ${promises.length} sources in parallel`);
     
     // Fetch data from available sources in parallel
     const results = await Promise.allSettled(promises);
+    
+    console.log(`[AGGREGATED MARKET DEBUG] Promise.allSettled results:`, results);
     
     // Extract successful results
     let reddit: SentimentData[] = [];
@@ -633,13 +666,20 @@ export const fetchAggregatedMarketSentiment = async (timeRange: TimeRange = '1w'
     let resultIndex = 0;
     if (hasRedditAccess) {
       const redditResult = results[resultIndex];
+      console.log(`[AGGREGATED MARKET DEBUG] Reddit result:`, redditResult);
       reddit = redditResult.status === 'fulfilled' ? redditResult.value : [];
+      console.log(`[AGGREGATED MARKET DEBUG] Reddit data length: ${reddit.length}`);
       resultIndex++;
     }
     const yahooResult = results[resultIndex];
+    console.log(`[AGGREGATED MARKET DEBUG] Yahoo result:`, yahooResult);
     yahoo = yahooResult.status === 'fulfilled' ? yahooResult.value : [];
+    console.log(`[AGGREGATED MARKET DEBUG] Yahoo data length: ${yahoo.length}`);
+    
     const finvizResult = results[resultIndex + 1];
+    console.log(`[AGGREGATED MARKET DEBUG] FinViz result:`, finvizResult);
     finviz = finvizResult.status === 'fulfilled' ? finvizResult.value : [];
+    console.log(`[AGGREGATED MARKET DEBUG] FinViz data length: ${finviz.length}`);
     
     console.log(`Source data: Reddit=${reddit.length}, Yahoo=${yahoo.length}, FinViz=${finviz.length}`);
     
@@ -685,7 +725,7 @@ export const fetchAggregatedMarketSentiment = async (timeRange: TimeRange = '1w'
     return currentData;
     
   } catch (error) {
-    console.error('Error fetching aggregated market sentiment:', error);
+    console.error('[AGGREGATED MARKET ERROR] Error fetching aggregated market sentiment:', error);
     return [];
   }
 };
@@ -694,7 +734,7 @@ export const fetchAggregatedMarketSentiment = async (timeRange: TimeRange = '1w'
  * Fetch both insider trades and institutional holdings in parallel for optimal loading
  * This reduces the number of API calls and improves overall loading performance
  */
-export const fetchSecDataParallel = async (timeRange: TimeRange = '1m', refresh: boolean = false, signal?: AbortSignal): Promise<{
+export const fetchSecDataParallel = async (timeRange: TimeRange = '1w', refresh: boolean = false, signal?: AbortSignal): Promise<{
   insiderTrades: InsiderTrade[];
   institutionalHoldings: InstitutionalHolding[];
   metadata: { fetchedAt: string; refreshed: boolean };
@@ -756,7 +796,7 @@ export const fetchSecDataParallel = async (timeRange: TimeRange = '1m', refresh:
  * Stream insider trades with real-time progress updates using Server-Sent Events
  */
 export const streamInsiderTrades = (
-  timeRange: TimeRange = '1m', 
+  timeRange: TimeRange = '1w', 
   refresh: boolean = false,
   onProgress: (progressData: {
     stage: string;

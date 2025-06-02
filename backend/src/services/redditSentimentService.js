@@ -70,9 +70,9 @@ function analyzeTickerSentiment(ticker, posts) {
   );
 }
 
-async function getRedditTickerSentiment(timeRange = '1w', userId = null) {
+async function getRedditTickerSentiment(timeRange = '1w', userId = null, userTickers = null) {
   const ttl = selectTtl(timeRange);
-  const cacheKey = `reddit-ticker-sentiment-${timeRange}-${userId || 'system'}`;
+  const cacheKey = `reddit-ticker-sentiment-${timeRange}-${userId || 'system'}-${userTickers ? userTickers.join(',') : 'default'}`;
 
   return cacheManager.getOrFetch(cacheKey, 'reddit-sentiment', async () => {
     console.log(`[REDDIT SENTIMENT DEBUG] Fetching real Reddit ticker sentiment data for ${timeRange} (user: ${userId || 'system'})`);
@@ -84,16 +84,27 @@ async function getRedditTickerSentiment(timeRange = '1w', userId = null) {
       
       console.log(`[REDDIT SENTIMENT DEBUG] Starting to fetch from ${subreddits.length} subreddits...`);
       
-      // Fetch posts from each subreddit in parallel
+      // Fetch posts from each subreddit in parallel with optimized limits
       await Promise.all(subreddits.map(async subreddit => {
         try {
           console.log(`[REDDIT SENTIMENT DEBUG] Fetching posts from r/${subreddit}...`);
+          
+          // 🔧 OPTIMIZATION: Dynamic post limits based on timeRange for better data quality
+          let postLimit;
+          switch(timeRange) {
+            case '1d': postLimit = 25; break;  // Focus on recent hot posts
+            case '3d': postLimit = 50; break;  // Balanced recent activity
+            case '1w': postLimit = 75; break;  // Comprehensive weekly view
+            default: postLimit = 50; break;
+          }
+          
           const posts = await redditUtils.fetchSubredditPosts(subreddit, { 
-            limit: 50, 
-            time: timeRange === '1d' ? 'day' : 'week',
+            limit: postLimit, 
+            time: timeRange === '1d' ? 'day' : timeRange === '3d' ? 'week' : 'week',
+            sort: timeRange === '1d' ? 'hot' : 'top', // Use 'top' for longer timeframes
             userId: userId
           });
-          console.log(`[REDDIT SENTIMENT DEBUG] Fetched ${posts.length} posts from r/${subreddit}`);
+          console.log(`[REDDIT SENTIMENT DEBUG] Fetched ${posts.length} posts from r/${subreddit} (limit: ${postLimit})`);
           allPosts.push(...posts);
         } catch (error) {
           console.error(`[REDDIT SENTIMENT ERROR] Error fetching posts from r/${subreddit}:`, error.message);
@@ -108,11 +119,14 @@ async function getRedditTickerSentiment(timeRange = '1w', userId = null) {
         throw new Error('No posts found in any subreddit');
       }
       
-      // Analyze sentiment for each ticker
-      const tickers = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'TSLA', 'NVDA', 'AMD', 'META', 'SPY', 'QQQ'];
+      // Use user-provided tickers or fall back to default popular tickers
+      const tickers = userTickers && userTickers.length > 0 
+        ? userTickers 
+        : ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'TSLA', 'NVDA', 'AMD', 'META', 'SPY', 'QQQ'];
+      
       const sentimentData = [];
       
-      console.log(`[REDDIT SENTIMENT DEBUG] Analyzing sentiment for ${tickers.length} tickers...`);
+      console.log(`[REDDIT SENTIMENT DEBUG] Analyzing sentiment for ${tickers.length} ${userTickers ? 'user watchlist' : 'default'} tickers: ${tickers.join(', ')}`);
       
       for (const ticker of tickers) {
         try {
@@ -136,7 +150,9 @@ async function getRedditTickerSentiment(timeRange = '1w', userId = null) {
           totalPosts: allPosts.length,
           uniqueTickers: sentimentData.length,
           sources: subreddits,
-          timeRange
+          timeRange,
+          userTickers: userTickers ? true : false,
+          tickersAnalyzed: tickers
         }
       };
       
@@ -169,7 +185,7 @@ async function getRedditMarketSentiment(timeRange = '1w', userId = null) {
         try {
           const posts = await redditUtils.fetchSubredditPosts(subreddit, { 
             limit: 100, 
-            time: timeRange === '1d' ? 'day' : 'week',
+            time: timeRange === '1d' ? 'day' : timeRange === '3d' ? 'week' : 'week',
             sort: timeRange === '1d' ? 'hot' : 'top',
             userId: userId
           });
@@ -191,6 +207,10 @@ async function getRedditMarketSentiment(timeRange = '1w', userId = null) {
         case '1d':
           startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
           intervalMs = 60 * 60 * 1000; // 1 hour
+          break;
+        case '3d':
+          startDate = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+          intervalMs = 3 * 60 * 60 * 1000; // 3 hours
           break;
         case '1w':
           startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);

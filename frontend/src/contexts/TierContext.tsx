@@ -54,13 +54,17 @@ export const TierProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      console.log('🔄 TierContext: Fetching tier info from:', `${apiUrl}/api/subscription/tier-info`);
+      // Add cache-busting query parameter to force fresh request
+      const cacheBuster = `?_t=${Date.now()}&_r=${Math.random()}`;
+      console.log('🔄 TierContext: Fetching tier info from:', `${apiUrl}/api/subscription/tier-info${cacheBuster}`);
       console.log('🔑 TierContext: Using token:', token ? token.substring(0, 20) + '...' : 'No token');
       
-      const response = await fetch(`${apiUrl}/api/subscription/tier-info`, {
+      const response = await fetch(`${apiUrl}/api/subscription/tier-info${cacheBuster}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
         },
       });
 
@@ -201,6 +205,29 @@ export const TierProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Expose refresh function globally for debugging
     (window as any).refreshTierInfo = refreshTierInfo;
     (window as any).simulateUpgrade = simulateUpgrade;
+    
+    // Add debug function to check tier data
+    (window as any).debugTierInfo = () => {
+      console.log('🔍 Current TierContext state:', {
+        tierInfo,
+        loading,
+        error,
+        isAuthenticated,
+        hasToken: !!token
+      });
+      
+      if (tierInfo) {
+        console.log('📊 Detailed tier info:', {
+          tier: tierInfo.tier,
+          credits: tierInfo.credits,
+          features: tierInfo.features,
+          limits: tierInfo.limits
+        });
+      }
+      
+      console.log('🔄 Forcing tier refresh...');
+      refreshTierInfo();
+    };
 
     return () => {
       window.removeEventListener('tierUpgrade', handleTierUpgrade as EventListener);
@@ -208,6 +235,7 @@ export const TierProvider: React.FC<{ children: React.ReactNode }> = ({ children
       window.removeEventListener('refreshTierInfo', handleTierRefresh);
       delete (window as any).refreshTierInfo;
       delete (window as any).simulateUpgrade;
+      delete (window as any).debugTierInfo;
     };
   }, [isAuthenticated, token]);
 

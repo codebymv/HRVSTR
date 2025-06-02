@@ -64,8 +64,12 @@ const getDataSummary = (source: string, postCount: number, commentCount: number,
 };
 
 const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
+  // Add debug log to verify component is being called
+  console.log('[SENTIMENT CARD] Rendering card for:', data?.ticker, data);
+  
   // Early return if data is invalid
   if (!data || !data.ticker) {
+    console.log('[SENTIMENT CARD] Returning null - invalid data');
     return null;
   }
 

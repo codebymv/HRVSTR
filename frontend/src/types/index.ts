@@ -152,4 +152,4 @@ export interface EarningsAnalysis {
   };
 }
 
-export type TimeRange = '1w' | '1m' | '3m' | '6m';
+export type TimeRange = '1d' | '3d' | '1w';

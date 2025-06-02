@@ -43,6 +43,21 @@ export function ensureTickerDiversity(
   if (items.length > 0 && typeof items[0] === 'object' && 'ticker' in items[0]) {
     console.log('[TICKER_UTILS DEBUG] Processing SentimentData array');
     const sentimentData = items as SentimentData[];
+    
+    // Check if this is real watchlist data (has actual scores/confidence) vs demo data
+    const hasRealData = sentimentData.some(item => 
+      (item.postCount && item.postCount > 0) || 
+      (item.commentCount && item.commentCount > 0) || 
+      (item.newsCount && item.newsCount > 0)
+    );
+    
+    if (hasRealData) {
+      // For real watchlist data, return only the actual data without padding
+      console.log('[TICKER_UTILS DEBUG] Real watchlist data detected, returning without padding:', sentimentData.length);
+      return sentimentData;
+    }
+    
+    // For demo/empty data, continue with padding logic
     const tickerMap = new Map<string, SentimentData>();
     
     // Create a map of tickers to their SentimentData objects
@@ -76,7 +91,7 @@ export function ensureTickerDiversity(
       }
     });
     
-    console.log('[TICKER_UTILS DEBUG] Returning SentimentData array:', result.length);
+    console.log('[TICKER_UTILS DEBUG] Returning SentimentData array with padding:', result.length);
     return result;
   }
   

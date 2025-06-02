@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { AlertTriangle, Info, Loader2, MessageSquare, TrendingUp, Globe, Layers } from 'lucide-react';
 import SentimentCard from './SentimentCard';
 import ProgressBar from '../ProgressBar';
@@ -40,6 +40,21 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
 }) => {
   const [dataSource, setDataSource] = useState<DataSource>('combined');
   
+  // Infinite scroll state
+  const [displayedItems, setDisplayedItems] = useState<SentimentData[]>([]);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  
+  // Infinite scroll refs
+  const loadingRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const isLoadingMoreRef = useRef(false);
+  const lastLoadTimeRef = useRef(0);
+  
+  // Constants for infinite scroll
+  const ITEMS_PER_PAGE = 4;
+  const THROTTLE_MS = 500;
+  
   // Theme-specific styling using ThemeContext
   const { theme } = useTheme();
   const isLight = theme === 'light';
@@ -65,42 +80,107 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
 
   // Get the appropriate sentiment data based on the selected source
   const getSentimentData = () => {
-    // Debug logs to see what data is passed into this component
-    console.log('SCORES DEBUG - Data sources:');
-    console.log('Reddit sentiments:', redditSentiments);
-    console.log('FinViz sentiments:', finvizSentiments);
-    console.log('Yahoo sentiments:', yahooSentiments);
-    console.log('Combined sentiments:', combinedSentiments);
-    
-    let result;
     switch (dataSource) {
       case 'reddit':
-        result = redditSentiments;
-        break;
+        return redditSentiments;
       case 'finviz':
-        result = finvizSentiments;
-        break;
+        return finvizSentiments;
       case 'yahoo':
-        result = yahooSentiments;
-        break;
+        return yahooSentiments;
       case 'combined':
+        // If combined data is empty but we have individual source data, show Reddit first
+        if (combinedSentiments.length === 0 && redditSentiments.length > 0) {
+          console.log('[CARD RENDER] Combined empty, falling back to Reddit data:', redditSentiments.length);
+          return redditSentiments;
+        }
+        return combinedSentiments;
       default:
-        result = combinedSentiments;
-        break;
+        return [];
     }
-    
-    // Debug log the result
-    console.log(`SCORES DEBUG - Selected source (${dataSource}):`, result);
-    if (result && result.length > 0) {
-      console.log(`Sample item (${result[0].ticker}) confidence:`, 
-                result[0].confidence, 
-                'typeof:', typeof result[0].confidence);
-    }
-    
-    return result;
   };
 
   const currentSentiments = getSentimentData();
+
+  // Handle loading more items for infinite scroll
+  const handleLoadMore = useCallback(() => {
+    // Don't load if already loading, no more items, or too soon since last load
+    if (isLoadingMoreRef.current || !hasMore || isLoadingMore) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastLoadTimeRef.current < THROTTLE_MS) {
+      return;
+    }
+
+    isLoadingMoreRef.current = true;
+    lastLoadTimeRef.current = now;
+    setIsLoadingMore(true);
+
+    // Calculate next batch of items
+    const startIndex = displayedItems.length;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    const nextItems = currentSentiments.slice(startIndex, endIndex);
+
+    // Simulate a small delay for better UX
+    setTimeout(() => {
+      if (nextItems.length > 0) {
+        setDisplayedItems(prev => [...prev, ...nextItems]);
+        setHasMore(endIndex < currentSentiments.length);
+      } else {
+        setHasMore(false);
+      }
+      
+      setIsLoadingMore(false);
+      isLoadingMoreRef.current = false;
+    }, 300);
+  }, [currentSentiments, displayedItems.length, hasMore, isLoadingMore]);
+
+  // Set up intersection observer for infinite scroll
+  useEffect(() => {
+    if (!loadingRef.current || isLoadingMore || !hasMore || currentSentiments.length === 0) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoadingMore && !isLoadingMoreRef.current) {
+          handleLoadMore();
+        }
+      },
+      { rootMargin: '50px' }
+    );
+
+    observer.observe(loadingRef.current);
+
+    return () => {
+      if (loadingRef.current) observer.unobserve(loadingRef.current);
+    };
+  }, [handleLoadMore, isLoadingMore, hasMore, currentSentiments.length]);
+
+  // Reset displayed items when data source or sentiments change
+  useEffect(() => {
+    console.log('[CARD RENDER] Resetting for dataSource:', dataSource, 'length:', currentSentiments.length);
+    
+    const initialItems = currentSentiments.slice(0, ITEMS_PER_PAGE);
+    console.log('[CARD RENDER] Initial items:', initialItems.length, 'from total:', currentSentiments.length);
+    
+    setDisplayedItems(initialItems);
+    setHasMore(ITEMS_PER_PAGE < currentSentiments.length);
+    setIsLoadingMore(false);
+    isLoadingMoreRef.current = false;
+  }, [dataSource, redditSentiments, finvizSentiments, yahooSentiments, combinedSentiments, currentSentiments]);
+
+  // Debug conditional rendering
+  useEffect(() => {
+    console.log('[CARD RENDER] Conditional check:', {
+      currentSentimentsLength: currentSentiments?.length || 0,
+      displayedItemsLength: displayedItems.length,
+      dataSource,
+      shouldShowCards: currentSentiments?.length > 0,
+      isLoading,
+      isRateLimited,
+      error
+    });
+  }, [currentSentiments, displayedItems, dataSource, isLoading, isRateLimited, error]);
 
   // Use hard-coded values to match the chart percentages
   const getSourceDistribution = () => {
@@ -109,23 +189,49 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
     if (dataSource === 'finviz') return { reddit: 0, finviz: 100, yahoo: 0 };
     if (dataSource === 'yahoo') return { reddit: 0, finviz: 0, yahoo: 100 };
     
-    // For combined view, adjust based on Reddit access
+    // For combined view, calculate actual percentages from the real data
     if (dataSource === 'combined') {
-      if (hasRedditAccess) {
-        // Pro users get all sources
-        return {
-          reddit: 72,
-          finviz: 16,
-          yahoo: 12
-        };
-      } else {
-        // Free users only get FinViz and Yahoo
-        return {
-          reddit: 0,
-          finviz: 60,
-          yahoo: 40
-        };
+      if (hasRedditAccess && combinedSentiments.length > 0) {
+        // Calculate actual source distribution from combined sentiment data
+        const sourceCounts = { reddit: 0, finviz: 0, yahoo: 0 };
+        
+        combinedSentiments.forEach(item => {
+          if (item.source === 'reddit') sourceCounts.reddit++;
+          else if (item.source === 'finviz') sourceCounts.finviz++;
+          else if (item.source === 'yahoo') sourceCounts.yahoo++;
+        });
+        
+        const total = sourceCounts.reddit + sourceCounts.finviz + sourceCounts.yahoo;
+        
+        if (total > 0) {
+          return {
+            reddit: Math.round((sourceCounts.reddit / total) * 100),
+            finviz: Math.round((sourceCounts.finviz / total) * 100),
+            yahoo: Math.round((sourceCounts.yahoo / total) * 100)
+          };
+        }
       }
+      
+      // Fallback for free users or when no data
+      if (!hasRedditAccess) {
+        // Calculate from FinViz and Yahoo only
+        const finvizCount = finvizSentiments.length;
+        const yahooCount = yahooSentiments.length;
+        const total = finvizCount + yahooCount;
+        
+        if (total > 0) {
+          return {
+            reddit: 0,
+            finviz: Math.round((finvizCount / total) * 100),
+            yahoo: Math.round((yahooCount / total) * 100)
+          };
+        }
+        
+        return { reddit: 0, finviz: 60, yahoo: 40 }; // Default fallback
+      }
+      
+      // Default fallback when no data available
+      return { reddit: 72, finviz: 16, yahoo: 12 };
     }
     
     console.log('Unknown data source:', dataSource);
@@ -237,7 +343,73 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
         </div>
       )}
       
-      {isLoading ? (
+      {currentSentiments?.length > 0 ? (
+        <div 
+          ref={containerRef}
+          className="flex flex-col space-y-4"
+          style={{}}
+        >
+          {(() => {
+            console.log('[CARD RENDER] About to render', displayedItems.length, 'cards');
+            
+            return (
+              <>
+                {displayedItems.map((data, index) => {
+                  // Ensure unique key even if ticker is undefined
+                  const uniqueKey = `${dataSource}-${data?.ticker || 'unknown'}-${index}`;
+                  
+                  console.log(`[CARD RENDER] Item ${index}:`, {
+                    ticker: data?.ticker,
+                    hasData: !!data,
+                    willRender: !!(data && data.ticker)
+                  });
+                  
+                  // Skip rendering if data is invalid
+                  if (!data || !data.ticker) {
+                    console.log(`[CARD RENDER] Skipping item ${index} - invalid data`);
+                    return null;
+                  }
+
+                  return (
+                    <SentimentCard 
+                      key={uniqueKey} 
+                      data={data}
+                    />
+                  );
+                })}
+              </>
+            );
+          })()}
+          
+          {/* Infinite scroll loading indicator */}
+          <div 
+            ref={loadingRef}
+            className="w-full h-[80px] flex justify-center items-center"
+            style={{ contain: 'layout size' }}
+          >
+            {isLoadingMore && hasMore ? (
+              <div className="flex flex-col items-center">
+                <Loader2 className="mb-2 text-blue-500 animate-spin" size={20} />
+                <p className={`text-sm ${mutedTextColor}`}>Loading more sentiment data...</p>
+              </div>
+            ) : hasMore ? (
+              <div className="h-[60px] opacity-0" /> // Invisible spacer when not loading
+            ) : displayedItems.length > ITEMS_PER_PAGE ? (
+              <div className={`text-sm ${mutedTextColor} text-center py-4`}>
+                All {currentSentiments.length} sentiment scores loaded
+              </div>
+            ) : null}
+          </div>
+          
+          {/* Show loading indicator at bottom if still loading other sources */}
+          {isLoading && (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="mr-2 text-blue-500 animate-spin" size={16} />
+              <p className={`text-sm ${mutedTextColor}`}>{loadingStage} ({loadingProgress}%)</p>
+            </div>
+          )}
+        </div>
+      ) : isLoading ? (
         <div className="flex flex-col items-center justify-center p-10 text-center">
           <Loader2 className="mb-2 text-blue-500 animate-spin" size={32} />
           <p className={`text-lg font-semibold ${textColor}`}>{loadingStage}</p>
@@ -256,25 +428,6 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
         <div className="flex flex-col items-center justify-center p-10 text-center">
           <AlertTriangle className="mb-2 text-yellow-500" size={32} />
           <p className={textColor}>{error}</p>
-        </div>
-      ) : currentSentiments?.length > 0 ? (
-        <div className="flex flex-col space-y-4 overflow-visible">
-          {currentSentiments.slice(0, 4).map((data, index) => {
-            // Ensure unique key even if ticker is undefined
-            const uniqueKey = `${dataSource}-${data?.ticker || 'unknown'}-${index}`;
-            
-            // Skip rendering if data is invalid
-            if (!data || !data.ticker) {
-              return null;
-            }
-
-            return (
-            <SentimentCard 
-                key={uniqueKey} 
-              data={data}
-            />
-            );
-          })}
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center p-10 text-center">

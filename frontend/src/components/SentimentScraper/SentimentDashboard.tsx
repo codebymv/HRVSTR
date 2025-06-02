@@ -52,6 +52,9 @@ const SentimentDashboard: React.FC = () => {
   // Combined access: needs both tier access AND API keys configured
   const hasFullRedditAccess = hasRedditTierAccess && redditApiKeysConfigured;
   
+  // Ensure both tier info and API key check are complete before starting data loading
+  const isSystemReady = !checkingApiKeys && tierInfo !== null;
+  
   // DEBUG: Log the Reddit access calculation with change detection
   const prevAccessRef = useRef(hasFullRedditAccess);
   useEffect(() => {
@@ -63,6 +66,7 @@ const SentimentDashboard: React.FC = () => {
         hasRedditTierAccess,
         redditApiKeysConfigured,
         checkingApiKeys,
+        isSystemReady,
         timestamp: new Date().toISOString()
       });
       prevAccessRef.current = hasFullRedditAccess;
@@ -75,7 +79,9 @@ const SentimentDashboard: React.FC = () => {
     hasRedditTierAccess,
     redditApiKeysConfigured,
     hasFullRedditAccess,
-    checkingApiKeys
+    checkingApiKeys,
+    tierInfoReady: tierInfo !== null,
+    isSystemReady
   });
   
   // Check API key status on component mount
@@ -154,19 +160,19 @@ const SentimentDashboard: React.FC = () => {
     // Actions
     refreshData,
     handleLoadMorePosts: originalHandleLoadMorePosts,
-  } = useSentimentData(timeRange, hasFullRedditAccess, !checkingApiKeys);
+  } = useSentimentData(timeRange, hasFullRedditAccess, isSystemReady);
   
   // Effect to refresh data when Reddit access is gained
   useEffect(() => {
-    // Only trigger refresh when access changes from false to true and we're not still checking API keys
-    if (hasFullRedditAccess && !checkingApiKeys && prevAccessRef.current === false) {
+    // Only trigger refresh when access changes from false to true and the system is ready
+    if (hasFullRedditAccess && isSystemReady && prevAccessRef.current === false) {
       console.log('🚀 Reddit access gained - refreshing data to fetch real Reddit sentiment');
       // Small delay to ensure state has settled
       setTimeout(() => {
         refreshData();
       }, 100);
     }
-  }, [hasFullRedditAccess, checkingApiKeys, refreshData]);
+  }, [hasFullRedditAccess, isSystemReady, refreshData]);
   
   // Use time range debounce hook for smooth transitions
   const {

@@ -281,27 +281,27 @@ const Navbar: React.FC = () => {
           ref={menuRef}
           className={`lg:hidden ${bgColor} p-4 border-t ${borderColor} absolute top-full left-0 right-0 z-50 max-h-[calc(100vh-3.5rem)] overflow-y-auto`}
           aria-label="Mobile navigation">
-          {/* Close button */}
-          <div className="flex justify-end mb-2">
-            <button 
-              onClick={() => setIsMenuOpen(false)}
-              className={`p-2 rounded-full ${hoverBgColor} transition-colors`}
-              aria-label="Close menu"
-            >
-              <X size={20} className={iconColor} />
-            </button>
-          </div>
           
-          {/* Mobile navigation with direct links */}
+          {/* Mobile navigation with direct links - close button integrated into first item */}
           <nav className="grid gap-2">
-            <a 
-              href="/"
-              className={`flex items-center space-x-3 py-2 px-3 ${location.pathname === '/' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
-              onClick={handleMenuItemClick}
-            >
-              <Home size={20} />
-              <span>Home</span>
-            </a>
+            {/* Home with close button */}
+            <div className="flex items-center justify-between">
+              <a 
+                href="/"
+                className={`flex items-center space-x-3 py-2 px-3 flex-1 ${location.pathname === '/' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
+                onClick={handleMenuItemClick}
+              >
+                <Home size={20} />
+                <span>Home</span>
+              </a>
+              <button 
+                onClick={() => setIsMenuOpen(false)}
+                className={`p-2 ml-2 rounded-full ${hoverBgColor} transition-colors`}
+                aria-label="Close menu"
+              >
+                <X size={20} className={iconColor} />
+              </button>
+            </div>
             
             <a 
               href="/sentiment"

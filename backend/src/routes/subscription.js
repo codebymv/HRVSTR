@@ -29,6 +29,15 @@ router.get('/tier-info', authenticateToken, async (req, res) => {
     );
     const watchlistCount = parseInt(watchlistResult.rows[0].count);
 
+    // Add cache-busting headers to prevent stale tier data
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+      'Last-Modified': new Date().toUTCString(),
+      'ETag': `"${userId}-${tierInfo.tier}-${Date.now()}"`
+    });
+
     res.json({
       success: true,
       data: {

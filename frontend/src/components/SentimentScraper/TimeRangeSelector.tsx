@@ -26,7 +26,7 @@ const TimeRangeSelector: React.FC<TimeRangeSelectorProps> = ({
   const activeButtonTextColor = 'text-white';
 
   // Available time ranges
-  const timeRanges: TimeRange[] = ['1d', '1w', '1m', '3m'];
+  const timeRanges: TimeRange[] = ['1d', '3d', '1w'];
 
   return (
     <div className={`flex flex-wrap gap-1 ${className}`}>

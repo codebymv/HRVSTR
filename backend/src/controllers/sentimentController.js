@@ -6,6 +6,8 @@ const redditSentimentService = require('../services/redditSentimentService');
 const finvizSentimentService = require('../services/finvizSentimentService');
 const yahooSentimentService = require('../services/yahooSentimentService');
 const aggregatedSentimentService = require('../services/aggregatedSentimentService');
+const { getUserWatchlistTickers, limitTickersByTier } = require('../utils/watchlistUtils');
+const { getUserTierInfo } = require('../middleware/tierMiddleware');
 
 /**
  * Get ticker sentiment data from Reddit
@@ -17,7 +19,24 @@ async function getRedditTickerSentiment(req, res, next) {
   try {
     const { timeRange = '1w' } = req.query;
     const userId = req.user?.id; // Get user ID from authenticated request
-    const result = await redditSentimentService.getRedditTickerSentiment(timeRange, userId);
+    
+    // Get user's watchlist tickers
+    let userTickers = await getUserWatchlistTickers(userId);
+    
+    // Get user tier and apply limits
+    if (userId) {
+      try {
+        const tierInfo = await getUserTierInfo(userId);
+        const userTier = tierInfo?.tier || 'free';
+        userTickers = limitTickersByTier(userTickers, userTier);
+        console.log(`[SENTIMENT CONTROLLER] Using ${userTickers.length} tickers for ${userTier} user: ${userTickers.join(', ')}`);
+      } catch (tierError) {
+        console.error('[SENTIMENT CONTROLLER] Error getting tier info:', tierError);
+        // Continue with unlimited tickers on error
+      }
+    }
+    
+    const result = await redditSentimentService.getRedditTickerSentiment(timeRange, userId, userTickers);
     res.json(result);
   } catch (error) {
     console.error('Error fetching Reddit ticker sentiment:', error.message);
@@ -52,11 +71,36 @@ async function getRedditMarketSentiment(req, res, next) {
 async function getFinvizSentiment(req, res) {
   try {
     const { tickers } = req.query;
+    const userId = req.user?.id;
+    
+    let targetTickers = tickers;
+    
+    // If no tickers specified, use user's watchlist
     if (!tickers) {
-      return res.status(400).json({ error: 'Tickers parameter is required' });
+      const userTickers = await getUserWatchlistTickers(userId);
+      
+      // Apply tier limits
+      if (userId) {
+        try {
+          const tierInfo = await getUserTierInfo(userId);
+          const userTier = tierInfo?.tier || 'free';
+          const limitedTickers = limitTickersByTier(userTickers, userTier);
+          targetTickers = limitedTickers.join(',');
+          console.log(`[SENTIMENT CONTROLLER] Using watchlist tickers for FinViz: ${targetTickers}`);
+        } catch (tierError) {
+          console.error('[SENTIMENT CONTROLLER] Error getting tier info:', tierError);
+          targetTickers = userTickers.join(',');
+        }
+      } else {
+        targetTickers = userTickers.join(',');
+      }
     }
     
-    const result = await finvizSentimentService.getFinvizTickerSentiment(tickers);
+    if (!targetTickers) {
+      return res.status(400).json({ error: 'No tickers available for analysis' });
+    }
+    
+    const result = await finvizSentimentService.getFinvizTickerSentiment(targetTickers);
     res.json(result);
   } catch (error) {
     console.error('Finviz sentiment error:', error);
@@ -72,11 +116,36 @@ async function getFinvizSentiment(req, res) {
 async function getYahooSentiment(req, res) {
   try {
     const { tickers } = req.query;
+    const userId = req.user?.id;
+    
+    let targetTickers = tickers;
+    
+    // If no tickers specified, use user's watchlist
     if (!tickers) {
-      return res.status(400).json({ error: 'Tickers parameter is required' });
+      const userTickers = await getUserWatchlistTickers(userId);
+      
+      // Apply tier limits
+      if (userId) {
+        try {
+          const tierInfo = await getUserTierInfo(userId);
+          const userTier = tierInfo?.tier || 'free';
+          const limitedTickers = limitTickersByTier(userTickers, userTier);
+          targetTickers = limitedTickers.join(',');
+          console.log(`[SENTIMENT CONTROLLER] Using watchlist tickers for Yahoo: ${targetTickers}`);
+        } catch (tierError) {
+          console.error('[SENTIMENT CONTROLLER] Error getting tier info:', tierError);
+          targetTickers = userTickers.join(',');
+        }
+      } else {
+        targetTickers = userTickers.join(',');
+      }
     }
     
-    const result = await yahooSentimentService.getYahooTickerSentiment(tickers);
+    if (!targetTickers) {
+      return res.status(400).json({ error: 'No tickers available for analysis' });
+    }
+    
+    const result = await yahooSentimentService.getYahooTickerSentiment(targetTickers);
     res.json(result);
   } catch (error) {
     console.error('Yahoo sentiment error:', error);
@@ -108,13 +177,37 @@ async function getYahooMarketSentiment(req, res) {
 async function getAggregatedSentiment(req, res, next) {
   try {
     const { tickers, timeRange = '1w', sources = 'reddit,finviz' } = req.query;
+    const userId = req.user?.id;
     
+    let targetTickers = tickers;
+    
+    // If no tickers specified, use user's watchlist
     if (!tickers) {
-      return res.status(400).json({ error: 'Tickers parameter is required' });
+      const userTickers = await getUserWatchlistTickers(userId);
+      
+      // Apply tier limits
+      if (userId) {
+        try {
+          const tierInfo = await getUserTierInfo(userId);
+          const userTier = tierInfo?.tier || 'free';
+          const limitedTickers = limitTickersByTier(userTickers, userTier);
+          targetTickers = limitedTickers.join(',');
+          console.log(`[SENTIMENT CONTROLLER] Using watchlist tickers for aggregated sentiment: ${targetTickers}`);
+        } catch (tierError) {
+          console.error('[SENTIMENT CONTROLLER] Error getting tier info:', tierError);
+          targetTickers = userTickers.join(',');
+        }
+      } else {
+        targetTickers = userTickers.join(',');
+      }
+    }
+    
+    if (!targetTickers) {
+      return res.status(400).json({ error: 'No tickers available for analysis' });
     }
     
     const sourcesList = sources.split(',');
-    const result = await aggregatedSentimentService.getAggregatedSentiment(tickers, timeRange, sourcesList);
+    const result = await aggregatedSentimentService.getAggregatedSentiment(targetTickers, timeRange, sourcesList);
     res.json(result);
   } catch (error) {
     console.error('Error fetching aggregated sentiment:', error.message);
