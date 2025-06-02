@@ -2,220 +2,319 @@
 
 This document examines the caching implementation for the Earnings Monitor feature in the HRVSTR application.
 
-## 1. Earnings Service Architecture
+## 1. Earnings Component-Level Caching
 
-The Earnings Monitor uses a layered approach for data fetching and caching:
-
-### Data Sources and APIs
-
-The system retrieves earnings data from external APIs through a proxy server:
+The `EarningsMonitor` component implements localStorage-based caching for optimal performance and data persistence:
 
 ```typescript
-export async function fetchUpcomingEarnings(timeRange: TimeRange = '1m'): Promise<EarningsEvent[]> {
+// Cached data state with localStorage persistence
+const [upcomingEarnings, setUpcomingEarnings] = useState<EarningsEvent[]>(() => {
   try {
-    const proxyUrl = getProxyUrl();
-    const response = await fetch(`${proxyUrl}/api/earnings/upcoming?timeRange=${timeRange}`);
-    
-    if (!response.ok) {
-      throw new Error(`Proxy server returned error: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data.earningsEvents as EarningsEvent[];
-  } catch (error) {
-    console.error('Earnings API error:', error);
-    throw new Error(error instanceof Error ? error.message : 'Failed to fetch earnings data');
+    const cached = localStorage.getItem('earnings_upcomingEarnings');
+    return cached ? JSON.parse(cached) : [];
+  } catch (e) {
+    console.error('Error loading cached earnings:', e);
+    return [];
   }
-}
-```
+});
 
-Key endpoints include:
-- `/api/earnings/upcoming` - Retrieves upcoming earnings events
-- `/api/earnings/historical/:ticker` - Retrieves historical earnings for a specific ticker
-- `/api/earnings/analysis/:ticker` - Provides earnings analysis and predictions
-
-## 2. Component-Level Caching
-
-The `EarningsMonitor` component implements internal state-based caching:
-
-```typescript
-// State variables for caching
-const [upcomingEarnings, setUpcomingEarnings] = useState<EarningsEvent[]>([]);
-const [earningsAnalysis, setEarningsAnalysis] = useState<EarningsAnalysis | null>(null);
-```
-
-Unlike other components that use localStorage or more persistent caching mechanisms, the Earnings Monitor primarily relies on component state, which means:
-
-1. Data is re-fetched when the component mounts
-2. Data persists only during the component's lifecycle
-3. Cache is cleared on component unmount or page refresh
-
-This approach prioritizes freshness of data over persistence, which is appropriate for time-sensitive earnings information.
-
-## 3. Fallback Mechanisms
-
-The earnings service implements robust fallback mechanisms for analysis:
-
-```typescript
-export async function analyzeEarningsSurprise(ticker: string): Promise<EarningsAnalysis> {
+// Track the last fetch time
+const [lastFetchTime, setLastFetchTime] = useState<number | null>(() => {
   try {
-    // API fetch attempt
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      // Fall back to local calculation if the API fails
-      console.log('Falling back to local earnings analysis calculation');
-      return calculateLocalEarningsAnalysis(ticker);
-    }
-    
-    // Process data if successful
-    // ...
-  } catch (error) {
-    console.error('Earnings analysis error:', error);
-    // Fall back to local calculation if the API fails
-    console.log('Falling back to local earnings analysis calculation due to error');
-    return calculateLocalEarningsAnalysis(ticker);
+    const cached = localStorage.getItem('earnings_lastFetchTime');
+    return cached ? JSON.parse(cached) : null;
+  } catch (e) {
+    console.error('Error loading cached fetch time:', e);
+    return null;
   }
-}
+});
 ```
 
-This provides a graceful degradation path:
-1. First attempts to fetch pre-calculated analysis from the server
-2. If server request fails, falls back to performing analysis locally
-3. Uses the locally calculated analysis as an in-memory cache
+This approach provides:
+1. Immediate data display on component mount using cached data
+2. Persistence across browser sessions and page reloads
+3. Error-resilient loading with fallback to empty arrays
 
-## 4. Progress Tracking
+## 2. Cache Freshness Management
 
-The component implements detailed progress tracking for better user experience:
-
-```typescript
-// Progress tracking states for better UX
-const [loadingProgress, setLoadingProgress] = useState(0);
-const [loadingStage, setLoadingStage] = useState<string>('Initializing...');
-```
-
-Progress updates are managed through helper functions:
+The earnings system implements a 30-minute staleness threshold consistent with other HRVSTR components:
 
 ```typescript
-// Helper function to update progress
-const updateProgress = (step: number, stage: string) => {
-  const progressPercentage = Math.round((step / totalSteps) * 100);
-  console.log(`Loading progress: ${progressPercentage}%, Stage: ${stage}`);
-  setLoadingProgress(progressPercentage);
-  setLoadingStage(stage);
+// Helper function to check if data is stale (older than 30 minutes)
+const isDataStale = (timestamp: number | null): boolean => {
+  if (!timestamp) return true;
+  const thirtyMinutesInMs = 30 * 60 * 1000;
+  return Date.now() - timestamp > thirtyMinutesInMs;
+};
+
+// Calculate initial loading state based on cache freshness
+useEffect(() => {
+  console.log('🔄 EARNINGS: Component mounted, checking if initial loading is needed');
   
-  // Propagate to parent component if callback exists
-  if (onLoadingProgressChange) {
-    onLoadingProgressChange(progressPercentage, stage);
+  const hasData = upcomingEarnings.length > 0;
+  const dataIsStale = isDataStale(lastFetchTime);
+  const needsRefresh = !hasData || dataIsStale;
+  
+  console.log('🔄 EARNINGS: Initial state calculation:', {
+    hasData,
+    dataLength: upcomingEarnings.length,
+    lastFetchTime: lastFetchTime ? new Date(lastFetchTime).toISOString() : null,
+    dataIsStale,
+    needsRefresh,
+    unlockedEarningsTable: unlockedComponents.earningsTable
+  });
+  
+  // Set initial loading state based on cache freshness and unlock status
+  if (unlockedComponents.earningsTable && needsRefresh) {
+    console.log('📊 EARNINGS: Initial loading needed - data is stale or missing');
+    setLoading(prev => ({ ...prev, upcomingEarnings: true }));
+  } else if (unlockedComponents.earningsTable && !needsRefresh) {
+    console.log('📊 EARNINGS: Using cached data, no initial loading needed');
+    setLoading(prev => ({ ...prev, upcomingEarnings: false }));
+  }
+}, []); // Only run on mount
+```
+
+Key features:
+- Automatic staleness detection using 30-minute threshold
+- Initial loading state calculation based on cache freshness
+- Integration with session-based component unlocking
+
+## 3. Intelligent Data Loading
+
+The earnings component implements smart data loading that respects cache freshness:
+
+```typescript
+const loadData = async () => {
+  // Only load if earnings table is unlocked
+  if (!unlockedComponents.earningsTable) {
+    console.log('📊 Earnings table locked - skipping data load');
+    return;
+  }
+
+  // Check if we have fresh cached data
+  const hasData = upcomingEarnings.length > 0;
+  const dataIsStale = isDataStale(lastFetchTime);
+  
+  console.log('📊 EARNINGS: Cache check:', {
+    hasData,
+    dataLength: upcomingEarnings.length,
+    lastFetchTime: lastFetchTime ? new Date(lastFetchTime).toISOString() : null,
+    dataIsStale,
+    timeRange
+  });
+
+  // If we have fresh data, no need to fetch
+  if (hasData && !dataIsStale) {
+    console.log('📊 EARNINGS: Using cached data, no fetch needed');
+    setLoading(prev => ({ ...prev, upcomingEarnings: false }));
+    return;
+  }
+
+  console.log('📊 EARNINGS: Fetching fresh data...');
+  // ... proceed with API fetch
+};
+```
+
+This approach:
+- Checks cache freshness before making API calls
+- Respects component unlock status
+- Provides detailed logging for debugging
+- Prevents unnecessary API requests
+
+## 4. Automatic Data Persistence
+
+The earnings component automatically saves data to localStorage whenever it changes:
+
+```typescript
+// Save data to localStorage whenever it changes
+useEffect(() => {
+  if (upcomingEarnings.length > 0) {
+    localStorage.setItem('earnings_upcomingEarnings', JSON.stringify(upcomingEarnings));
+  }
+}, [upcomingEarnings]);
+
+// Save last fetch time to localStorage
+useEffect(() => {
+  if (lastFetchTime) {
+    localStorage.setItem('earnings_lastFetchTime', JSON.stringify(lastFetchTime));
+  }
+}, [lastFetchTime]);
+```
+
+This ensures data persistence without manual intervention.
+
+## 5. Time Range-Based Cache Invalidation
+
+The earnings system implements intelligent cache clearing when time ranges change:
+
+```typescript
+// Handle time range changes
+const handleTimeRangeChange = (range: TimeRange) => {
+  console.log(`⏰ EARNINGS: Changing time range from ${timeRange} to ${range}`);
+  
+  // Update the time range state
+  setTimeRange(range);
+  
+  // Clear cached data when time range changes to force fresh fetch
+  console.log('⏰ EARNINGS: Clearing cache for new time range');
+  localStorage.removeItem('earnings_upcomingEarnings');
+  localStorage.removeItem('earnings_lastFetchTime');
+  
+  // Reset cached data in state
+  setUpcomingEarnings([]);
+  setLastFetchTime(null);
+  
+  // Clear any existing errors
+  setErrors({
+    upcomingEarnings: null,
+    analysis: null
+  });
+  
+  // Trigger fresh data loading if unlocked
+  if (unlockedComponents.earningsTable) {
+    console.log('⏰ EARNINGS: Triggering fresh data load for new time range');
+    loadData();
   }
 };
 ```
 
-This provides:
-1. Granular progress reporting during the data fetch process
-2. Feedback to the user on the current stage of loading
-3. Parent component notification for coordinated loading states
+This ensures users get appropriate earnings data for their selected time frame.
 
-## 5. Analysis Caching Strategy
+## 6. Cache Refresh Functionality
 
-The earnings analysis caching follows a memoization pattern:
+The earnings component provides comprehensive cache clearing capabilities:
 
 ```typescript
-// Analysis is only loaded when a ticker is selected
+const refreshData = () => {
+  console.log('🔄 EARNINGS: Refresh triggered - clearing cache and fetching fresh data');
+  
+  // Clear cached data to force fresh fetch
+  localStorage.removeItem('earnings_upcomingEarnings');
+  localStorage.removeItem('earnings_lastFetchTime');
+  
+  // Reset cached data in state
+  setUpcomingEarnings([]);
+  setLastFetchTime(null);
+  
+  // Clear any existing errors
+  setErrors({
+    upcomingEarnings: null,
+    analysis: null
+  });
+  
+  // Force fresh data load
+  loadData();
+  
+  if (selectedTicker && unlockedComponents.earningsAnalysis) {
+    loadAnalysis(selectedTicker);
+  }
+};
+```
+
+Key features:
+- Clears both localStorage and component state
+- Forces fresh API fetch
+- Maintains error state hygiene
+- Reloads analysis for selected ticker if applicable
+
+## 7. Debug and Development Tools
+
+The earnings implementation includes developer debugging tools:
+
+```typescript
+// Debug function to clear all earnings cache - available in browser console
+useEffect(() => {
+  (window as any).clearEarningsCache = () => {
+    console.log('🧹 DEBUG: Clearing all earnings cache...');
+    localStorage.removeItem('earnings_upcomingEarnings');
+    localStorage.removeItem('earnings_lastFetchTime');
+    
+    setUpcomingEarnings([]);
+    setLastFetchTime(null);
+    setErrors({ upcomingEarnings: null, analysis: null });
+    setLoading({ upcomingEarnings: false, analysis: false });
+    
+    console.log('🧹 DEBUG: Earnings cache cleared! Reload the page to see fresh data.');
+  };
+}, []);
+```
+
+This provides developers with easy cache clearing via browser console: `clearEarningsCache()`.
+
+## 8. Progressive Loading with Cache
+
+The earnings caching implementation includes detailed progress tracking using the new real-time progress system:
+
+```typescript
+const earnings = await fetchUpcomingEarningsWithProgress(
+  timeRange,
+  (progress: ProgressUpdate) => {
+    // Update progress with real-time information from backend
+    setLoadingProgress(progress.percent);
+    setLoadingStage(progress.message);
+    
+  if (onLoadingProgressChange) {
+      onLoadingProgressChange(progress.percent, progress.message);
+    }
+    
+    console.log(`📊 Real-time progress: ${progress.percent}% - ${progress.message}`);
+    if (progress.currentDate) {
+      console.log(`📅 Currently processing: ${progress.currentDate}`);
+    }
+  }
+);
+```
+
+This provides:
+- Real-time progress updates during data scraping
+- Visual feedback during cache miss loads
+- Better user experience during cache refreshes
+
+## 9. Analysis Caching Strategy
+
+The earnings analysis caching follows an on-demand pattern:
+
+```typescript
 const loadAnalysis = async (ticker: string) => {
-  // Skip if already loading or no ticker selected
-  if (loading.analysis || !ticker) return;
+  // Only load if earnings analysis is unlocked
+  if (!unlockedComponents.earningsAnalysis) {
+    console.log('📊 Earnings analysis locked - skipping analysis load');
+    return;
+  }
   
   setLoading(prev => ({ ...prev, analysis: true }));
-  setLoadingProgress(0);
-  setLoadingStage('Initializing analysis...');
+  setErrors(prev => ({ ...prev, analysis: null }));
   
-  // ... loading logic ...
+  // ... loading logic with progress tracking ...
   
   try {
     const analysis = await analyzeEarningsSurprise(ticker);
     setEarningsAnalysis(analysis);
+    setLoading(prev => ({ ...prev, analysis: false }));
   } catch (error) {
     // ... error handling ...
-  } finally {
-    setLoading(prev => ({ ...prev, analysis: false }));
   }
 };
 ```
 
 This approach:
-1. Loads analysis data on-demand when a ticker is selected
-2. Caches the result in component state
-3. Prevents redundant API calls for the same ticker during the component's lifecycle
+- Loads analysis data on-demand when a ticker is selected
+- Caches the result in component state
+- Respects component unlock status
+- Provides progress feedback
 
-## 6. Time Range-Based Fetching
+## 10. Consistent Architecture
 
-The component implements time range-based data fetching:
+The earnings caching system provides:
 
-```typescript
-const [timeRange, setTimeRange] = useState<TimeRange>('1m');
+1. **Cross-Session Persistence**: Data persists across browser sessions using localStorage
+2. **Consistent Staleness Threshold**: 30-minute cache window matching other components
+3. **Intelligent Loading States**: Calculates initial loading based on cache freshness
+4. **Automatic Cache Invalidation**: Clears cache when time ranges change
+5. **Session-Based Component Access**: Integrates with credit-based unlock system
+6. **Real-Time Progress Tracking**: Provides detailed progress feedback during data loads
+7. **Developer Debugging**: Console-accessible cache clearing functions
+8. **Comprehensive Refresh**: Both state and localStorage clearing capabilities
 
-// Used in loadData function
-const earnings = await fetchUpcomingEarnings(timeRange);
-```
-
-This ensures that:
-1. Data is fetched based on the selected time range (1d, 1w, 1m, 3m)
-2. Cache is effectively segmented by time range
-3. Changing the time range triggers a fresh data fetch
-
-## 7. Cache Refresh Logic
-
-Manual refresh capability is provided:
-
-```typescript
-const refreshData = () => {
-  // Clear state data
-  setSelectedTicker(null);
-  setEarningsAnalysis(null);
-  // Re-fetch with current parameters
-  loadData();
-};
-```
-
-This gives users control over cache freshness without requiring page reload.
-
-## 8. Areas for Improvement
-
-The current earnings caching implementation could be improved in several ways:
-
-1. **Persistent Caching**:
-   - Add localStorage caching for earnings data
-   - Implement TTL (Time-To-Live) based expiration
-   - Persist analysis results to reduce redundant calculations
-
-2. **Debouncing/Throttling**:
-   - Implement debouncing for analysis requests
-   - Add rate limiting to prevent API abuse
-
-3. **Structured Cache Management**:
-   - Create a dedicated earnings cache service
-   - Implement proper cache invalidation
-   - Add version tracking for cached data
-
-4. **Prefetching Strategy**:
-   - Preload analysis for likely-to-be-selected tickers
-   - Implement background fetching for popular earnings events
-
-These improvements would enhance the user experience while reducing server load and API requests.
-
-## 9. Comparison with Other Caching Approaches
-
-The earnings caching approach differs from other parts of the application:
-
-1. **Compared to Sentiment Caching**:
-   - Less persistent (no localStorage)
-   - More focused on data freshness
-   - No explicit TTL management
-
-2. **Compared to SEC Filings Caching**:
-   - No explicit cache clearing functionality
-   - Simpler caching architecture
-   - Relies more on server-side caching
-
-This difference in approach is intentional and reflects the time-sensitive nature of earnings data compared to more stable SEC filings information.
+This architecture ensures consistent performance and user experience across all HRVSTR premium features while maintaining optimal API usage and response times.
