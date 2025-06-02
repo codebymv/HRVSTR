@@ -90,6 +90,15 @@ const SentimentDashboard: React.FC = () => {
 
   // Refresh data handler
   const refreshData = () => {
+    // Check if any components are actually unlocked
+    const hasUnlockedComponents = unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit;
+    
+    if (!hasUnlockedComponents) {
+      console.log('🔄 SENTIMENT: No components unlocked, aborting refresh');
+      info('Please unlock at least one component before refreshing');
+      return;
+    }
+    
     originalRefreshData();
   };
 
@@ -516,15 +525,30 @@ const SentimentDashboard: React.FC = () => {
             <h1 className={`text-2xl font-bold ${textColor}`}>Sentiment Scraper</h1>
             
             <button 
-              className={`${isLight ? 'bg-blue-500' : 'bg-blue-600'} hover:${isLight ? 'bg-blue-600' : 'bg-blue-700'} rounded-full p-2 transition-colors ${isDataLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`transition-colors rounded-full p-2 ${
+                // Show different styling based on unlock state
+                (unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)
+                  ? `${isLight ? 'bg-blue-500' : 'bg-blue-600'} hover:${isLight ? 'bg-blue-600' : 'bg-blue-700'} text-white` // Unlocked: normal blue
+                  : 'bg-gray-400 cursor-not-allowed text-gray-200' // Locked: grayed out
+              } ${isDataLoading ? 'opacity-50' : ''}`}
               onClick={refreshData}
-              disabled={isDataLoading}
-              title="Refresh Data"
+              disabled={isDataLoading || !(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)}
+              title={
+                (unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)
+                  ? 'Refresh sentiment data'
+                  : 'Unlock components to refresh data'
+              }
             >
-              {isDataLoading ? (
+              {/* Only show spinner if components are unlocked AND loading */}
+              {(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit) && isDataLoading ? (
                 <Loader2 size={18} className="text-white animate-spin" />
               ) : (
-                <RefreshCw size={18} className="text-white" />
+                <RefreshCw size={18} className={
+                  // Gray icon when locked, white when unlocked
+                  !(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)
+                    ? 'text-gray-200' 
+                    : 'text-white'
+                } />
               )}
             </button>
           </div>

@@ -651,10 +651,30 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
           {/* Refresh button */}
           <button 
             onClick={refreshData}
-            className={`p-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white transition-colors`}
-            title="Refresh Data"
+            disabled={loading.upcomingEarnings || loading.analysis || !(unlockedComponents.earningsTable || unlockedComponents.earningsAnalysis)}
+            className={`p-2 rounded-full transition-colors ${
+              // Show different styling based on unlock state
+              (unlockedComponents.earningsTable || unlockedComponents.earningsAnalysis)
+                ? 'bg-blue-600 hover:bg-blue-700 text-white' // Unlocked: normal blue
+                : 'bg-gray-400 cursor-not-allowed text-gray-200' // Locked: grayed out
+            } ${(loading.upcomingEarnings || loading.analysis) ? 'opacity-50' : ''}`}
+            title={
+              (unlockedComponents.earningsTable || unlockedComponents.earningsAnalysis)
+                ? 'Refresh earnings data'
+                : 'Unlock components to refresh data'
+            }
           >
-            <RefreshCw size={18} className="text-white" />
+            {/* Only show spinner if components are unlocked AND loading */}
+            {(unlockedComponents.earningsTable || unlockedComponents.earningsAnalysis) && (loading.upcomingEarnings || loading.analysis) ? (
+              <Loader2 size={18} className="text-white animate-spin" />
+            ) : (
+              <RefreshCw size={18} className={
+                // Gray icon when locked, white when unlocked
+                !(unlockedComponents.earningsTable || unlockedComponents.earningsAnalysis)
+                  ? 'text-gray-200' 
+                  : 'text-white'
+              } />
+            )}
           </button>
         </div>
       </div>
