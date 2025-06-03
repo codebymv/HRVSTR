@@ -280,6 +280,30 @@ if (process.env.NODE_ENV === 'production') {
 // Error handling middleware (must be after routes)
 app.use(errorHandler);
 
+// Initialize session cleanup scheduler
+const { sessionCleanupScheduler } = require('./utils/sessionCleanupScheduler');
+
+// Start the session cleanup scheduler with configuration
+sessionCleanupScheduler.start({
+  sessionCleanupInterval: 15 * 60 * 1000,    // 15 minutes
+  cacheCleanupInterval: 30 * 60 * 1000,     // 30 minutes  
+  longRunningCheckInterval: 60 * 60 * 1000, // 1 hour
+  enabled: true // Can be disabled via environment variable if needed
+});
+
+// Graceful shutdown handling
+process.on('SIGTERM', () => {
+  console.log('🛑 Received SIGTERM signal, shutting down gracefully...');
+  sessionCleanupScheduler.stop();
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('🛑 Received SIGINT signal, shutting down gracefully...');
+  sessionCleanupScheduler.stop();
+  process.exit(0);
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

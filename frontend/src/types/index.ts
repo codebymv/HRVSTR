@@ -145,18 +145,64 @@ export interface EarningsEvent {
 
 export interface EarningsAnalysis {
   ticker: string;
-  surprisePercentage: number;
-  magnitude: number;
-  direction: 'positive' | 'negative';
-  historicalPattern: {
+  companyName?: string;
+  sector?: string;
+  industry?: string;
+  marketCap?: number;
+  
+  // Current metrics
+  currentPrice?: number;
+  eps?: number;
+  pe?: number;
+  
+  // Price data
+  priceChange?: number;
+  priceChangePercent?: number;
+  dayLow?: number;
+  dayHigh?: number;
+  yearLow?: number;
+  yearHigh?: number;
+  
+  // Earnings data
+  earningsDate?: string;
+  
+  // Analysis scores
+  analysisScore?: number;
+  riskLevel?: string;
+  
+  // Historical earnings metrics
+  beatFrequency?: number;
+  averageSurprise?: number;
+  consistency?: number;
+  postEarningsDrift?: number;
+  historicalEarningsCount?: number;
+  
+  // Latest earnings
+  latestEarnings?: {
+    surprise?: number;
+    magnitude?: number;
+    marketReaction?: number;
+  };
+  
+  // Legacy properties for backward compatibility
+  surprisePercentage?: number;
+  magnitude?: number;
+  direction?: 'positive' | 'negative';
+  historicalPattern?: {
     averageSurprise: number;
     consistency: number;
     postEarningsDrift: number;
   };
-  marketReaction: {
+  marketReaction?: {
     immediateReaction: number;
     weekAfterReaction: number;
   };
+  
+  // Data metadata
+  dataSources?: string[];
+  dataLimitations?: string[];
+  timestamp?: string;
+  isPlaceholder?: boolean;
 }
 
 export type TimeRange = '1d' | '3d' | '1w' | '1m' | '3m' | '6m';

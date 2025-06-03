@@ -488,4 +488,140 @@ router.get('/active-sessions', authenticateToken, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/credits/cleanup-status
+ * Get session and cache cleanup status
+ */
+router.get('/cleanup-status', authenticateToken, async (req, res) => {
+  try {
+    const { sessionCleanupScheduler } = require('../utils/sessionCleanupScheduler');
+    const stats = await sessionCleanupScheduler.getCleanupStats();
+    
+    if (stats.success) {
+      res.json({
+        success: true,
+        ...stats
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: stats.error
+      });
+    }
+  } catch (error) {
+    console.error('Error getting cleanup status:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get cleanup status'
+    });
+  }
+});
+
+/**
+ * POST /api/credits/manual-cleanup
+ * Trigger manual cleanup of expired sessions and cache
+ */
+router.post('/manual-cleanup', authenticateToken, async (req, res) => {
+  try {
+    const userRole = req.user.role; // Assuming admin role checking exists
+    
+    // Only allow admins to trigger manual cleanup (you can adjust this)
+    // if (userRole !== 'admin') {
+    //   return res.status(403).json({
+    //     success: false,
+    //     error: 'Insufficient permissions'
+    //   });
+    // }
+    
+    const { sessionCleanupScheduler } = require('../utils/sessionCleanupScheduler');
+    const result = await sessionCleanupScheduler.runManualCleanup();
+    
+    res.json({
+      success: true,
+      message: 'Manual cleanup completed',
+      results: result
+    });
+  } catch (error) {
+    console.error('Error running manual cleanup:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to run manual cleanup'
+    });
+  }
+});
+
+/**
+ * GET /api/credits/session-debug/:userId?
+ * Debug endpoint to check specific user's sessions
+ */
+router.get('/session-debug/:userId?', authenticateToken, async (req, res) => {
+  try {
+    const targetUserId = req.params.userId || req.user.id;
+    
+    // Only allow users to debug their own sessions unless admin
+    if (targetUserId !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Can only debug your own sessions'
+      });
+    }
+    
+    // Get detailed session information
+    const sessions = await pool.query(`
+      SELECT 
+        session_id,
+        component,
+        status,
+        credits_used,
+        unlocked_at,
+        expires_at,
+        EXTRACT(EPOCH FROM (expires_at - CURRENT_TIMESTAMP))/3600 as hours_remaining,
+        EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - unlocked_at))/3600 as hours_since_unlock,
+        metadata
+      FROM research_sessions 
+      WHERE user_id = $1
+      ORDER BY unlocked_at DESC
+      LIMIT 20
+    `, [targetUserId]);
+    
+    // Get cache data for this user
+    const cacheData = await pool.query(`
+      SELECT 
+        query_type,
+        tickers,
+        fetched_at,
+        expires_at,
+        EXTRACT(EPOCH FROM (expires_at - CURRENT_TIMESTAMP))/60 as minutes_remaining,
+        credits_consumed
+      FROM sentiment_research_data srd
+      JOIN research_sessions rs ON srd.session_id = rs.session_id
+      WHERE srd.user_id = $1
+      ORDER BY srd.fetched_at DESC
+      LIMIT 20
+    `, [targetUserId]);
+    
+    res.json({
+      success: true,
+      userId: targetUserId,
+      sessions: sessions.rows.map(session => ({
+        ...session,
+        hoursRemaining: Math.round(session.hours_remaining * 100) / 100,
+        hoursSinceUnlock: Math.round(session.hours_since_unlock * 100) / 100,
+        isExpired: session.hours_remaining <= 0
+      })),
+      cacheEntries: cacheData.rows.map(entry => ({
+        ...entry,
+        minutesRemaining: Math.round(entry.minutes_remaining * 100) / 100,
+        isExpired: entry.minutes_remaining <= 0
+      }))
+    });
+  } catch (error) {
+    console.error('Error debugging sessions:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to debug sessions'
+    });
+  }
+});
+
 module.exports = router; 

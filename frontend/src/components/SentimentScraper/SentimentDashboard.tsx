@@ -236,20 +236,10 @@ const SentimentDashboard: React.FC = () => {
     return () => clearInterval(interval);
   }, [currentTier]); // 🔧 Added currentTier dependency to trigger refresh on tier changes
   
-  // Auto-unlock components for Pro users FIRST, before checking sessions
+  // Check existing sessions for all users (including Pro users)
   useEffect(() => {
-    if (tierInfo && currentTier === 'pro') {
-      console.log('🔓 AUTO-UNLOCK: Pro user detected, auto-unlocking all sentiment components');
-      setUnlockedComponents({
-        chart: true,
-        scores: true,
-        reddit: true
-      });
-      // Pro users don't need sessions - they get permanent access
-      return;
-    }
+    if (!tierInfo) return;
     
-    // Only check sessions for non-Pro users
     const checkExistingSessions = () => {
       const chartSession = checkUnlockSession('chart');
       const scoresSession = checkUnlockSession('scores');
@@ -266,13 +256,12 @@ const SentimentDashboard: React.FC = () => {
       setActiveSessions(sessions);
     };
 
-    if (tierInfo && currentTier !== 'pro') {
-      checkExistingSessions();
+    // Check sessions for all users (including Pro)
+    checkExistingSessions();
     
-      // Check for expired sessions every minute for non-Pro users
-      const interval = setInterval(checkExistingSessions, 60000);
-      return () => clearInterval(interval);
-    }
+    // Check for expired sessions every minute for all users
+    const interval = setInterval(checkExistingSessions, 60000);
+    return () => clearInterval(interval);
   }, [tierInfo, currentTier]);
 
   // Custom handleLoadMorePosts with tier limit checking
@@ -305,17 +294,6 @@ const SentimentDashboard: React.FC = () => {
 
   // Handlers for unlocking individual components
   const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
-    // Pro users already have permanent access - no need to spend credits
-    if (currentTier === 'pro') {
-      info(`Pro users have permanent access to ${component}!`);
-      // Ensure component is unlocked (should already be from auto-unlock effect)
-      setUnlockedComponents(prev => ({
-        ...prev,
-        [component]: true
-      }));
-      return;
-    }
-    
     // Check if already unlocked in current session
     const existingSession = checkUnlockSession(component);
     if (existingSession) {

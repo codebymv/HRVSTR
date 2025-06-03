@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, Loader2, Lock, Crown } from 'lucide-react';
+import { RefreshCw, Loader2, Lock, Crown, TrendingUp, Zap } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTier } from '../../contexts/TierContext';
+import { useToast } from '../../contexts/ToastContext';
+import { 
+  checkUnlockSession, 
+  storeUnlockSession, 
+  getAllUnlockSessions,
+  getSessionTimeRemainingFormatted 
+} from '../../utils/sessionStorage';
 import InsiderTradesTab from './InsiderTradesTab';
 import InstitutionalHoldingsTab from './InstitutionalHoldingsTab';
 import { clearSecCache, clearUserSecCache } from '../../services/api';
@@ -20,7 +27,8 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
 }) => {
   const { theme } = useTheme();
   const { user } = useAuth();
-  const { tierInfo } = useTier();
+  const { tierInfo, refreshTierInfo } = useTier();
+  const { info } = useToast();
   const isLight = theme === 'light';
   
   // Theme-based styling
@@ -34,6 +42,18 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
   const tabActiveText = 'text-white';
   const tabInactiveBg = isLight ? 'bg-gray-100' : 'bg-gray-800';
   const tabInactiveText = isLight ? 'text-gray-700' : 'text-gray-300';
+
+  // Component unlock state - managed by sessions
+  const [unlockedComponents, setUnlockedComponents] = useState<{
+    insiderTrading: boolean;
+    institutionalHoldings: boolean;
+  }>({
+    insiderTrading: false,
+    institutionalHoldings: false
+  });
+
+  // Session state for time tracking
+  const [activeSessions, setActiveSessions] = useState<any[]>([]);
 
   // State management - simplified without localStorage
   const [activeTab, setActiveTab] = useState<'insider' | 'institutional'>('insider');
@@ -70,8 +90,42 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     institutionalHoldings: null
   });
 
+  // Get tier info
+  const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
+  
+  // Credit costs for each component
+  const COMPONENT_COSTS = {
+    insiderTrading: 10,        // Insider trading data
+    institutionalHoldings: 15, // Institutional holdings data
+  };
+
+  // Check existing sessions for all users
+  useEffect(() => {
+    if (!tierInfo) return;
+    
+    const checkExistingSessions = () => {
+      const insiderSession = checkUnlockSession('insiderTrading');
+      const institutionalSession = checkUnlockSession('institutionalHoldings');
+
+      setUnlockedComponents({
+        insiderTrading: !!insiderSession,
+        institutionalHoldings: !!institutionalSession
+      });
+
+      // Update active sessions for display
+      const sessions = getAllUnlockSessions();
+      setActiveSessions(sessions);
+    };
+
+    // Check sessions for all users
+    checkExistingSessions();
+    
+    // Check for expired sessions every minute for all users
+    const interval = setInterval(checkExistingSessions, 60000);
+    return () => clearInterval(interval);
+  }, [tierInfo, currentTier]);
+
   // Check tier access using TierContext instead of AuthContext
-  const currentTier = tierInfo?.tier || 'free';
   const hasInstitutionalAccess = Boolean(currentTier && ['pro', 'elite', 'institutional'].includes(currentTier));
   
   console.log(`🔍 SEC DASHBOARD - Tier access check:`, {
@@ -331,21 +385,10 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     setShowTierDialog(true);
   };
   
-  // Handle tab switching - with tier restrictions
+  // Handle tab switching - no tier restrictions with session-based unlocking
   const handleTabChange = (tab: 'insider' | 'institutional') => {
-    // Prevent switching to institutional tab if user doesn't have access
-    if (tab === 'institutional' && !hasInstitutionalAccess) {
-      showTierLimitDialog(
-        'Institutional Holdings',
-        'Institutional holdings analysis is a Pro feature. Upgrade to access comprehensive 13F filing data and institutional investment tracking.',
-        'Unlock institutional holdings, advanced SEC analysis, and comprehensive regulatory filing insights with HRVSTR Pro.',
-        'pro'
-      );
-      return;
-    }
-    
     // SAFETY FIX: Reset stuck loading state when switching to institutional tab
-    if (tab === 'institutional' && hasInstitutionalAccess && loadingState.institutionalHoldings.isLoading) {
+    if (tab === 'institutional' && loadingState.institutionalHoldings.isLoading) {
       console.warn('🔄 SEC DASHBOARD - Resetting stuck institutional loading state...');
       setLoadingState(prev => ({
         ...prev,
@@ -407,6 +450,121 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
       </div>
     );
   };
+
+  // Handlers for unlocking individual components
+  const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
+    // Check if already unlocked in current session
+    const existingSession = checkUnlockSession(component);
+    if (existingSession) {
+      const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
+      info(`${component} already unlocked (${timeRemaining})`);
+      return;
+    }
+    
+    try {
+      const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
+      const token = localStorage.getItem('auth_token');
+      
+      const response = await fetch(`${proxyUrl}/api/credits/unlock-component`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          component,
+          cost
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to unlock component');
+      }
+      
+      if (data.success) {
+        // Update component state
+        setUnlockedComponents(prev => ({
+          ...prev,
+          [component]: true
+        }));
+        
+        // Store session in localStorage
+        storeUnlockSession(component, {
+          sessionId: data.sessionId,
+          expiresAt: data.expiresAt,
+          creditsUsed: data.creditsUsed,
+          tier: tierInfo?.tier || 'free'
+        });
+        
+        // Update active sessions
+        const sessions = getAllUnlockSessions();
+        setActiveSessions(sessions);
+        
+        // Show appropriate toast message
+        if (data.existingSession) {
+          info(`${component} already unlocked (${data.timeRemaining}h remaining)`);
+        } else {
+          info(`${data.creditsUsed} credits used`);
+        }
+        
+        // Refresh tier info to update usage meter
+        if (refreshTierInfo) {
+          await refreshTierInfo();
+        }
+      }
+      
+    } catch (error) {
+      info(`Failed to unlock ${component}. Please try again.`);
+    }
+  };
+
+  // Component for locked overlays
+  const LockedOverlay: React.FC<{
+    title: string;
+    description: string;
+    cost: number;
+    componentKey: keyof typeof unlockedComponents;
+    icon: React.ReactNode;
+  }> = ({ title, description, cost, componentKey, icon }) => (
+    <div className={`${isLight ? 'bg-white border-gray-200' : 'bg-gray-800 border-gray-700'} rounded-lg border p-8 text-center relative overflow-hidden`}>
+      {/* Background Pattern */}
+      <div className="absolute inset-0 opacity-5">
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-600" />
+      </div>
+      
+      {/* Content */}
+      <div className="relative z-10">
+        <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          {icon}
+        </div>
+        
+        <h3 className={`text-xl font-bold ${textColor} mb-2`}>
+          {title}
+        </h3>
+        
+        <p className={`${subTextColor} mb-6 max-w-sm mx-auto`}>
+          {description}
+        </p>
+        
+        <div className={`${isLight ? 'bg-blue-50 border-blue-200' : 'bg-blue-900/20 border-blue-800'} rounded-lg p-4 border mb-6`}>
+          <div className="flex items-center justify-center gap-2 text-sm font-medium">
+            <Zap className="w-4 h-4 text-blue-500" />
+            <span className={textColor}>{cost} credits</span>
+          </div>
+        </div>
+        
+        <button
+          onClick={() => handleUnlockComponent(componentKey, cost)}
+          className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-6 py-3 rounded-lg font-medium transition-all flex items-center justify-center mx-auto gap-2"
+        >
+          <Crown className="w-4 h-4" />
+          Unlock for {cost} Credits
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -476,13 +634,10 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
           <button
             className={`py-2 px-4 rounded-t-lg font-medium text-sm flex-1 text-center relative ${
               activeTab === 'institutional' ? `${tabActiveBg} ${tabActiveText}` : `${tabInactiveBg} ${tabInactiveText}`
-            } ${!hasInstitutionalAccess ? 'opacity-60 cursor-pointer' : ''}`}
+            }`}
             onClick={() => handleTabChange('institutional')}
           >
             Institutional Holdings
-            {!hasInstitutionalAccess && (
-              <Lock className="w-3 h-3 inline-block ml-1" />
-            )}
           </button>
         </div>
         
@@ -490,64 +645,84 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
         <div className="flex-1 overflow-hidden">
           {activeTab === 'insider' && (
             <>
-              {loadingState.insiderTrades.isLoading ? (
-                <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden h-full`}>
-                  <div className={`${headerBg} p-4`}>
-                    <h2 className={`text-lg font-semibold ${textColor}`}>Recent Insider Transactions</h2>
-                  </div>
-                  <div className="flex flex-col items-center justify-center py-20 text-center">
-                    <Loader2 className="mb-3 text-blue-500 animate-spin" size={32} />
-                    <p className={`text-lg font-semibold ${textColor} mb-2`}>{loadingStage}</p>
-                    <div className="w-full max-w-sm mt-4 mb-2">
-                      <ProgressBar progress={loadingProgress} />
+              {unlockedComponents.insiderTrading ? (
+                <>
+                  {loadingState.insiderTrades.isLoading ? (
+                    <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden h-full`}>
+                      <div className={`${headerBg} p-4`}>
+                        <h2 className={`text-lg font-semibold ${textColor}`}>Recent Insider Transactions</h2>
+                      </div>
+                      <div className="flex flex-col items-center justify-center py-20 text-center">
+                        <Loader2 className="mb-3 text-blue-500 animate-spin" size={32} />
+                        <p className={`text-lg font-semibold ${textColor} mb-2`}>{loadingStage}</p>
+                        <div className="w-full max-w-sm mt-4 mb-2">
+                          <ProgressBar progress={loadingProgress} />
+                        </div>
+                        <div className={`text-xs ${isLight ? 'text-blue-600' : 'text-blue-400'}`}>{loadingProgress}% complete</div>
+                      </div>
                     </div>
-                    <div className={`text-xs ${isLight ? 'text-blue-600' : 'text-blue-400'}`}>{loadingProgress}% complete</div>
-                  </div>
-                </div>
+                  ) : (
+                    <InsiderTradesTab
+                      timeRange={timeRange}
+                      isLoading={loadingState.insiderTrades.isLoading}
+                      onLoadingChange={handleInsiderTradesLoading}
+                      forceReload={loadingState.insiderTrades.needsRefresh}
+                      initialData={insiderTradesData}
+                      error={errors.insiderTrades}
+                    />
+                  )}
+                </>
               ) : (
-                <InsiderTradesTab
-                  timeRange={timeRange}
-                  isLoading={loadingState.insiderTrades.isLoading}
-                  onLoadingChange={handleInsiderTradesLoading}
-                  forceReload={loadingState.insiderTrades.needsRefresh}
-                  initialData={insiderTradesData}
-                  error={errors.insiderTrades}
+                <LockedOverlay
+                  title="Insider Trading Data"
+                  description="Unlock access to real-time insider trading transactions, executive stock purchases, and regulatory filings data."
+                  cost={COMPONENT_COSTS.insiderTrading}
+                  componentKey="insiderTrading"
+                  icon={<TrendingUp className="w-8 h-8 text-white" />}
                 />
               )}
             </>
           )}
           
           {activeTab === 'institutional' && (
-            hasInstitutionalAccess ? (
-              <>
-                {loadingState.institutionalHoldings.isLoading ? (
-                  <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden h-full`}>
-                    <div className={`${headerBg} p-4`}>
-                      <h2 className={`text-lg font-semibold ${textColor}`}>Institutional Holdings</h2>
-                    </div>
-                    <div className="flex flex-col items-center justify-center py-20 text-center">
-                      <Loader2 className="mb-3 text-blue-500 animate-spin" size={32} />
-                      <p className={`text-lg font-semibold ${textColor} mb-2`}>{loadingStage}</p>
-                      <div className="w-full max-w-sm mt-4 mb-2">
-                        <ProgressBar progress={loadingProgress} />
+            <>
+              {unlockedComponents.institutionalHoldings ? (
+                <>
+                  {loadingState.institutionalHoldings.isLoading ? (
+                    <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden h-full`}>
+                      <div className={`${headerBg} p-4`}>
+                        <h2 className={`text-lg font-semibold ${textColor}`}>Institutional Holdings</h2>
                       </div>
-                      <div className={`text-xs ${isLight ? 'text-blue-600' : 'text-blue-400'}`}>{loadingProgress}% complete</div>
+                      <div className="flex flex-col items-center justify-center py-20 text-center">
+                        <Loader2 className="mb-3 text-blue-500 animate-spin" size={32} />
+                        <p className={`text-lg font-semibold ${textColor} mb-2`}>{loadingStage}</p>
+                        <div className="w-full max-w-sm mt-4 mb-2">
+                          <ProgressBar progress={loadingProgress} />
+                        </div>
+                        <div className={`text-xs ${isLight ? 'text-blue-600' : 'text-blue-400'}`}>{loadingProgress}% complete</div>
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <InstitutionalHoldingsTab
-                    timeRange={timeRange}
-                    isLoading={loadingState.institutionalHoldings.isLoading}
-                    onLoadingChange={handleInstitutionalHoldingsLoading}
-                    forceReload={loadingState.institutionalHoldings.needsRefresh}
-                    initialData={institutionalHoldingsData}
-                    error={errors.institutionalHoldings}
-                  />
-                )}
-              </>
-            ) : (
-              <InstitutionalUpgradeCard />
-            )
+                  ) : (
+                    <InstitutionalHoldingsTab
+                      timeRange={timeRange}
+                      isLoading={loadingState.institutionalHoldings.isLoading}
+                      onLoadingChange={handleInstitutionalHoldingsLoading}
+                      forceReload={loadingState.institutionalHoldings.needsRefresh}
+                      initialData={institutionalHoldingsData}
+                      error={errors.institutionalHoldings}
+                    />
+                  )}
+                </>
+              ) : (
+                <LockedOverlay
+                  title="Institutional Holdings"
+                  description="Access comprehensive 13F filing data, institutional investment tracking, and hedge fund position analysis."
+                  cost={COMPONENT_COSTS.institutionalHoldings}
+                  componentKey="institutionalHoldings"
+                  icon={<TrendingUp className="w-8 h-8 text-white" />}
+                />
+              )}
+            </>
           )}
         </div>
       </div>

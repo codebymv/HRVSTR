@@ -6,6 +6,41 @@ const db = require('../database/db');
 const secService = require('./secService');
 
 /**
+ * Cache configuration for SEC data
+ */
+const SEC_CACHE_CONFIG = {
+  // Cache TTL by tier (in seconds) - Action-oriented limits
+  FREE_TIER_TTL: 1 * 60 * 60,       // 1 hour for free tier (encourages action)
+  PRO_TIER_TTL: 2 * 60 * 60,        // 2 hours for pro tier (moderate window)
+  ELITE_TIER_TTL: 4 * 60 * 60,      // 4 hours for elite tier (extended window)
+  INSTITUTIONAL_TIER_TTL: 30 * 60,  // 30 minutes for institutional (ultra-fresh data)
+  
+  // Default limits by data type and tier
+  LIMITS: {
+    FREE: {
+      insider_trades: 10,
+      institutional_holdings: 5,
+      parallel_requests: 1
+    },
+    PRO: {
+      insider_trades: 50,
+      institutional_holdings: 25,
+      parallel_requests: 2
+    },
+    ELITE: {
+      insider_trades: 200,
+      institutional_holdings: 100,
+      parallel_requests: 3
+    },
+    INSTITUTIONAL: {
+      insider_trades: 1000,
+      institutional_holdings: 500,
+      parallel_requests: 5
+    }
+  }
+};
+
+/**
  * Check if user has valid cached SEC data
  * @param {string} userId - User UUID
  * @param {string} dataType - 'insider_trades' or 'institutional_holdings'

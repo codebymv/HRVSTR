@@ -1,35 +1,114 @@
 /**
  * Earnings Controller
- * Handles business logic for earnings API endpoints using free data sources
+ * Handles business logic for earnings API endpoints using user-specific caching
+ * Updated to follow the same architecture pattern as secController.js
  */
-const earningsUtils = require('../utils/earnings');
+const earningsService = require('../services/earningsService');
+const userEarningsCacheService = require('../services/userEarningsCacheService');
 const cacheUtils = require('../utils/cache');
+const earningsUtils = require('../utils/earnings');
 const { randomDelay } = require('../utils/scraping-helpers');
 
 /**
- * Get upcoming earnings data using Yahoo Finance
+ * Get upcoming earnings data with user-specific caching
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  * @param {Function} next - Express next function
  */
 async function getUpcomingEarnings(req, res, next) {
   try {
-    const { timeRange = '1m', refresh = false } = req.query;
+    const { timeRange = '1m', refresh = 'false', limit } = req.query;
+    const userId = req.user?.id;
+    const tier = req.user?.tier || 'free';
+    
+    console.log(`📊 Earnings request: userId=${userId}, timeRange=${timeRange}, tier=${tier}, refresh=${refresh}`);
+    
+    if (!userId) {
+      // For unauthenticated users, use simple caching
+      return await getUpcomingEarningsUnauthenticated(req, res, next);
+    }
+    
+    try {
+      const options = {
+        limit: limit ? parseInt(limit) : null
+      };
+      
+      const data = await userEarningsCacheService.getEarningsData(
+        userId,
+        'upcoming_earnings',
+        timeRange,
+        tier,
+        refresh === 'true',
+        options
+      );
+      
+      if (!data.success) {
+        return res.status(500).json({
+          success: false,
+          error: data.error,
+          message: data.userMessage || data.message,
+          retryAfter: data.retryAfter,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      res.json({
+        success: true,
+        data: data.data,
+        count: data.count,
+        source: data.source,
+        metadata: data.metadata,
+        timeRange,
+        tier,
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      if (error.message.includes('INSUFFICIENT_CREDITS')) {
+        return res.status(402).json({
+          success: false,
+          error: 'INSUFFICIENT_CREDITS',
+          message: 'Insufficient credits for this operation',
+          userMessage: 'You have reached your earnings data limit for this billing period.'
+        });
+      }
+      throw error;
+    }
+    
+  } catch (error) {
+    console.error('❌ Error in getUpcomingEarnings:', error);
+    res.status(500).json({
+      success: false,
+      error: 'EARNINGS_FETCH_ERROR',
+      message: 'Failed to fetch upcoming earnings data',
+      userMessage: 'Unable to load earnings data at the moment. Please try again.',
+      timestamp: new Date().toISOString()
+    });
+  }
+}
+
+/**
+ * Get upcoming earnings for unauthenticated users (simple caching)
+ */
+async function getUpcomingEarningsUnauthenticated(req, res, next) {
+  try {
+    const { timeRange = '1m', refresh = 'false' } = req.query;
     
     // Check cache first (unless refresh is requested)
-    if (!refresh && cacheUtils.hasCachedItem('earnings-upcoming', timeRange)) {
+    if (refresh !== 'true' && cacheUtils.hasCachedItem('earnings-upcoming', timeRange)) {
       const cachedData = cacheUtils.getCachedItem('earnings-upcoming', timeRange);
       console.log(`📋 Serving cached upcoming earnings data for ${timeRange}`);
       
-      // Apply comprehensive validation to cached data as well
-      const validatedCachedData = validateAndCleanEarningsData(cachedData);
+      // Apply free tier limits for unauthenticated users
+      const limitedData = cachedData.slice(0, 25);
       
       return res.json({
         success: true,
-        data: validatedCachedData,
+        data: limitedData,
         source: 'cache',
         timeRange,
-        count: validatedCachedData.length,
+        count: limitedData.length,
+        tier: 'free',
         timestamp: new Date().toISOString()
       });
     }
@@ -39,132 +118,44 @@ async function getUpcomingEarnings(req, res, next) {
     // Add random delay to avoid rate limiting
     await randomDelay(500, 1500);
     
-    // Fetch upcoming earnings from Yahoo Finance
-    const upcomingEarnings = await earningsUtils.scrapeEarningsCalendar(timeRange);
+    // Fetch upcoming earnings
+    const result = await earningsService.getUpcomingEarnings(timeRange, 25);
     
-    if (!upcomingEarnings || upcomingEarnings.length === 0) {
-      return res.json({
-        success: true,
-        data: [],
-        message: 'No upcoming earnings found for the specified time range',
-        timeRange,
-        count: 0,
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        error: result.error,
+        message: result.userMessage || result.message,
         timestamp: new Date().toISOString()
       });
     }
 
-    // Apply comprehensive validation and cleaning
-    const validatedEarnings = validateAndCleanEarningsData(upcomingEarnings);
-    
-    // Cache the validated results for 1 hour
-    cacheUtils.setCachedItem('earnings-upcoming', timeRange, validatedEarnings, 3600);
-    
-    console.log(`✅ Successfully fetched and validated ${validatedEarnings.length} upcoming earnings (filtered from ${upcomingEarnings.length} raw entries)`);
+    // Cache the results for 1 hour
+    cacheUtils.setCachedItem('earnings-upcoming', timeRange, result.data, 3600);
     
     res.json({
       success: true,
-      data: validatedEarnings,
-      source: 'Yahoo Finance',
+      data: result.data,
+      source: 'fresh',
       timeRange,
-      count: validatedEarnings.length,
+      count: result.count,
+      tier: 'free',
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
-    console.error('❌ Error fetching upcoming earnings:', error.message);
+    console.error('❌ Error in getUpcomingEarningsUnauthenticated:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch upcoming earnings data',
-      message: error.message,
+      error: 'EARNINGS_FETCH_ERROR',
+      message: 'Failed to fetch upcoming earnings data',
       timestamp: new Date().toISOString()
     });
   }
 }
 
 /**
- * Comprehensive validation and cleaning function for earnings data
- * Filters out any earnings with invalid ticker symbols and ensures data consistency
- * @param {Array} earningsData - Array of earnings objects
- * @returns {Array} Cleaned array of valid earnings objects
- */
-function validateAndCleanEarningsData(earningsData) {
-  if (!Array.isArray(earningsData)) {
-    console.warn('🚨 VALIDATION: Expected array but received:', typeof earningsData);
-    return [];
-  }
-
-  let invalidCount = 0;
-  const validEarnings = earningsData.filter((earning, index) => {
-    // Check all possible ticker field names
-    const ticker = earning.symbol || earning.ticker;
-    
-    // Comprehensive ticker validation
-    if (!ticker || 
-        typeof ticker !== 'string' || 
-        ticker.trim() === '' ||
-        ticker === 'undefined' ||
-        ticker === 'null' ||
-        ticker === 'Symbol' ||
-        ticker === 'N/A' ||
-        ticker === '-' ||
-        ticker.toLowerCase() === 'company' ||
-        ticker.length > 10 ||
-        ticker.length < 1) {
-      
-      console.warn(`🚨 VALIDATION: Filtering out earnings at index ${index} with invalid ticker:`, {
-        ticker: ticker,
-        type: typeof ticker,
-        fullEarning: earning
-      });
-      invalidCount++;
-      return false;
-    }
-
-    // Additional validation for ticker pattern (basic stock symbol format)
-    const tickerPattern = /^[A-Z]{1,5}(\.[A-Z]{1,2})?$/;
-    if (!tickerPattern.test(ticker.toUpperCase())) {
-      console.warn(`🚨 VALIDATION: Filtering out earnings with ticker pattern mismatch: "${ticker}"`);
-      invalidCount++;
-      return false;
-    }
-
-    // Validate company name
-    const companyName = earning.companyName || earning.company;
-    if (!companyName || 
-        typeof companyName !== 'string' || 
-        companyName.trim() === '' ||
-        companyName === 'Company' ||
-        companyName === 'N/A') {
-      console.warn(`🚨 VALIDATION: Filtering out earnings with invalid company name: "${companyName}" for ticker: "${ticker}"`);
-      invalidCount++;
-      return false;
-    }
-
-    return true;
-  }).map(earning => {
-    // Normalize the data structure to ensure consistent field names
-    return {
-      ticker: (earning.symbol || earning.ticker).toUpperCase().trim(),
-      symbol: (earning.symbol || earning.ticker).toUpperCase().trim(), // Keep both fields for compatibility
-      companyName: (earning.companyName || earning.company || '').trim(),
-      reportDate: earning.date || earning.reportDate,
-      estimatedEPS: earning.estimatedEPS || earning.expectedEPS || null,
-      actualEPS: earning.actualEPS || earning.reportedEPS || null,
-      time: earning.time || 'Unknown',
-      source: earning.source || 'Yahoo Finance',
-      lastUpdated: earning.lastUpdated || new Date().toISOString()
-    };
-  });
-
-  if (invalidCount > 0) {
-    console.log(`🔍 VALIDATION: Filtered out ${invalidCount} invalid earnings entries. ${validEarnings.length} valid entries remaining.`);
-  }
-
-  return validEarnings;
-}
-
-/**
- * Get earnings analysis for a specific ticker using free data sources
+ * Get earnings analysis for a specific ticker with user caching
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  * @param {Function} next - Express next function
@@ -172,56 +163,79 @@ function validateAndCleanEarningsData(earningsData) {
 async function getEarningsAnalysis(req, res, next) {
   try {
     const { ticker } = req.params;
-    const { refresh = false } = req.query;
+    const { refresh = 'false', timeRange = '1m' } = req.query;
+    const userId = req.user?.id;
+    const tier = req.user?.tier || 'free';
 
     if (!ticker) {
       return res.status(400).json({
         success: false,
-        error: 'Ticker symbol is required',
+        error: 'MISSING_TICKER',
+        message: 'Ticker symbol is required',
         timestamp: new Date().toISOString()
       });
     }
 
     const normalizedTicker = ticker.toUpperCase();
-    console.log(`📊 Fetching earnings analysis for: ${normalizedTicker}`);
+    console.log(`📊 Fetching earnings analysis for: ${normalizedTicker}, userId: ${userId}`);
 
-    // Check cache first
-    if (!refresh && cacheUtils.hasCachedItem('earnings-analysis', normalizedTicker)) {
-      const cachedAnalysis = cacheUtils.getCachedItem('earnings-analysis', normalizedTicker);
-      console.log(`📋 Serving cached analysis for ${normalizedTicker}`);
-      return res.json({
-        success: true,
-        ticker: normalizedTicker,
-        analysis: cachedAnalysis,
-        source: 'cache',
-        timestamp: new Date().toISOString()
-      });
+    if (!userId) {
+      // For unauthenticated users, use simple caching
+      return await getEarningsAnalysisUnauthenticated(req, res, next);
     }
 
-    // Add random delay to avoid rate limiting
-    await randomDelay(800, 2000);
-
-    // Perform earnings analysis using free data sources
-    const analysis = await earningsUtils.analyzeEarnings(normalizedTicker);
-    
-    // Cache the analysis for 2 hours
-    cacheUtils.setCachedItem('earnings-analysis', normalizedTicker, analysis, 7200);
-    
-    console.log(`✅ Successfully generated analysis for ${normalizedTicker}`);
-    
-    res.json({
-      success: true,
-      ticker: normalizedTicker,
-      analysis,
-      timestamp: new Date().toISOString()
-    });
+    try {
+      const options = {
+        ticker: normalizedTicker
+      };
+      
+      const data = await userEarningsCacheService.getEarningsData(
+        userId,
+        'earnings_analysis',
+        timeRange,
+        tier,
+        refresh === 'true',
+        options
+      );
+      
+      if (!data.success) {
+        return res.status(500).json({
+          success: false,
+          error: data.error,
+          message: data.userMessage || data.message,
+          ticker: normalizedTicker,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      res.json({
+        success: true,
+        ticker: normalizedTicker,
+        analysis: data.data,
+        source: data.source,
+        metadata: data.metadata,
+        tier,
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      if (error.message.includes('INSUFFICIENT_CREDITS')) {
+        return res.status(402).json({
+          success: false,
+          error: 'INSUFFICIENT_CREDITS',
+          message: 'Insufficient credits for earnings analysis',
+          ticker: normalizedTicker
+        });
+      }
+      throw error;
+    }
 
   } catch (error) {
-    console.error(`❌ Error analyzing earnings for ${req.params.ticker}:`, error.message);
+    console.error(`❌ Error analyzing earnings for ${req.params.ticker}:`, error);
     res.status(500).json({
       success: false,
-      error: 'Failed to analyze earnings data',
-      message: error.message,
+      error: 'EARNINGS_ANALYSIS_ERROR',
+      message: 'Failed to analyze earnings data',
       ticker: req.params.ticker,
       timestamp: new Date().toISOString()
     });
@@ -229,69 +243,285 @@ async function getEarningsAnalysis(req, res, next) {
 }
 
 /**
- * Get basic company information using free FMP endpoints
+ * Get earnings analysis for unauthenticated users
+ */
+async function getEarningsAnalysisUnauthenticated(req, res, next) {
+  try {
+    const { ticker } = req.params;
+    const { refresh = 'false' } = req.query;
+    const normalizedTicker = ticker.toUpperCase();
+
+    // Check cache first
+    if (refresh !== 'true' && cacheUtils.hasCachedItem('earnings-analysis', normalizedTicker)) {
+      const cachedAnalysis = cacheUtils.getCachedItem('earnings-analysis', normalizedTicker);
+      console.log(`📋 Serving cached analysis for ${normalizedTicker}`);
+      return res.json({
+        success: true,
+        ticker: normalizedTicker,
+        analysis: cachedAnalysis,
+        source: 'cache',
+        tier: 'free',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Add random delay to avoid rate limiting
+    await randomDelay(800, 2000);
+
+    // Perform earnings analysis
+    const result = await earningsService.getEarningsAnalysis(normalizedTicker);
+    
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        error: result.error,
+        message: result.userMessage || result.message,
+        ticker: normalizedTicker,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Cache the analysis for 2 hours
+    cacheUtils.setCachedItem('earnings-analysis', normalizedTicker, result.data, 7200);
+    
+    res.json({
+      success: true,
+      ticker: normalizedTicker,
+      analysis: result.data,
+      source: 'fresh',
+      tier: 'free',
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error(`❌ Error in getEarningsAnalysisUnauthenticated:`, error);
+    res.status(500).json({
+      success: false,
+      error: 'EARNINGS_ANALYSIS_ERROR',
+      message: 'Failed to analyze earnings data',
+      ticker: req.params.ticker,
+      timestamp: new Date().toISOString()
+    });
+  }
+}
+
+/**
+ * Get historical earnings for a ticker with user caching
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  * @param {Function} next - Express next function
  */
-async function getCompanyInfo(req, res, next) {
+async function getHistoricalEarnings(req, res, next) {
   try {
     const { ticker } = req.params;
+    const { refresh = 'false', timeRange = '1m', limit } = req.query;
+    const userId = req.user?.id;
+    const tier = req.user?.tier || 'free';
 
     if (!ticker) {
       return res.status(400).json({
         success: false,
-        error: 'Ticker symbol is required',
+        error: 'MISSING_TICKER',
+        message: 'Ticker symbol is required',
         timestamp: new Date().toISOString()
       });
     }
 
     const normalizedTicker = ticker.toUpperCase();
-    console.log(`🏢 Fetching company info for: ${normalizedTicker}`);
+    console.log(`📊 Fetching historical earnings for: ${normalizedTicker}`);
 
-    // Check cache first
-    if (cacheUtils.hasCachedItem('company-info', normalizedTicker)) {
-      const cachedInfo = cacheUtils.getCachedItem('company-info', normalizedTicker);
-      console.log(`📋 Serving cached company info for ${normalizedTicker}`);
+    if (!userId) {
+      // Return placeholder for unauthenticated users
       return res.json({
         success: true,
         ticker: normalizedTicker,
-        data: cachedInfo,
-        source: 'cache',
+        historicalEarnings: [],
+        message: 'Historical earnings data requires authentication',
+        count: 0,
+        tier: 'free',
         timestamp: new Date().toISOString()
       });
     }
 
-    // Add random delay
-    await randomDelay(500, 1200);
+    try {
+      const options = {
+        ticker: normalizedTicker,
+        limit: limit ? parseInt(limit) : null
+      };
+      
+      const data = await userEarningsCacheService.getEarningsData(
+        userId,
+        'historical_earnings',
+        timeRange,
+        tier,
+        refresh === 'true',
+        options
+      );
+      
+      if (!data.success) {
+        return res.status(500).json({
+          success: false,
+          error: data.error,
+          message: data.userMessage || data.message,
+          ticker: normalizedTicker,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      res.json({
+        success: true,
+        ticker: normalizedTicker,
+        historicalEarnings: data.data,
+        count: data.count,
+        source: data.source,
+        metadata: data.metadata,
+        tier,
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      if (error.message.includes('INSUFFICIENT_CREDITS')) {
+        return res.status(402).json({
+          success: false,
+          error: 'INSUFFICIENT_CREDITS',
+          message: 'Insufficient credits for historical earnings data',
+          ticker: normalizedTicker
+        });
+      }
+      throw error;
+    }
 
-    // Fetch company profile and basic financials
-    const [profile, financials] = await Promise.all([
-      earningsUtils.fetchCompanyProfile(normalizedTicker).catch(() => null),
-      earningsUtils.fetchBasicFinancials(normalizedTicker).catch(() => null)
-    ]);
+  } catch (error) {
+    console.error(`❌ Error fetching historical earnings for ${req.params.ticker}:`, error);
+    res.status(500).json({
+      success: false,
+      error: 'HISTORICAL_EARNINGS_ERROR',
+      message: 'Failed to fetch historical earnings data',
+      ticker: req.params.ticker,
+      timestamp: new Date().toISOString()
+    });
+  }
+}
 
-    const companyInfo = {
-      ticker: normalizedTicker,
-      profile,
-      financials,
-      lastUpdated: new Date().toISOString()
-    };
-
-    // Cache for 4 hours
-    cacheUtils.setCachedItem('company-info', normalizedTicker, companyInfo, 14400);
+/**
+ * Get user's earnings cache status
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next function
+ */
+async function getUserEarningsCacheStatus(req, res, next) {
+  try {
+    const userId = req.user?.id;
     
-    console.log(`✅ Successfully fetched company info for ${normalizedTicker}`);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'UNAUTHORIZED',
+        message: 'User authentication required'
+      });
+    }
+
+    const cacheStatus = await userEarningsCacheService.getUserEarningsCacheStatus(userId);
+
+    res.json({
+      success: true,
+      userId,
+      cacheStatus: cacheStatus.cacheStatus,
+      totalEntries: cacheStatus.totalEntries,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error(`Earnings Cache Status Error: ${error.message}`);
+    next(error);
+  }
+}
+
+/**
+ * Clear user's earnings cache
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next function
+ */
+async function clearUserEarningsCache(req, res, next) {
+  try {
+    const userId = req.user?.id;
+    const { dataType, timeRange } = req.query;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'UNAUTHORIZED',
+        message: 'User authentication required'
+      });
+    }
+
+    const result = await userEarningsCacheService.clearUserEarningsCache(userId, dataType, timeRange);
+
+    res.json({
+      success: true,
+      userId,
+      clearedEntries: result.clearedEntries,
+      message: result.message,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error(`Clear Earnings Cache Error: ${error.message}`);
+    next(error);
+  }
+}
+
+/**
+ * Clear the earnings data cache (for development and testing)
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next function
+ */
+async function clearEarningsCache(req, res, next) {
+  try {
+    const result = await earningsService.clearEarningsCache();
+    
+    res.json({
+      success: true,
+      message: result.message,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Clear Earnings Cache Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to clear earnings cache',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+}
+
+// Legacy functions for backward compatibility
+async function getCompanyInfo(req, res, next) {
+  try {
+    const { ticker } = req.params;
+    const normalizedTicker = ticker.toUpperCase();
+    
+    const result = await earningsService.getCompanyInfo(normalizedTicker);
+    
+    if (!result.success) {
+      return res.status(404).json({
+        success: false,
+        error: result.error,
+        message: result.message,
+        ticker: normalizedTicker,
+        timestamp: new Date().toISOString()
+      });
+    }
     
     res.json({
       success: true,
       ticker: normalizedTicker,
-      data: companyInfo,
+      companyInfo: result.data,
       timestamp: new Date().toISOString()
     });
-
   } catch (error) {
-    console.error(`❌ Error fetching company info for ${req.params.ticker}:`, error.message);
+    console.error(`Error fetching company info for ${req.params.ticker}:`, error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch company information',
@@ -302,63 +532,45 @@ async function getCompanyInfo(req, res, next) {
   }
 }
 
-/**
- * Health check endpoint for earnings service
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- */
 async function getEarningsHealth(req, res) {
-  try {
-    // Test basic functionality
-    const testResult = await earningsUtils.fetchBasicFinancials('AAPL').catch(() => null);
-    
-    res.json({
-      success: true,
-      status: 'healthy',
-      dataSources: {
-        yahooFinance: 'active',
-        fmpFreeTier: testResult ? 'active' : 'limited',
-        cache: 'active'
-      },
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    res.status(503).json({
-      success: false,
-      status: 'degraded',
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
+  res.json({
+    success: true,
+    service: 'earnings',
+    status: 'operational',
+    version: '2.0.0',
+    features: [
+      'upcoming_earnings',
+      'earnings_analysis', 
+      'historical_earnings',
+      'user_caching',
+      'tier_based_limits'
+    ],
+    timestamp: new Date().toISOString()
+  });
 }
 
-/**
- * Get progress for a scraping operation
- * @param {string} sessionId - Session identifier
- * @returns {Object|null} Progress object or null
- */
+// Progress tracking (legacy support)
+const progressStorage = new Map();
+
 function getProgress(sessionId) {
-  return earningsUtils.getProgress(sessionId);
+  return progressStorage.get(sessionId) || null;
 }
 
-/**
- * Update progress for a scraping operation
- * @param {string} sessionId - Session identifier
- * @param {number} percent - Progress percentage
- * @param {string} message - Progress message
- * @param {string} currentDate - Current date being processed
- * @param {Array} results - Optional results array
- */
 function updateProgress(sessionId, percent, message, currentDate = null, results = null) {
-  return earningsUtils.updateProgress(sessionId, percent, message, currentDate, results);
+  progressStorage.set(sessionId, {
+    percent,
+    message,
+    currentDate,
+    results,
+    timestamp: new Date().toISOString()
+  });
+  
+  // Auto-cleanup after 10 minutes
+  setTimeout(() => {
+    progressStorage.delete(sessionId);
+  }, 10 * 60 * 1000);
 }
 
-/**
- * Scrape earnings calendar with optional progress tracking
- * @param {string} timeRange - Time range for scraping
- * @param {string} sessionId - Optional session ID for progress tracking
- * @returns {Promise<Array>} Array of earnings events
- */
 async function scrapeEarningsCalendar(timeRange, sessionId = null) {
   return await earningsUtils.scrapeEarningsCalendar(timeRange, sessionId);
 }
@@ -366,6 +578,10 @@ async function scrapeEarningsCalendar(timeRange, sessionId = null) {
 module.exports = {
   getUpcomingEarnings,
   getEarningsAnalysis,
+  getHistoricalEarnings,
+  getUserEarningsCacheStatus,
+  clearUserEarningsCache,
+  clearEarningsCache,
   getCompanyInfo,
   getEarningsHealth,
   getProgress,
