@@ -22,7 +22,6 @@ import SentimentChartCard from './SentimentChartCard';
 import SentimentScoresSection from './SentimentScoresSection';
 import RedditPostsSection from './RedditPostsSection';
 import TierLimitDialog from '../UI/TierLimitDialog';
-import PremiumCreditControls from './PremiumCreditControls';
 
 const SentimentDashboard: React.FC = () => {
   const { theme } = useTheme();
@@ -52,9 +51,6 @@ const SentimentDashboard: React.FC = () => {
   // Session state for time tracking
   const [activeSessions, setActiveSessions] = useState<any[]>([]);
   
-  // Current selected symbol for research
-  const [currentSymbol, setCurrentSymbol] = useState('AAPL');
-  
   // Time range state
   const [timeRange, setTimeRange] = useState<TimeRange>('1w');
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -70,7 +66,62 @@ const SentimentDashboard: React.FC = () => {
   const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
   const redditPostLimit = currentTier === 'free' ? 5 : -1; // Free users: 5 posts, others: unlimited
   
-  // Use sentiment data hook - always load but conditionally show
+  // Reddit posts tier limits (posts per page = 10)
+  const REDDIT_TIER_LIMITS = {
+    free: 0,         // No access to Reddit posts
+    pro: -1,         // unlimited
+    elite: -1,       // unlimited
+    institutional: -1 // unlimited
+  };
+  
+  const hasRedditTierAccess = currentTier !== 'free';
+  
+  // Combined access: needs both tier access AND API keys configured
+  const hasFullRedditAccess = hasRedditTierAccess && redditApiKeysConfigured;
+  
+  // 🔧 FIX: Stabilize Reddit access to prevent hook restarts during TierContext updates
+  const [stableRedditAccess, setStableRedditAccess] = useState<boolean>(() => {
+    // Wait for tier info to be available before determining Reddit access
+    // This prevents the hook from starting with wrong access level
+    return false; // Always start with false, will be updated when tier loads
+  });
+  
+  // Update stable access when tier info or API keys change, but only if it represents a real change
+  useEffect(() => {
+    console.log('🔄 REDDIT ACCESS EFFECT:', {
+      tierInfo: tierInfo !== null ? { tier: tierInfo.tier } : 'null',
+      hasRedditTierAccess,
+      redditApiKeysConfigured,
+      hasFullRedditAccess,
+      stableRedditAccess,
+      currentTier
+    });
+    
+    if (tierInfo !== null) { // Only proceed when tier info is actually loaded
+      const newAccess = hasFullRedditAccess;
+      if (newAccess !== stableRedditAccess) {
+        console.log(`🔄 REDDIT ACCESS: Updating from ${stableRedditAccess} to ${newAccess} (tier: ${currentTier})`);
+        console.log(`🔄 REDDIT ACCESS DETAILS: tierAccess=${hasRedditTierAccess}, keysConfigured=${redditApiKeysConfigured}`);
+        setStableRedditAccess(newAccess);
+        
+        // If Reddit access changed, clear sentiment cache to force refresh with correct access level
+        if (stableRedditAccess !== newAccess) {
+          console.log('🔄 REDDIT ACCESS CHANGE: Clearing sentiment cache due to Reddit access change');
+          localStorage.removeItem('sentiment_allSentiments');
+          localStorage.removeItem('sentiment_allTickerSentiments');
+          localStorage.removeItem('sentiment_cachedRedditPosts');
+          localStorage.removeItem('sentiment_lastFetchTime');
+        }
+      } else {
+        console.log('🔄 REDDIT ACCESS: No change needed', { current: stableRedditAccess, calculated: newAccess });
+      }
+    }
+  }, [tierInfo, hasFullRedditAccess, stableRedditAccess, currentTier, hasRedditTierAccess, redditApiKeysConfigured]);
+
+  // Ensure both tier info and API key check are complete before starting data loading
+  const isSystemReady = !checkingApiKeys && tierInfo !== null;
+  
+  // Use sentiment data hook - now with correct Reddit access based on tier + API keys
   const {
     topSentiments,
     finvizSentiments,
@@ -86,7 +137,33 @@ const SentimentDashboard: React.FC = () => {
     handleLoadMorePosts: originalHandleLoadMorePosts,
     isDataLoading,
     refreshData: originalRefreshData
-  } = useSentimentData(timeRange, true, true); // Always load data
+  } = useSentimentData(timeRange, stableRedditAccess, isSystemReady);
+
+  // Debug logging for hook parameters
+  useEffect(() => {
+    console.log('🎯 SENTIMENT HOOK PARAMS:', {
+      timeRange,
+      stableRedditAccess,
+      isSystemReady,
+      hookCalled: true
+    });
+  }, [timeRange, stableRedditAccess, isSystemReady]);
+
+  // Debug logging for sentiment data
+  useEffect(() => {
+    console.log('🔍 SENTIMENT DATA DEBUG:', {
+      currentTier,
+      stableRedditAccess,
+      isSystemReady,
+      topSentimentsLength: topSentiments.length,
+      finvizSentimentsLength: finvizSentiments.length,
+      yahooSentimentsLength: yahooSentiments.length,
+      combinedSentimentsLength: combinedSentiments.length,
+      redditPostsLength: redditPosts.length,
+      loadingStates: loading,
+      errors
+    });
+  }, [currentTier, stableRedditAccess, isSystemReady, topSentiments, finvizSentiments, yahooSentiments, combinedSentiments, redditPosts, loading, errors]);
 
   // Refresh data handler
   const refreshData = () => {
@@ -94,7 +171,6 @@ const SentimentDashboard: React.FC = () => {
     const hasUnlockedComponents = unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit;
     
     if (!hasUnlockedComponents) {
-      console.log('🔄 SENTIMENT: No components unlocked, aborting refresh');
       info('Please unlock at least one component before refreshing');
       return;
     }
@@ -109,23 +185,7 @@ const SentimentDashboard: React.FC = () => {
     setTimeout(() => setIsTransitioning(false), 300);
   };
   
-  // Reddit posts tier limits (posts per page = 10)
-  const REDDIT_TIER_LIMITS = {
-    free: 0,         // No access to Reddit posts
-    pro: -1,         // unlimited
-    elite: -1,       // unlimited
-    institutional: -1 // unlimited
-  };
-  
-  const hasRedditTierAccess = currentTier !== 'free';
-  
-  // Combined access: needs both tier access AND API keys configured
-  const hasFullRedditAccess = hasRedditTierAccess && redditApiKeysConfigured;
-  
-  // Ensure both tier info and API key check are complete before starting data loading
-  const isSystemReady = !checkingApiKeys && tierInfo !== null;
-  
-  // Check API key status on component mount
+  // Check API key status on component mount AND when tier changes
   useEffect(() => {
     const checkApiKeyStatus = async () => {
       try {
@@ -133,10 +193,11 @@ const SentimentDashboard: React.FC = () => {
         const token = localStorage.getItem('auth_token');
         
         if (!token) {
-          console.warn('No auth token found, skipping API key status check');
           setRedditApiKeysConfigured(false);
           return;
         }
+        
+        console.log('🔑 Checking Reddit API key status for tier:', currentTier);
         
         const response = await fetch(`${proxyUrl}/api/settings/key-status`, {
           headers: {
@@ -146,32 +207,49 @@ const SentimentDashboard: React.FC = () => {
         
         if (response.ok) {
           const data = await response.json();
+          console.log('🔑 API key status response:', data);
           if (data.success && data.dataSources) {
-            setRedditApiKeysConfigured(data.dataSources.reddit || false);
+            const redditConfigured = data.dataSources.reddit || false;
+            console.log(`🔑 Reddit API keys configured: ${redditConfigured}`);
+            setRedditApiKeysConfigured(redditConfigured);
           } else {
             setRedditApiKeysConfigured(false);
           }
         } else {
+          console.error('🔑 API key status check failed:', response.status);
           setRedditApiKeysConfigured(false);
         }
       } catch (error) {
-        console.error('Error checking API key status:', error);
+        console.error('🔑 Error checking API key status:', error);
         setRedditApiKeysConfigured(false);
       } finally {
         setCheckingApiKeys(false);
       }
     };
 
+    // Run check on mount and when tier changes
     checkApiKeyStatus();
     
     // Also refresh API key status periodically
     const interval = setInterval(checkApiKeyStatus, 5 * 60 * 1000); // Every 5 minutes
     
     return () => clearInterval(interval);
-  }, []);
+  }, [currentTier]); // 🔧 Added currentTier dependency to trigger refresh on tier changes
   
-  // Check for existing unlock sessions on mount
+  // Auto-unlock components for Pro users FIRST, before checking sessions
   useEffect(() => {
+    if (tierInfo && currentTier === 'pro') {
+      console.log('🔓 AUTO-UNLOCK: Pro user detected, auto-unlocking all sentiment components');
+      setUnlockedComponents({
+        chart: true,
+        scores: true,
+        reddit: true
+      });
+      // Pro users don't need sessions - they get permanent access
+      return;
+    }
+    
+    // Only check sessions for non-Pro users
     const checkExistingSessions = () => {
       const chartSession = checkUnlockSession('chart');
       const scoresSession = checkUnlockSession('scores');
@@ -186,19 +264,17 @@ const SentimentDashboard: React.FC = () => {
       // Update active sessions for display
       const sessions = getAllUnlockSessions();
       setActiveSessions(sessions);
-      
-      if (chartSession || scoresSession || redditSession) {
-        // Session logging removed for production
-      }
     };
 
-    checkExistingSessions();
-  
-    // Check for expired sessions every minute
-    const interval = setInterval(checkExistingSessions, 60000);
-    return () => clearInterval(interval);
-  }, []);
-  
+    if (tierInfo && currentTier !== 'pro') {
+      checkExistingSessions();
+    
+      // Check for expired sessions every minute for non-Pro users
+      const interval = setInterval(checkExistingSessions, 60000);
+      return () => clearInterval(interval);
+    }
+  }, [tierInfo, currentTier]);
+
   // Custom handleLoadMorePosts with tier limit checking
   const handleLoadMorePosts = () => {
     // Check if tier limit would be exceeded and dialog hasn't been shown yet
@@ -229,7 +305,16 @@ const SentimentDashboard: React.FC = () => {
 
   // Handlers for unlocking individual components
   const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
-    console.log(`🔓 Attempting to unlock ${component} for ${cost} credits`);
+    // Pro users already have permanent access - no need to spend credits
+    if (currentTier === 'pro') {
+      info(`Pro users have permanent access to ${component}!`);
+      // Ensure component is unlocked (should already be from auto-unlock effect)
+      setUnlockedComponents(prev => ({
+        ...prev,
+        [component]: true
+      }));
+      return;
+    }
     
     // Check if already unlocked in current session
     const existingSession = checkUnlockSession(component);
@@ -285,7 +370,6 @@ const SentimentDashboard: React.FC = () => {
           info(`${component} already unlocked (${data.timeRemaining}h remaining)`);
         } else {
           info(`${data.creditsUsed} credits used`);
-          // Component unlock logging removed for production
         }
         
         // Refresh tier info to update usage meter
@@ -295,31 +379,8 @@ const SentimentDashboard: React.FC = () => {
       }
       
     } catch (error) {
-      console.error(`Error unlocking ${component}:`, error);
       info(`Failed to unlock ${component}. Please try again.`);
     }
-  };
-
-  // Legacy handler for full research (unlocks everything)
-  const handleStartResearch = (symbol: string) => {
-    console.log(`🔬 Starting full research session for ${symbol}`);
-    setCurrentSymbol(symbol);
-    
-    // Unlock all components for full research
-    setUnlockedComponents({
-      chart: true,
-      scores: true,
-      reddit: true,
-    });
-    
-    // Calculate total cost (would be discounted in production)
-    const totalCost = COMPONENT_COSTS.sentimentChart + COMPONENT_COSTS.sentimentScores + COMPONENT_COSTS.redditPosts;
-    console.log(`💳 Full research bundle cost: ${totalCost} credits (discounted from individual purchases)`);
-  };
-  
-  const handlePurchaseCredits = () => {
-    console.log('💰 Navigating to credit purchase');
-    navigate('/billing/credits');
   };
 
   // Component for locked overlays
@@ -482,33 +543,35 @@ const SentimentDashboard: React.FC = () => {
           <div className="flex justify-between items-center">
             <h1 className={`text-2xl font-bold ${textColor}`}>Sentiment Scraper</h1>
             
-            <button 
-              className={`transition-colors rounded-full p-2 ${
-                // Show different styling based on unlock state
-                (unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)
-                  ? `${isLight ? 'bg-blue-500' : 'bg-blue-600'} hover:${isLight ? 'bg-blue-600' : 'bg-blue-700'} text-white` // Unlocked: normal blue
-                  : 'bg-gray-400 cursor-not-allowed text-gray-200' // Locked: grayed out
-              } ${isDataLoading ? 'opacity-50' : ''}`}
-              onClick={refreshData}
-              disabled={isDataLoading || !(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)}
-              title={
-                (unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)
-                  ? 'Refresh sentiment data'
-                  : 'Unlock components to refresh data'
-              }
-            >
-              {/* Only show spinner if components are unlocked AND loading */}
-              {(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit) && isDataLoading ? (
-                <Loader2 size={18} className="text-white animate-spin" />
-              ) : (
-                <RefreshCw size={18} className={
-                  // Gray icon when locked, white when unlocked
-                  !(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)
-                    ? 'text-gray-200' 
-                    : 'text-white'
-                } />
-              )}
-            </button>
+            <div className="flex gap-2">
+              <button 
+                className={`transition-colors rounded-full p-2 ${
+                  // Show different styling based on unlock state
+                  (unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)
+                    ? `${isLight ? 'bg-blue-500' : 'bg-blue-600'} hover:${isLight ? 'bg-blue-600' : 'bg-blue-700'} text-white` // Unlocked: normal blue
+                    : 'bg-gray-400 cursor-not-allowed text-gray-200' // Locked: grayed out
+                } ${isDataLoading ? 'opacity-50' : ''}`}
+                onClick={refreshData}
+                disabled={isDataLoading || !(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)}
+                title={
+                  (unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)
+                    ? 'Refresh sentiment data'
+                    : 'Unlock components to refresh data'
+                }
+              >
+                {/* Only show spinner if components are unlocked AND loading */}
+                {(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit) && isDataLoading ? (
+                  <Loader2 size={18} className="text-white animate-spin" />
+                ) : (
+                  <RefreshCw size={18} className={
+                    // Gray icon when locked, white when unlocked
+                    !(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)
+                      ? 'text-gray-200' 
+                      : 'text-white'
+                  } />
+                )}
+              </button>
+            </div>
           </div>
           
           {/* Description row */}
@@ -517,13 +580,6 @@ const SentimentDashboard: React.FC = () => {
         
         {/* Dashboard Layout - Show components with locked overlays */}
         <div className="space-y-6">
-          {/* Credit Balance - Full width row */}
-          <PremiumCreditControls 
-            onStartResearch={handleStartResearch}
-            onPurchaseCredits={handlePurchaseCredits}
-            currentSymbol={currentSymbol}
-          />
-          
           {/* Main Content Grid */}
         <div className="flex flex-col xl:flex-row gap-6">
           {/* Main Content Area */}
@@ -544,7 +600,7 @@ const SentimentDashboard: React.FC = () => {
                 rateLimited: errors.rateLimited
               }}
               onRefresh={refreshData}
-              hasRedditAccess={hasFullRedditAccess}
+              hasRedditAccess={stableRedditAccess}
             />
               ) : (
                 <LockedOverlay
@@ -569,7 +625,7 @@ const SentimentDashboard: React.FC = () => {
                 loadingStage={loadingStage}
                 error={errors.sentiment}
                 isRateLimited={errors.rateLimited}
-                hasRedditAccess={hasFullRedditAccess}
+                hasRedditAccess={stableRedditAccess}
                 hasRedditTierAccess={hasRedditTierAccess}
                 redditApiKeysConfigured={redditApiKeysConfigured}
               />
@@ -635,7 +691,7 @@ const SentimentDashboard: React.FC = () => {
               loadingStage={loadingStage}
               error={errors.sentiment}
               isRateLimited={errors.rateLimited}
-              hasRedditAccess={hasFullRedditAccess}
+              hasRedditAccess={stableRedditAccess}
               hasRedditTierAccess={hasRedditTierAccess}
               redditApiKeysConfigured={redditApiKeysConfigured}
             />

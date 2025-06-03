@@ -439,7 +439,16 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
               <p className={mutedTextColor}>Please use the Reddit, Finviz, or All tabs for available sentiment data.</p>
             </>
           ) : (
-            <p className={mutedTextColor}>No sentiment data available for {dataSource} source</p>
+            <>
+              <p className={`${textColor} font-medium mb-2`}>No stocks in your watchlist</p>
+              <p className={`${mutedTextColor} mb-4`}>Add stocks to your watchlist to see sentiment analysis from {dataSource === 'combined' ? 'FinViz, Yahoo Finance' + (hasRedditAccess ? ', and Reddit' : '') : dataSource}.</p>
+              <button
+                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                onClick={() => window.location.href = '/'}
+              >
+                Go to Watchlist
+              </button>
+            </>
           )}
         </div>
       )}

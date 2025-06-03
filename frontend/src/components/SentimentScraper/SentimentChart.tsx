@@ -84,30 +84,29 @@ const SentimentChart: React.FC<SentimentChartProps> = ({
     }
 
     // Calculate percentages (only for the three main sources)
-    let percentages = {
-      reddit: Math.round((sourceCounts.reddit / total) * 100),
-      finviz: Math.round((sourceCounts.finviz / total) * 100),
-      yahoo: Math.round((sourceCounts.yahoo / total) * 100)
-    };
-
-    // Override Reddit percentage for free users
+    let percentages;
+    
     if (!hasRedditAccess) {
-      const redditPercentage = percentages.reddit;
-      percentages.reddit = 0;
+      // For free users, completely exclude Reddit from calculation
+      const freeUserTotal = sourceCounts.finviz + sourceCounts.yahoo;
+      console.log('Free user calculation - FinViz + Yahoo only:', { finviz: sourceCounts.finviz, yahoo: sourceCounts.yahoo, total: freeUserTotal });
       
-      // Redistribute Reddit percentage to other sources
-      if (redditPercentage > 0) {
-        const nonRedditTotal = percentages.finviz + percentages.yahoo;
-        if (nonRedditTotal > 0) {
-          const redistributionRatio = (100 - percentages.reddit) / nonRedditTotal;
-          percentages.finviz = Math.round(percentages.finviz * redistributionRatio);
-          percentages.yahoo = Math.round(percentages.yahoo * redistributionRatio);
-        } else {
-          // If no other sources, default distribution
-          percentages.finviz = 60;
-          percentages.yahoo = 40;
-        }
+      if (freeUserTotal === 0) {
+        percentages = { reddit: 0, finviz: 50, yahoo: 50 };
+      } else {
+        percentages = {
+          reddit: 0,
+          finviz: Math.round((sourceCounts.finviz / freeUserTotal) * 100),
+          yahoo: Math.round((sourceCounts.yahoo / freeUserTotal) * 100)
+        };
       }
+    } else {
+      // For Pro users, include all sources
+      percentages = {
+        reddit: Math.round((sourceCounts.reddit / total) * 100),
+        finviz: Math.round((sourceCounts.finviz / total) * 100),
+        yahoo: Math.round((sourceCounts.yahoo / total) * 100)
+      };
     }
 
     console.log('Final calculated percentages:', percentages);

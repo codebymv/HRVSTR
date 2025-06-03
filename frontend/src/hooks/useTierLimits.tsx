@@ -6,7 +6,7 @@ interface TierLimitState {
   featureName: string;
   message?: string;
   upgradeMessage?: string;
-  context?: 'reddit' | 'watchlist' | 'search' | 'general';
+  context?: 'reddit' | 'watchlist' | 'search' | 'general' | 'sec' | 'institutional';
 }
 
 export const useTierLimits = () => {
@@ -51,7 +51,7 @@ export const useTierLimits = () => {
     featureName: string,
     customMessage?: string,
     customUpgradeMessage?: string,
-    context: 'reddit' | 'watchlist' | 'search' | 'general' = 'general'
+    context: 'reddit' | 'watchlist' | 'search' | 'general' | 'sec' | 'institutional' = 'general'
   ) => {
     setTierLimitDialog({
       isOpen: true,

@@ -44,15 +44,19 @@ export function ensureTickerDiversity(
     console.log('[TICKER_UTILS DEBUG] Processing SentimentData array');
     const sentimentData = items as SentimentData[];
     
-    // Check if this is real watchlist data (has actual scores/confidence) vs demo data
+    // Check if this is real watchlist data vs demo/default data
+    // Real data indicators: non-zero confidence, actual scores, or comes from watchlist APIs
     const hasRealData = sentimentData.some(item => 
+      (item.confidence && item.confidence > 0 && item.confidence !== 50) || // Non-default confidence
+      (item.score && item.score !== 0 && item.score !== 0.5) || // Non-neutral score
       (item.postCount && item.postCount > 0) || 
       (item.commentCount && item.commentCount > 0) || 
-      (item.newsCount && item.newsCount > 0)
+      (item.newsCount && item.newsCount > 0) ||
+      (item.source === 'finviz' || item.source === 'yahoo') // Real API sources
     );
     
-    if (hasRealData) {
-      // For real watchlist data, return only the actual data without padding
+    // For watchlist data (even if scores are neutral), don't pad - show user's actual stocks only
+    if (hasRealData || sentimentData.length <= 5) {
       console.log('[TICKER_UTILS DEBUG] Real watchlist data detected, returning without padding:', sentimentData.length);
       return sentimentData;
     }

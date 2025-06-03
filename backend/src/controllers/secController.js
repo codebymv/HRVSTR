@@ -5,6 +5,7 @@
 const secService = require('../services/secService');
 const cacheManager = require('../utils/cacheManager');
 const cache = require('../utils/cache');
+const { pool: db } = require('../config/data-sources');
 
 // Register rate limits for SEC endpoints
 cacheManager.registerRateLimit('sec-insider', 30, 60); // 30 requests per minute for insider trades
@@ -38,6 +39,7 @@ function getCacheTtl(dataType, isMarketHours = false) {
 
 /**
  * Get insider trades data from SEC (all recent filings)
+ * Now integrates with user-specific database caching
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  * @param {Function} next - Express next function
@@ -45,23 +47,80 @@ function getCacheTtl(dataType, isMarketHours = false) {
 async function getInsiderTrades(req, res, next) {
   try {
     const { timeRange = '1m', limit = 100, refresh = 'false' } = req.query;
+    const userId = req.user?.id; // From auth middleware
+    const userTier = req.user?.tier || 'free';
+
+    console.log(`[secController] getInsiderTrades for user ${userId}, tier: ${userTier}`);
+
+    // Use user-specific cache service for authenticated users
+    if (userId) {
+      const userSecCacheService = require('../services/userSecCacheService');
+      const result = await userSecCacheService.getSecDataForUser(
+        userId, 
+        userTier, 
+        'insider_trades', 
+        timeRange, 
+        refresh === 'true'
+      );
+
+      if (!result.success) {
+        // Handle specific error types
+        if (result.error === 'TIER_RESTRICTION') {
+          return res.status(403).json({
+            error: 'ACCESS_DENIED',
+            message: result.message,
+            userMessage: result.userMessage,
+            tierRequired: result.tierRequired
+          });
+        } else if (result.error === 'INSUFFICIENT_CREDITS') {
+          return res.status(402).json({
+            error: 'PAYMENT_REQUIRED',
+            message: result.message,
+            userMessage: result.userMessage,
+            creditsRequired: result.creditsRequired,
+            creditsAvailable: result.creditsAvailable
+          });
+        } else {
+          return res.status(500).json({
+            error: 'SERVICE_ERROR',
+            message: result.message,
+            userMessage: result.userMessage || 'Unable to fetch insider trades data'
+          });
+        }
+      }
+
+      return res.json(result.data);
+    }
+
+    // Fallback to legacy cache system for non-authenticated users
     const cacheKey = `sec-insider-trades-${timeRange}-${limit}`;
     const ttl = getCacheTtl('insider-trades');
 
     const result = await cacheManager.getOrFetch(cacheKey, 'sec-insider', async () => {
       console.log(`Fetching fresh SEC insider trades data for ${timeRange}`);
       
-      const insiderTrades = await secService.fetchInsiderTrades(timeRange, parseInt(limit));
+      const serviceResult = await secService.getInsiderTrades(timeRange, parseInt(limit));
+      
+      if (!serviceResult.success) {
+        throw new Error(serviceResult.message || 'Failed to fetch insider trades');
+      }
 
       return {
         timeRange,
-        insiderTrades,
-        count: insiderTrades.length,
+        insiderTrades: serviceResult.data, // serviceResult.data is the array
+        count: serviceResult.count,
         source: 'sec-edgar',
         refreshed: true,
         lastUpdated: new Date().toISOString()
       };
     }, ttl, refresh === 'true');
+
+    console.log(`[secController] Legacy cache result structure:`, {
+      hasResult: !!result,
+      insiderTradesType: typeof result?.insiderTrades,
+      isArray: Array.isArray(result?.insiderTrades),
+      count: result?.insiderTrades?.length || result?.count || 0
+    });
 
     res.json(result);
   } catch (error) {
@@ -111,6 +170,7 @@ async function getInsiderTradesByTicker(req, res, next) {
 
 /**
  * Get institutional holdings data from SEC (all recent filings)
+ * Now integrates with user-specific database caching
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  * @param {Function} next - Express next function
@@ -118,6 +178,52 @@ async function getInsiderTradesByTicker(req, res, next) {
 async function getInstitutionalHoldings(req, res, next) {
   try {
     const { timeRange = '1m', limit = 50, refresh = 'false' } = req.query;
+    const userId = req.user?.id; // From auth middleware
+    const userTier = req.user?.tier || 'free';
+
+    console.log(`[secController] getInstitutionalHoldings for user ${userId}, tier: ${userTier}`);
+
+    // Use user-specific cache service for authenticated users
+    if (userId) {
+      const userSecCacheService = require('../services/userSecCacheService');
+      const result = await userSecCacheService.getSecDataForUser(
+        userId, 
+        userTier, 
+        'institutional_holdings', 
+        timeRange, 
+        refresh === 'true'
+      );
+
+      if (!result.success) {
+        // Handle specific error types
+        if (result.error === 'TIER_RESTRICTION') {
+          return res.status(403).json({
+            error: 'ACCESS_DENIED',
+            message: result.message,
+            userMessage: result.userMessage,
+            tierRequired: result.tierRequired
+          });
+        } else if (result.error === 'INSUFFICIENT_CREDITS') {
+          return res.status(402).json({
+            error: 'PAYMENT_REQUIRED',
+            message: result.message,
+            userMessage: result.userMessage,
+            creditsRequired: result.creditsRequired,
+            creditsAvailable: result.creditsAvailable
+          });
+        } else {
+          return res.status(500).json({
+            error: 'SERVICE_ERROR',
+            message: result.message,
+            userMessage: result.userMessage || 'Unable to fetch institutional holdings data'
+          });
+        }
+      }
+
+      return res.json(result.data);
+    }
+
+    // Fallback to legacy cache system for non-authenticated users
     const cacheKey = `sec-institutional-holdings-${timeRange}-${limit}`;
     const ttl = getCacheTtl('institutional-holdings');
 
@@ -581,15 +687,44 @@ async function getSecDataParallel(req, res, next) {
 }
 
 /**
- * Stream insider trades data with real-time progress updates using Server-Sent Events
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
+ * Stream insider trades data with real-time progress updates using SSE
+ * Now integrates with user-specific database caching
  */
 async function streamInsiderTrades(req, res) {
-  const { timeRange = '1m', limit = 100, refresh = 'false' } = req.query;
+  const { timeRange = '1m', limit = 100, refresh = 'false', token } = req.query;
+  
+  // Handle authentication from query parameter (EventSource doesn't support headers)
+  let userId = req.user?.id;
+  let userTier = req.user?.tier || 'free';
+  
+  if (token && !userId) {
+    try {
+      // Verify token manually if passed via query parameter
+      const jwt = require('jsonwebtoken');
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      
+      console.log(`🔍 SEC CONTROLLER - JWT decoded:`, { userId: decoded.userId, exp: decoded.exp });
+      
+      // Look up user to get current tier
+      const userQuery = 'SELECT id, tier FROM users WHERE id = $1';
+      const userResult = await db.query(userQuery, [decoded.userId]);
+      
+      if (userResult.rows.length > 0) {
+        userId = userResult.rows[0].id;
+        userTier = userResult.rows[0].tier || 'free';
+        console.log(`🔍 SEC CONTROLLER - Authenticated via token: user ${userId}, tier: ${userTier}`);
+      } else {
+        console.log(`🔍 SEC CONTROLLER - User not found in database for ID: ${decoded.userId}`);
+      }
+    } catch (error) {
+      console.error('🔍 SEC CONTROLLER - Token verification failed:', error.message);
+      console.log('🔍 SEC CONTROLLER - Continuing as unauthenticated user');
+      // Continue as unauthenticated user
+    }
+  }
   
   console.log(`\n🔍 SEC CONTROLLER - streamInsiderTrades START`);
-  console.log(`🔍 Request params:`, { timeRange, limit, refresh });
+  console.log(`🔍 Request params:`, { timeRange, limit, refresh, userId, userTier });
   
   // Set up SSE headers
   res.writeHead(200, {
@@ -690,6 +825,48 @@ async function streamInsiderTrades(req, res) {
   });
 
   try {
+    // Use the new user-specific cache service for authenticated users
+    if (userId) {
+      console.log(`🔍 SEC CONTROLLER - Using user-specific cache for ${userId}`);
+      
+      const userSecCacheService = require('../services/userSecCacheService');
+      
+      try {
+        const result = await userSecCacheService.getSecDataForUser(
+          userId, 
+          userTier, 
+          'insider_trades', 
+          timeRange, 
+          refresh === 'true', 
+          progressCallback
+        );
+        
+        console.log(`🔍 SEC CONTROLLER - User cache service result:`, {
+          success: result?.success,
+          fromCache: result?.fromCache,
+          dataCount: result?.data?.insiderTrades?.length || result?.data?.count || 0,
+          error: result?.error
+        });
+        
+        if (!result.success) {
+          console.error(`🔍 SEC CONTROLLER - User cache error: ${result.error}`);
+          endStream(null, result);
+          return;
+        }
+        
+        // Send final result
+        endStream(result.data);
+        return;
+      } catch (userCacheError) {
+        console.error(`🔍 SEC CONTROLLER - User cache service threw error:`, userCacheError);
+        console.log(`🔍 SEC CONTROLLER - Falling back to legacy system due to user cache error`);
+        // Fall through to legacy system
+      }
+    }
+    
+    // Fallback to old cache system for non-authenticated users
+    console.log(`🔍 SEC CONTROLLER - No user authentication, using legacy cache system`);
+    
     // Check cache first, unless refresh is requested
     if (refresh !== 'true' && cache.hasCachedItem && cache.hasCachedItem('sec-insider-trades', { timeRange, limit })) {
       console.log(`🔍 SEC CONTROLLER - Serving cached SEC insider trades data for ${timeRange}`);
@@ -749,7 +926,7 @@ async function streamInsiderTrades(req, res) {
       uniqueDates: result.insiderTrades ? [...new Set(result.insiderTrades.map(t => t.filingDate?.split('T')[0]))].slice(0, 5) : []
     });
     
-    // Cache the result (30 minutes TTL)
+    // Cache the result (30 minutes TTL) - only for non-authenticated users
     if (cache.setCachedItem) {
       cache.setCachedItem('sec-insider-trades', { timeRange, limit }, result, 30 * 60 * 1000);
     }
@@ -772,6 +949,89 @@ async function streamInsiderTrades(req, res) {
   }
 }
 
+/**
+ * Get user's SEC cache status
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next function
+ */
+async function getUserCacheStatus(req, res, next) {
+  try {
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        error: 'UNAUTHORIZED',
+        message: 'User authentication required'
+      });
+    }
+
+    const userSecCacheService = require('../services/userSecCacheService');
+    const cacheStatus = await userSecCacheService.getUserCacheStatus(userId);
+
+    res.json({
+      userId,
+      cacheStatus,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error(`SEC Cache Status Error: ${error.message}`);
+    next(error);
+  }
+}
+
+/**
+ * Clear user's SEC cache
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next function
+ */
+async function clearUserCache(req, res, next) {
+  try {
+    const userId = req.user?.id;
+    const { dataType, timeRange } = req.query; // Optional filters
+    
+    if (!userId) {
+      return res.status(401).json({
+        error: 'UNAUTHORIZED',
+        message: 'User authentication required'
+      });
+    }
+
+    const db = require('../database/db');
+    
+    let query = 'DELETE FROM user_sec_cache WHERE user_id = $1';
+    let params = [userId];
+    
+    // Add optional filters
+    if (dataType) {
+      query += ' AND data_type = $2';
+      params.push(dataType);
+    }
+    
+    if (timeRange) {
+      const paramIndex = params.length + 1;
+      query += ` AND time_range = $${paramIndex}`;
+      params.push(timeRange);
+    }
+    
+    query += ' RETURNING id, data_type, time_range';
+    
+    const result = await db.query(query, params);
+    
+    res.json({
+      success: true,
+      message: 'User SEC cache cleared successfully',
+      clearedEntries: result.rows.length,
+      entries: result.rows,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error(`Clear User SEC Cache Error: ${error.message}`);
+    next(error);
+  }
+}
+
 module.exports = {
   getInsiderTrades,
   getInsiderTradesByTicker,
@@ -782,5 +1042,7 @@ module.exports = {
   getTickerSummary,
   clearCache,
   getSecDataParallel,
-  streamInsiderTrades
+  streamInsiderTrades,
+  getUserCacheStatus,
+  clearUserCache
 };

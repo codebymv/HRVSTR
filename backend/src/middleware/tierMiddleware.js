@@ -6,7 +6,7 @@ const TIER_LIMITS = {
     watchlistLimit: 5,
     monthlyCredits: 50,
     dailyCredits: 10,
-    features: ['FinViz', 'SEC-Insider', 'Earnings'],
+    features: ['FinViz', 'SEC-Insider', 'Earnings', 'Yahoo'],
     historyDays: 1,
     maxTickersPerRequest: 3,
     rateLimitPerMinute: 10

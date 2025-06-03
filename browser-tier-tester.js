@@ -16,6 +16,7 @@
  *   testTier('elite')        - Switch to Elite tier  
  *   testTier('institutional') - Switch to Institutional tier
  *   testTier('free')         - Switch back to Free tier
+ *   clearCache()             - Manually clear sentiment cache
  *   showTiers()              - Show all available tiers
  *   getCurrentTier()         - Show current tier info
  */
@@ -83,6 +84,42 @@ function getAuthToken() {
   return null;
 }
 
+// Function to manually clear sentiment cache
+function clearCache() {
+  console.log('🔄 Clearing sentiment cache...');
+  
+  try {
+    // Try using the exposed cache clearing function first
+    if (typeof window !== 'undefined' && window.clearSentimentCache) {
+      window.clearSentimentCache();
+      console.log('✅ Sentiment cache cleared using exposed function');
+      return;
+    }
+    
+    // Manual cache clearing if function isn't available
+    const cacheKeys = [
+      'sentiment_allSentiments',
+      'sentiment_allTickerSentiments', 
+      'sentiment_cachedRedditPosts',
+      'sentiment_lastFetchTime'
+    ];
+    
+    let clearedCount = 0;
+    cacheKeys.forEach(key => {
+      if (localStorage.getItem(key)) {
+        localStorage.removeItem(key);
+        clearedCount++;
+      }
+    });
+    
+    console.log(`✅ Manually cleared ${clearedCount} sentiment cache keys`);
+    console.log('💡 Refresh the page to reload with fresh data');
+    
+  } catch (error) {
+    console.error('❌ Error clearing cache:', error.message);
+  }
+}
+
 // Main function to change tier
 async function testTier(tierName) {
   const tier = tierName.toLowerCase();
@@ -117,6 +154,30 @@ async function testTier(tierName) {
     if (data.success) {
       console.log(`✅ Successfully switched to ${TIERS[tier].icon} ${TIERS[tier].name} tier!`);
       console.log(`📊 Credits: ${data.data.credits.remaining}/${data.data.credits.monthly}`);
+      
+      // Clear sentiment cache to prevent stale data
+      console.log('🔄 Clearing sentiment cache...');
+      try {
+        // Clear sentiment cache if the function is available
+        if (typeof window !== 'undefined' && window.clearSentimentCache) {
+          window.clearSentimentCache();
+          console.log('✅ Sentiment cache cleared successfully');
+        } else {
+          // Manual cache clearing if function isn't available
+          const cacheKeys = [
+            'sentiment_allSentiments',
+            'sentiment_allTickerSentiments', 
+            'sentiment_cachedRedditPosts',
+            'sentiment_lastFetchTime'
+          ];
+          
+          cacheKeys.forEach(key => localStorage.removeItem(key));
+          console.log('✅ Manually cleared sentiment cache keys');
+        }
+      } catch (cacheError) {
+        console.warn('⚠️ Could not clear sentiment cache:', cacheError.message);
+      }
+      
       console.log(`🔄 Refresh the page to see UI changes`);
       
       // Update the local watchlist limits in sessionStorage

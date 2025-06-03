@@ -227,6 +227,9 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
   // Track the last time range used for cache invalidation
   const [lastTimeRange, setLastTimeRange] = useState<TimeRange>(timeRange);
   
+  // Track last Reddit access state to detect changes
+  const [lastRedditAccess, setLastRedditAccess] = useState<boolean | null>(null);
+  
   // Pagination state for Reddit posts
   const [redditPage, setRedditPage] = useState(1);
   const [hasMorePosts, setHasMorePosts] = useState(true);
@@ -263,6 +266,8 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
     }
     loadingRef.current = true;
     
+    console.log('🔄 LOAD DATA START:', { timeRange, hasRedditAccess, apiKeysReady });
+    
     try {
       // Cancel all pending requests
       requestManager.abort();
@@ -272,8 +277,40 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
       const dataIsStale = isDataStale(lastFetchTime);
       const timeRangeChanged = lastTimeRange !== timeRange;
       
-      // If we have fresh data and time range hasn't changed, use cached data
-      if (hasData && !dataIsStale && !timeRangeChanged) {
+      // 🔧 FIX: Check if cached data matches current tier access level
+      // If Reddit access changed, cached data might not be appropriate for current tier
+      const accessLevelChanged = lastRedditAccess !== null && lastRedditAccess !== hasRedditAccess;
+      const needsTierSpecificData = !hasRedditAccess && (finvizSentiments.length === 0 || yahooSentiments.length === 0);
+      
+      console.log('🔄 CACHE CHECK:', { 
+        hasData, 
+        dataIsStale, 
+        timeRangeChanged, 
+        accessLevelChanged,
+        needsTierSpecificData,
+        lastRedditAccess,
+        currentRedditAccess: hasRedditAccess,
+        finvizCount: finvizSentiments.length,
+        yahooCount: yahooSentiments.length,
+        lastFetchTime 
+      });
+      
+      // If we have fresh data and time range hasn't changed AND access level matches, use cached data
+      if (hasData && !dataIsStale && !timeRangeChanged && !accessLevelChanged && !needsTierSpecificData) {
+        console.log('🔄 USING CACHED DATA - skipping fresh fetch');
+        // 🔧 FIX: Generate chart data from cached sentiment data
+        try {
+          if (allSentiments && allSentiments.length > 0) {
+            const chartDataResult = generateChartData(allSentiments, timeRange, hasRedditAccess);
+            setChartData(chartDataResult);
+          } else {
+            setChartData([]);
+          }
+        } catch (chartError) {
+          console.error('Error generating chart from cached data:', chartError);
+          setChartData([]);
+        }
+        
         setLoading({
           sentiment: false,
           posts: false,
@@ -283,6 +320,8 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
         loadingRef.current = false;
         return;
       }
+
+      console.log('🔧 [SENTIMENT HOOK DEBUG] Cache check passed, proceeding with fresh data fetch');
 
       // Request keys for different data fetching operations
       const REQUEST_KEYS = {
@@ -313,30 +352,31 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
       
       try {
         // Step 1: Fetch market sentiment timeline data for chart visualization
-          updateProgress(15, hasRedditAccess ? 'Downloading sentiment timeline from all sources...' : 'Downloading sentiment timeline (FinViz + Yahoo)...');
-          const sentimentSignal = requestManager.getSignal(REQUEST_KEYS.sentimentData);
-          
-          // Use market sentiment data for chart (provides time-series data)
-          let sentimentData = await fetchAggregatedMarketSentiment(timeRange, sentimentSignal, hasRedditAccess);
-          logger.log(`Aggregated market sentiment: ${sentimentData.length} data points from ${hasRedditAccess ? 'all sources' : 'FinViz + Yahoo only'}`);
-          
-          // 🔧 FIX: Fallback handling with proper time range
-          if (!sentimentData || sentimentData.length === 0) {
-            const sentimentSignal2 = requestManager.getSignal(REQUEST_KEYS.sentimentData + '-alt');
-            const alternateData = await fetchAggregatedMarketSentiment('1w', sentimentSignal2, hasRedditAccess);
-            if (alternateData.length > sentimentData.length) {
-              logger.log(`Found more data with alternate timeframe: ${alternateData.length} points`);
-              sentimentData = alternateData;
-            }
-          }
-          
-          setAllSentiments(sentimentData);
+        updateProgress(15, hasRedditAccess ? 'Downloading sentiment timeline from all sources...' : 'Downloading sentiment timeline (FinViz + Yahoo)...');
+        const sentimentSignal = requestManager.getSignal(REQUEST_KEYS.sentimentData);
+        
+        // Use market sentiment data for chart (provides time-series data)
+        const sentimentData = await fetchAggregatedMarketSentiment(timeRange, sentimentSignal, hasRedditAccess);
+        logger.log(`Aggregated market sentiment: ${sentimentData.length} data points from ${hasRedditAccess ? 'all sources' : 'FinViz + Yahoo only'}`);
+        
+        setAllSentiments(sentimentData);
         setLastFetchTime(Date.now());
         setLastTimeRange(timeRange);
         
+        // Generate chart data using real data from available sources
+        updateProgress(20, 'Generating sentiment charts from real market data...');
+        if (sentimentData && sentimentData.length > 0) {
+          const chartDataResult = generateChartData(sentimentData, timeRange, hasRedditAccess);
+          setChartData(chartDataResult);
+          logger.log(`[CHART DEBUG] Generated chart data from ${sentimentData.length} real market sentiment points`);
+        } else {
+          console.warn('[CHART DEBUG] No market sentiment data available');
+          setChartData([]);
+        }
+        
       } catch (error: unknown) {
         if (error instanceof DOMException && error.name === 'AbortError') return;
-        logger.error('Market sentiment error for chart:', error);
+        logger.error('Market sentiment error:', error);
         setErrors(prev => ({ ...prev, sentiment: error instanceof Error ? error.message : 'Failed to fetch market sentiment timeline' }));
       }
       
@@ -392,6 +432,7 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
       
       try {
         // Step 3: Fetch ticker sentiment data (Reddit for Pro+ users, FinViz/Yahoo for all)
+        console.log('🔄 STARTING TICKER SENTIMENT FETCH SECTION');
         let tickerSentimentData: SentimentData[] = allTickerSentiments;
         
         // Check if we need to fetch Reddit ticker sentiment data
@@ -399,6 +440,14 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
           allTickerSentiments.some(item => item.source === 'reddit');
         const needsRedditData = hasRedditAccess && !hasRealRedditData;
         const needsDefaultData = !hasRedditAccess && allTickerSentiments.length === 0;
+        
+        console.log('🔄 TICKER SENTIMENT LOGIC:', { 
+          hasRealRedditData, 
+          needsRedditData, 
+          needsDefaultData,
+          allTickerSentimentsLength: allTickerSentiments.length,
+          hasRedditAccess 
+        });
         
         if (needsRedditData) {
           updateProgress(45, `Fetching ${timeRange} Reddit ticker sentiment data...`);
@@ -412,7 +461,7 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
           try {
             // Fetch user's actual watchlist tickers
             const watchlistSignal = requestManager.getSignal(REQUEST_KEYS.tickerSentiment + '-watchlist');
-            const watchlistTickers = await fetchWatchlistFinvizSentiment(watchlistSignal);
+            const watchlistTickers = await fetchWatchlistFinvizSentiment(timeRange, watchlistSignal);
             
             if (watchlistTickers.length > 0) {
               // Use the user's actual watchlist tickers for default sentiment data
@@ -441,72 +490,63 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
           // Using existing ticker sentiment data
         }
         
+        // Always fetch FinViz and Yahoo data regardless of ticker sentiment availability
+        // This ensures free users get sentiment scores even without Reddit access
+        
+        console.log('🔄 STARTING FINVIZ/YAHOO WATCHLIST SECTION');
+        
+        // Set topSentiments from available ticker data (could be empty for free users)
         if (tickerSentimentData.length > 0) {
           const diverseSentiments = ensureTickerDiversity(tickerSentimentData, 10);
           setTopSentiments(diverseSentiments);
-          
-          // 🔧 FIX: Ensure Reddit data is immediately available even if other sources fail
-          
-          // ONLY use watchlist APIs - NO fallback to hardcoded tickers
-          updateProgress(60, 'Fetching FinViz sentiment data from your watchlist...');
-          
-          // Fetch FinViz data using watchlist API
-          let finvizData: SentimentData[] = [];
-          try {
-            const finvizSignal = requestManager.getSignal(REQUEST_KEYS.finviz);
-            finvizData = await fetchWatchlistFinvizSentiment(finvizSignal);
-            setFinvizSentiments(finvizData);
-          } catch (finvizError) {
-            logger.error('FinViz watchlist data error:', finvizError);
-            setFinvizSentiments([]);
-          }
-          
-          // Fetch Yahoo data using watchlist API  
-          updateProgress(75, 'Fetching Yahoo sentiment data from your watchlist...');
-          let yahooData: SentimentData[] = [];
-          try {
-            const yahooSignal = requestManager.getSignal(REQUEST_KEYS.yahoo);
-            yahooData = await fetchWatchlistYahooSentiment(yahooSignal);
-            setYahooSentiments(yahooData);
-          } catch (yahooError) {
-            logger.error('Yahoo Finance watchlist data error:', yahooError);
-            setYahooSentiments([]);
-          }
-          
-          // Build combined data with available results (no fallback data)
-          const sourcesToMerge: SentimentData[][] = [];
-          if (diverseSentiments.length > 0) sourcesToMerge.push(diverseSentiments);
-          if (finvizData.length > 0) sourcesToMerge.push(finvizData);
-          if (yahooData.length > 0) sourcesToMerge.push(yahooData);
-          
-          const mergedSentimentData = mergeSentimentData(...sourcesToMerge);
-          const combinedSentiments = aggregateByTicker(mergedSentimentData);
-          setCombinedSentiments(combinedSentiments);
-          
-          // 🔧 NEW: Generate chart data immediately after we have combined sentiment data
-          try {
-            updateProgress(85, 'Generating sentiment charts from market data...');
-            
-            // Use market sentiment timeline data as the primary source for chart (provides time-series data)
-            if (allSentiments.length > 0) {
-              const chartDataResult = generateChartData(allSentiments, timeRange);
-              setChartData(chartDataResult);
-            } else {
-              console.warn('[CHART DEBUG] No market sentiment timeline data available for chart generation');
-              setChartData([]);
-            }
-          } catch (chartError) {
-            console.error('[CHART DEBUG] Error generating chart from market timeline data:', chartError);
-            setChartData([]);
-          }
         } else {
-          // 🔧 FIX: If no ticker data at all, set all arrays to empty
           setTopSentiments([]);
-          setFinvizSentiments([]);
-          setYahooSentiments([]);
-          setCombinedSentiments([]);
-          setChartData([]);
         }
+        
+        // 🔧 FIX: Use watchlist APIs for all users - backend handles tier limits
+        updateProgress(60, 'Fetching FinViz sentiment data from your watchlist...');
+        
+        // Fetch FinViz data using watchlist API for all users
+        let finvizData: SentimentData[] = [];
+        try {
+          console.log('🔍 FETCHING FinViz watchlist sentiment...');
+          const finvizSignal = requestManager.getSignal(REQUEST_KEYS.finviz);
+          finvizData = await fetchWatchlistFinvizSentiment(timeRange, finvizSignal);
+          console.log(`🔍 FinViz sentiment result: ${finvizData.length} items`, finvizData.slice(0, 3));
+          setFinvizSentiments(finvizData);
+        } catch (finvizError) {
+          console.error('❌ FinViz sentiment API error:', finvizError);
+          logger.error('FinViz sentiment data error:', finvizError);
+          setFinvizSentiments([]);
+        }
+        
+        // Fetch Yahoo data using watchlist API for all users
+        updateProgress(75, 'Fetching Yahoo sentiment data from your watchlist...');
+        let yahooData: SentimentData[] = [];
+        try {
+          console.log('🔍 FETCHING Yahoo watchlist sentiment...');
+          const yahooSignal = requestManager.getSignal(REQUEST_KEYS.yahoo);
+          yahooData = await fetchWatchlistYahooSentiment(timeRange, yahooSignal);
+          console.log(`🔍 Yahoo sentiment result: ${yahooData.length} items`, yahooData.slice(0, 3));
+          setYahooSentiments(yahooData);
+        } catch (yahooError) {
+          console.error('❌ Yahoo sentiment API error:', yahooError);
+          logger.error('Yahoo Finance sentiment data error:', yahooError);
+          setYahooSentiments([]);
+        }
+        
+        // Build combined data with available results (no fallback data)
+        const sourcesToMerge: SentimentData[][] = [];
+        if (tickerSentimentData.length > 0) {
+          const diverseSentiments = ensureTickerDiversity(tickerSentimentData, 10);
+          sourcesToMerge.push(diverseSentiments);
+        }
+        if (finvizData.length > 0) sourcesToMerge.push(finvizData);
+        if (yahooData.length > 0) sourcesToMerge.push(yahooData);
+        
+        const mergedSentimentData = mergeSentimentData(...sourcesToMerge);
+        const combinedSentiments = aggregateByTicker(mergedSentimentData);
+        setCombinedSentiments(combinedSentiments);
         
         updateLoadingState({
           sentiment: false,
@@ -676,12 +716,53 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
     }
   }, [timeRange, lastTimeRange, loadData]);
 
-  // Load data when component mounts or when access changes
+  // Handle Reddit access changes - clear cache when access level changes
   useEffect(() => {
-    if (apiKeysReady) {
+    // Force refresh when real hasRedditAccess value becomes available (from null)
+    // or when access level actually changes
+    const shouldRefresh = (lastRedditAccess === null) || (lastRedditAccess !== hasRedditAccess);
+    
+    if (shouldRefresh && apiKeysReady) {
+      console.log(`🔄 SENTIMENT HOOK: Reddit access ${lastRedditAccess === null ? 'initialized' : 'changed from ' + lastRedditAccess} to ${hasRedditAccess}, refreshing data...`);
+      
+      // Cancel any in-progress loads since we need to restart with new access level
+      requestManager.abort();
+      loadingRef.current = false; // Reset loading ref to allow new load
+      
+      // Only clear cache if this is an actual change (not initialization)
+      if (lastRedditAccess !== null) {
+        // Clear cached data when Reddit access changes to force fresh fetch
+        localStorage.removeItem('sentiment_allSentiments');
+        localStorage.removeItem('sentiment_allTickerSentiments');
+        localStorage.removeItem('sentiment_cachedRedditPosts');
+        localStorage.removeItem('sentiment_lastFetchTime');
+        
+        // Reset cached data in state
+        setAllSentiments([]);
+        setAllTickerSentiments([]);
+        setCachedRedditPosts([]);
+        setLastFetchTime(null);
+      }
+      
+      // Update last known Reddit access state
+      setLastRedditAccess(hasRedditAccess);
+      
+      // Clear any existing errors
+      setErrors({
+        sentiment: null,
+        posts: null,
+        chart: null,
+        rateLimited: false
+      });
+      
+      // Trigger fresh data load with new access level
       loadData();
     }
-  }, [loadData, apiKeysReady, hasRedditAccess]);
+  }, [hasRedditAccess, lastRedditAccess, apiKeysReady, loadData, requestManager]);
+
+  // Load data when component mounts or when access changes
+  // Note: Initial load is now handled by the Reddit access change effect above
+  // to ensure proper access level is used from the start
   
   // Cleanup effect
   useEffect(() => {

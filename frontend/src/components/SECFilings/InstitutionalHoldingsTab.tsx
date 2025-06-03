@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { InstitutionalHolding, TimeRange } from '../../types';
-import { fetchInstitutionalHoldings } from '../../services/api';
+import { fetchInstitutionalHoldingsWithUserCache } from '../../services/api';
 import { AlertTriangle, Info, ArrowUpDown } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface InstitutionalHoldingsTabProps {
   timeRange: TimeRange;
@@ -46,20 +47,65 @@ const InstitutionalHoldingsTab: React.FC<InstitutionalHoldingsTabProps> = ({
     }
   }, [initialData, propError]);
   
-  // Load data when component mounts or forceReload changes
+  // Load data when component mounts or when explicitly requested
+  // Using a ref to track if we've started loading to avoid repeat calls
+  const isLoadingRef = React.useRef(false);
+  const lastLoadParamsRef = React.useRef({ timeRange: timeRange, hasInitialLoad: false }); // Initialize with current timeRange
+  
   useEffect(() => {
-    // If we have initialData and don't need to force reload, use the cache
-    if (initialData && initialData.length > 0 && !forceReload) {
-      console.log('Using cached institutional holdings data, no reload needed');
+    // Simple parameter tracking - only care about timeRange changes
+    const hasTimeRangeChanged = timeRange !== lastLoadParamsRef.current.timeRange;
+    const hasNoData = initialData.length === 0;
+    const hasNoInitialLoad = !lastLoadParamsRef.current.hasInitialLoad;
+    
+    console.log(`🔄 INSTITUTIONAL TAB: useEffect triggered`, {
+      isLoading,
+      isLoadingRef: isLoadingRef.current,
+      hasTimeRangeChanged,
+      forceReload,
+      timeRange,
+      lastTimeRange: lastLoadParamsRef.current.timeRange,
+      hasNoData,
+      hasNoInitialLoad,
+      error
+    });
+
+    // Don't load if already loading
+    if (isLoadingRef.current) {
+      console.log('🔄 INSTITUTIONAL TAB: Load already in progress, skipping...');
       return;
     }
-    
-    // Otherwise load fresh data with the forceReload flag
-    console.log(`Loading fresh institutional holdings data with forceReload=${forceReload}`);
-    // Only force an API refresh if forceReload is explicitly true
-    const shouldRefresh = forceReload === true;
-    loadData(shouldRefresh);
-  }, [timeRange, forceReload, initialData.length]);
+
+    // Don't retry if we have a credit error - user needs to get more credits
+    if (error && (error.includes('credits') || error.includes('INSUFFICIENT_CREDITS'))) {
+      console.log('🔄 INSTITUTIONAL TAB: Credit error detected, not retrying until user gets more credits');
+      return;
+    }
+
+    // Determine if we should load data
+    const shouldLoad = 
+      (hasTimeRangeChanged && !isLoading) ||                    // Time range changed and not currently loading
+      (hasNoInitialLoad && hasNoData && !isLoading) ||         // Initial load needed
+      (forceReload && !isLoading);                              // Forced reload requested
+
+    if (shouldLoad) {
+      console.log('🔄 INSTITUTIONAL TAB: Conditions met, starting loading process');
+      
+      // Update tracking IMMEDIATELY to prevent retriggering
+      lastLoadParamsRef.current = { timeRange, hasInitialLoad: true };
+      
+      // Start the loading process
+      const needsRefresh = forceReload || hasTimeRangeChanged;
+      loadData(needsRefresh);
+    } else {
+      console.log('🔄 INSTITUTIONAL TAB: No action taken', {
+        reason: isLoading ? 'already loading' :
+                isLoadingRef.current ? 'loading ref true' :
+                !hasTimeRangeChanged && !forceReload && lastLoadParamsRef.current.hasInitialLoad ? 'no changes' :
+                error ? 'has error' : 'unknown'
+      });
+    }
+  }, [timeRange, forceReload]); // Removed isLoading, initialData.length, error from deps to prevent feedback loops
   
   const [sortConfig, setSortConfig] = useState<{
     key: string;
@@ -114,6 +160,12 @@ const InstitutionalHoldingsTab: React.FC<InstitutionalHoldingsTabProps> = ({
   
   // Filter function to exclude SEC administrative codes and non-tradeable identifiers
   const filterTradeableSecurities = (holdings: InstitutionalHolding[]): InstitutionalHolding[] => {
+    // Safety check: ensure holdings is a valid array
+    if (!holdings || !Array.isArray(holdings)) {
+      console.warn('filterTradeableSecurities: received invalid holdings data:', holdings);
+      return [];
+    }
+    
     return holdings.filter(holding => {
       const ticker = holding.ticker;
       if (!ticker || ticker === '-') return false;
@@ -131,7 +183,16 @@ const InstitutionalHoldingsTab: React.FC<InstitutionalHoldingsTabProps> = ({
   
   // Helper function to filter holdings by timeRange
   const filterHoldingsByTimeRange = (holdings: InstitutionalHolding[], range: TimeRange): InstitutionalHolding[] => {
-    if (!holdings || holdings.length === 0) return holdings;
+    // Safety check: ensure holdings is a valid array
+    if (!holdings || !Array.isArray(holdings)) {
+      console.warn('filterHoldingsByTimeRange: received invalid holdings data:', holdings);
+      return [];
+    }
+    
+    if (holdings.length === 0) {
+      console.log('🗓️ FILTERING: No holdings to filter');
+      return holdings;
+    }
     
     const now = new Date();
     let cutoffDate: Date;
@@ -166,56 +227,114 @@ const InstitutionalHoldingsTab: React.FC<InstitutionalHoldingsTabProps> = ({
   
   // Load data from API
   const loadData = async (refresh: boolean = false) => {
-    console.log(`Loading institutional holdings for time range: ${timeRange}, refresh: ${refresh}`);
+    // CRITICAL FIX: Check loading state and set it atomically
+    if (isLoadingRef.current) {
+      console.log('📋 INSTITUTIONAL TAB: Load already in progress, skipping...');
+      return;
+    }
     
-    setError(null);
-    onLoadingChange(true, 0, 'Initializing institutional holdings data...');
+    // CRITICAL FIX: Set loading state here, not in useEffect
+    isLoadingRef.current = true;
     
-    // Total steps in loading process
-    const totalSteps = 4;
+    // Set up timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      if (isLoadingRef.current) {
+        console.warn('📋 INSTITUTIONAL TAB: Loading timeout reached, resetting...');
+        isLoadingRef.current = false;
+        setError('Loading timeout - please try again');
+        onLoadingChange(false, 0, 'Loading timeout', [], 'Loading timeout - please try again');
+      }
+    }, 60000); // 60 second timeout
     
-    // Helper function to update progress
+    // Start with loading animation - especially important for initial fetch
     const updateProgress = (step: number, stage: string) => {
-      const progressPercentage = Math.round((step / totalSteps) * 100);
-      console.log(`Institutional holdings loading progress: ${progressPercentage}%, Stage: ${stage}`);
-      onLoadingChange(true, progressPercentage, stage);
+      console.log(`🔄 INSTITUTIONAL TAB: Institutional holdings loading progress: ${step}%, Stage: ${stage}`);
+      onLoadingChange(true, step, stage, [], null);
     };
     
     try {
-      // Step 1: Fetch institutional holdings with refresh parameter
-      updateProgress(1, 'Fetching institutional holdings data...');
-      const allHoldings = await fetchInstitutionalHoldings(timeRange, refresh);
-      console.log(`Received ${allHoldings.length} institutional holdings from API`);
+      // Show initial loading state with proper animation
+      updateProgress(0, 'Initializing institutional holdings data...');
       
-      // Step 2: Apply frontend timeRange filtering
-      updateProgress(2, 'Filtering holdings by time range...');
-      const filteredHoldings = filterHoldingsByTimeRange(allHoldings, timeRange);
-      console.log(`Filtered to ${filteredHoldings.length} holdings for ${timeRange} range`);
+      // Add longer delay to ensure loading animation is visible
+      await new Promise(resolve => setTimeout(resolve, 800));
       
-      // Log a sample holding to help with debugging
-      if (filteredHoldings.length > 0) {
-        console.log('Sample filtered institutional holding:', JSON.stringify(filteredHoldings[0], null, 2));
+      updateProgress(25, 'Fetching institutional holdings data...');
+      
+      // Add delay before API call to show the fetching stage
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const data = await fetchInstitutionalHoldingsWithUserCache(timeRange, refresh);
+      
+      if (!data || !Array.isArray(data)) {
+        console.warn('📋 INSTITUTIONAL TAB: Invalid or missing institutional holdings data in response:', data);
+        setError('Failed to load institutional holdings data');
+        onLoadingChange(false, 0, 'Error loading institutional holdings', [], 'Invalid data received from server');
+        return;
       }
       
-      // Step 3: Update state with filtered holdings
-      updateProgress(3, 'Organizing holdings data...');
-      setInstitutionalHoldings(filteredHoldings);
+      updateProgress(50, 'Filtering holdings by time range...');
       
-      // Step 4: Analyze for concentration patterns
-      updateProgress(4, 'Finalizing institutional holdings display...');
-      setTimeout(() => {
-        onLoadingChange(false, 100, 'Institutional holdings loaded successfully', filteredHoldings, null);
-      }, 300);
+      // Add longer delay for UX during filtering
+      await new Promise(resolve => setTimeout(resolve, 600));
+      
+      const filteredHoldings = filterHoldingsByTimeRange(data, timeRange);
+      const tradeableHoldings = filterTradeableSecurities(filteredHoldings);
+      
+      console.log(`🔄 INSTITUTIONAL TAB: Filtered to ${tradeableHoldings.length} holdings for ${timeRange} range`);
+      
+      if (tradeableHoldings.length > 0) {
+        console.log('🔄 INSTITUTIONAL TAB: Sample filtered institutional holding:', tradeableHoldings[0]);
+      }
+      
+      updateProgress(75, 'Organizing holdings data...');
+      
+      // Add longer delay for organizing data
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      updateProgress(100, 'Finalizing institutional holdings display...');
+      
+      // Longer final delay to show completion
+      await new Promise(resolve => setTimeout(resolve, 400));
+      
+      setInstitutionalHoldings(tradeableHoldings);
+      setError(null);
+      
+      console.log(`🔄 INSTITUTIONAL TAB: Calling onLoadingChange with ${tradeableHoldings.length} filtered holdings`);
+      onLoadingChange(false, 100, 'Institutional holdings loaded successfully', tradeableHoldings, null);
+      
     } catch (error) {
-      console.error('Institutional holdings error:', error);
+      console.error('❌ INSTITUTIONAL TAB: Error in loadData:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch institutional holdings data';
-      setError(errorMessage);
-      onLoadingChange(false, 0, 'Error loading institutional holdings', [], errorMessage);
+      
+      // Handle specific credit errors
+      let finalErrorMessage = errorMessage;
+      if (errorMessage.includes('credits') || errorMessage.includes('INSUFFICIENT_CREDITS')) {
+        console.warn('❌ INSTITUTIONAL TAB: Credit error detected, user needs more credits');
+        finalErrorMessage = 'You need 10 credits to access SEC filings data. Please upgrade your plan or wait for credits to refresh.';
+      }
+      
+      setError(finalErrorMessage);
+      onLoadingChange(false, 0, 'Error loading institutional holdings', [], finalErrorMessage);
+    } finally {
+      // Always ensure loading ref is reset in finally block
+      isLoadingRef.current = false;
+      
+      // Clear timeout if it exists
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     }
   };
   
   // Sort holdings by the configured sort key
   const sortInstitutionalHoldings = (holdings: InstitutionalHolding[]): InstitutionalHolding[] => {
+    // Safety check: ensure holdings is a valid array
+    if (!holdings || !Array.isArray(holdings)) {
+      console.warn('sortInstitutionalHoldings: received invalid holdings data:', holdings);
+      return [];
+    }
+    
     return [...holdings].sort((a, b) => {
       switch (sortConfig.key) {
         case 'filingDate':
@@ -273,43 +392,6 @@ const InstitutionalHoldingsTab: React.FC<InstitutionalHoldingsTabProps> = ({
           : 'ascending'
     });
   };
-  
-  // Load data when component mounts or when explicitly requested
-  // Using a ref to track if we've started loading to avoid repeat calls
-  const isLoadingRef = React.useRef(false);
-  const lastLoadParamsRef = React.useRef({ timeRange: '', forceReload: false });
-  
-  useEffect(() => {
-    // Create a unique key for the current load parameters
-    const currentParams = { timeRange, forceReload };
-    const paramsChanged = JSON.stringify(currentParams) !== JSON.stringify(lastLoadParamsRef.current);
-    const timeRangeChanged = timeRange !== lastLoadParamsRef.current.timeRange;
-    
-    // Only load if:
-    // 1. We're supposed to be loading AND haven't started yet
-    // 2. OR the parameters have changed (timeRange or forceReload) - this should trigger fresh data
-    if ((isLoading && !isLoadingRef.current) || (paramsChanged && (forceReload || timeRangeChanged))) {
-      // Mark that we've started the loading process
-      isLoadingRef.current = true;
-      lastLoadParamsRef.current = currentParams;
-      
-      // Determine if we should use cached data or fetch fresh
-      // Never use cache if forceReload is requested (manual refresh) OR timeRange changed
-      const hasValidCache = initialData && initialData.length > 0 && !forceReload && !timeRangeChanged;
-      
-      if (hasValidCache && !forceReload && !timeRangeChanged) {
-        console.log('Using cached institutional holdings data, no API call needed');
-        // Notify parent that loading is complete
-        onLoadingChange(false, 100, 'Institutional holdings loaded from cache', initialData, null);
-      } else {
-        console.log(`Loading fresh institutional holdings data: timeRange=${timeRange}, forceReload=${forceReload}, timeRangeChanged=${timeRangeChanged}`);
-        loadData(forceReload || paramsChanged);
-      }
-    } else if (!isLoading && !forceReload) {
-      // Reset the ref when loading is complete
-      isLoadingRef.current = false;
-    }
-  }, [timeRange, isLoading, forceReload, initialData.length, onLoadingChange]);
   
   // Filter out SEC administrative codes and then sort
   const filteredHoldings = filterTradeableSecurities(institutionalHoldings);

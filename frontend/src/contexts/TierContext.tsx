@@ -81,9 +81,14 @@ export const TierProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const data = await response.json();
       
+      console.log('🔍 TierContext: Received data:', data);
+      
       if (data.success) {
+        console.log('✅ TierContext: Setting tierInfo to:', data.data);
         setTierInfo(data.data);
+        console.log('✅ TierContext: tierInfo state should be updated');
       } else {
+        console.error('❌ TierContext: API returned success=false:', data);
         throw new Error(data.error || 'Failed to fetch tier info');
       }
     } catch (err) {
@@ -214,6 +219,18 @@ export const TierProvider: React.FC<{ children: React.ReactNode }> = ({ children
       delete (window as any).debugTierInfo;
     };
   }, [isAuthenticated, token]);
+
+  // Separate useEffect to track tierInfo changes and expose to window
+  useEffect(() => {
+    // Expose current tierInfo for debugging and update when it changes
+    (window as any).tierInfo = tierInfo;
+    console.log('🔍 TierContext: tierInfo state updated:', tierInfo);
+    
+    // Cleanup on unmount
+    return () => {
+      delete (window as any).tierInfo;
+    };
+  }, [tierInfo]); // This runs whenever tierInfo changes
 
   // Auto-refresh tier info periodically (every 30 seconds)
   useEffect(() => {

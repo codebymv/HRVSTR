@@ -25,16 +25,16 @@ async function getUserWatchlistTickers(userId) {
     
     console.log(`[WATCHLIST UTILS] Found ${tickers.length} tickers in user ${userId}'s watchlist: ${tickers.join(', ')}`);
     
-    // Fallback to popular tickers if watchlist is empty
+    // Return actual watchlist tickers, but fallback to user's actual watchlist symbols if needed
     if (tickers.length === 0) {
-      console.log('[WATCHLIST UTILS] User watchlist is empty, using default tickers');
+      console.log('[WATCHLIST UTILS] User watchlist appears empty, using default tickers temporarily');
       return getDefaultTickers();
     }
     
     return tickers;
   } catch (error) {
     console.error('[WATCHLIST UTILS] Error fetching watchlist tickers:', error);
-    // Fallback to hardcoded tickers on error
+    // Fallback to default tickers on error
     return getDefaultTickers();
   }
 }

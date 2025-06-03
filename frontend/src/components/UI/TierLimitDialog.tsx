@@ -10,7 +10,7 @@ interface TierLimitDialogProps {
   featureName?: string;
   currentTier?: string;
   upgradeMessage?: string;
-  context?: 'reddit' | 'watchlist' | 'search' | 'general';
+  context?: 'reddit' | 'watchlist' | 'search' | 'general' | 'sec' | 'institutional';
 }
 
 const TierLimitDialog: React.FC<TierLimitDialogProps> = ({
@@ -75,7 +75,9 @@ const TierLimitDialog: React.FC<TierLimitDialogProps> = ({
           {currentTier.toLowerCase() === 'free' && (
             <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
               <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">
-                {context === 'reddit' ? 'Free Tier Reddit Limits:' : 'Free Tier Daily Limits:'}
+                {context === 'reddit' ? 'Free Tier Reddit Limits:' : 
+                 context === 'sec' || context === 'institutional' ? 'Free Tier SEC Limits:' : 
+                 'Free Tier Daily Limits:'}
               </h4>
               <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
                 {context === 'reddit' ? (
@@ -89,49 +91,52 @@ const TierLimitDialog: React.FC<TierLimitDialogProps> = ({
                       <span className="font-medium">Limited</span>
                     </div>
                   </>
+                ) : context === 'sec' || context === 'institutional' ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span>• Insider trading data:</span>
+                      <span className="font-medium">Available</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>• Institutional holdings:</span>
+                      <span className="font-medium">Not Available</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>• 13F filings analysis:</span>
+                      <span className="font-medium">Not Available</span>
+                    </div>
+                  </>
                 ) : context === 'watchlist' ? (
                   <>
                     <div className="flex justify-between">
-                      <span>• Stock searches:</span>
-                      <span className="font-medium">25/day</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>• Price updates:</span>
-                      <span className="font-medium">25/day</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>• Watchlist items:</span>
+                      <span>• Max watchlist stocks:</span>
                       <span className="font-medium">5 stocks</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>• Real-time updates:</span>
+                      <span className="font-medium">Limited</span>
                     </div>
                   </>
                 ) : context === 'search' ? (
                   <>
                     <div className="flex justify-between">
-                      <span>• Stock searches:</span>
-                      <span className="font-medium">25/day</span>
+                      <span>• Stock searches per day:</span>
+                      <span className="font-medium">50 searches</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>• Search results:</span>
-                      <span className="font-medium">Basic</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>• Real-time data:</span>
-                      <span className="font-medium">Limited</span>
+                      <span>• Advanced filters:</span>
+                      <span className="font-medium">Not Available</span>
                     </div>
                   </>
                 ) : (
                   <>
                     <div className="flex justify-between">
-                      <span>• Stock searches:</span>
-                      <span className="font-medium">25/day</span>
+                      <span>• Daily API calls:</span>
+                      <span className="font-medium">10 calls</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>• Price updates:</span>
-                      <span className="font-medium">25/day</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>• Watchlist items:</span>
-                      <span className="font-medium">5 stocks</span>
+                      <span>• Monthly credits:</span>
+                      <span className="font-medium">50 credits</span>
                     </div>
                   </>
                 )}
@@ -156,6 +161,14 @@ const TierLimitDialog: React.FC<TierLimitDialogProps> = ({
                   <div>✓ Advanced sentiment analysis</div>
                   <div>✓ Real-time social media monitoring</div>
                   <div>✓ Multi-platform sentiment tracking</div>
+                </>
+              ) : context === 'sec' || context === 'institutional' ? (
+                <>
+                  <div>✓ Institutional holdings analysis</div>
+                  <div>✓ 13F filing data & insights</div>
+                  <div>✓ Smart money tracking</div>
+                  <div>✓ Quarterly holding changes</div>
+                  <div>✓ Advanced SEC filing analysis</div>
                 </>
               ) : context === 'watchlist' ? (
                 <>
@@ -184,20 +197,19 @@ const TierLimitDialog: React.FC<TierLimitDialogProps> = ({
         </div>
 
         {/* Actions */}
-        <div className="flex space-x-3 justify-end">
+        <div className="flex justify-end space-x-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+            className="px-4 py-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
           >
             Maybe Later
           </button>
-          <button
-            onClick={handleUpgradeClick}
-            className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg transition-all transform hover:scale-105 flex items-center space-x-2"
+          <a
+            href="/settings/tiers"
+            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
           >
-            <span>View Tiers</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
+            View Tiers
+          </a>
         </div>
       </div>
     </div>

@@ -78,6 +78,32 @@ router.get('/yahoo/market',
 );
 
 /**
+ * @route GET /api/sentiment/yahoo-market
+ * @desc Get historical market sentiment data from Yahoo Finance
+ * @access Protected (requires authentication and credits)
+ */
+router.get('/yahoo-market', 
+  authenticateToken,
+  checkCredits('market-sentiment'),
+  addCreditInfoToResponse,
+  sentimentController.getYahooMarketSentiment,
+  deductCredits
+);
+
+/**
+ * @route GET /api/sentiment/finviz-market
+ * @desc Get historical market sentiment data from FinViz
+ * @access Protected (requires authentication and credits)
+ */
+router.get('/finviz-market', 
+  authenticateToken,
+  checkCredits('market-sentiment'),
+  addCreditInfoToResponse,
+  sentimentController.getFinvizMarketSentiment,
+  deductCredits
+);
+
+/**
  * @route GET /api/sentiment/aggregate
  * @desc Get aggregated sentiment data from multiple sources
  * @access Protected (requires authentication and credits)

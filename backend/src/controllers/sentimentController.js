@@ -160,10 +160,27 @@ async function getYahooSentiment(req, res) {
  */
 async function getYahooMarketSentiment(req, res) {
   try {
-    const result = await yahooSentimentService.getYahooMarketSentiment();
+    const { timeRange = '1w' } = req.query;
+    const result = await yahooSentimentService.getYahooMarketSentiment(timeRange);
     res.json(result);
   } catch (error) {
     console.error('Yahoo market sentiment error:', error);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+/**
+ * Get market sentiment data from FinViz
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+async function getFinvizMarketSentiment(req, res) {
+  try {
+    const { timeRange = '1w' } = req.query;
+    const result = await finvizSentimentService.getFinvizMarketSentiment(timeRange);
+    res.json(result);
+  } catch (error) {
+    console.error('FinViz market sentiment error:', error);
     res.status(500).json({ error: error.message });
   }
 }
@@ -221,5 +238,6 @@ module.exports = {
   getFinvizSentiment,
   getYahooSentiment,
   getYahooMarketSentiment,
+  getFinvizMarketSentiment,
   getAggregatedSentiment
 };

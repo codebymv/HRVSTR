@@ -77,6 +77,20 @@ router.get('/filing/:accessionNumber', secController.getFilingDetails);
 router.get('/summary/:ticker', authenticateToken, secController.getTickerSummary);
 
 /**
+ * @route GET /api/sec/cache/status
+ * @desc Get user's SEC data cache status and expiration times
+ * @access Authenticated - Requires valid user token
+ */
+router.get('/cache/status', authenticateToken, secController.getUserCacheStatus);
+
+/**
+ * @route DELETE /api/sec/cache/clear
+ * @desc Clear user's SEC data cache (forces fresh fetch on next request)
+ * @access Authenticated - Requires valid user token
+ */
+router.delete('/cache/clear', authenticateToken, secController.clearUserCache);
+
+/**
  * @route GET /api/sec/clear-cache
  * @desc Clear the SEC data cache (for development and testing)
  * @access Public - Available to all tiers

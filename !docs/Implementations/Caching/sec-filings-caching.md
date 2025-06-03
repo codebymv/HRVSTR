@@ -1,247 +1,421 @@
 # SEC Filings Caching Implementation
 
-This document examines the caching implementation for the SEC Filings feature in the HRVSTR application.
+## Overview
 
-## 1. SEC Filings Dashboard Architecture
+The SEC filings caching system has been redesigned to use PostgreSQL database tables instead of localStorage, providing user-specific caching with cross-device access, tier-based expiration, and credit integration.
 
-The SEC Filings feature implements a comprehensive caching strategy using both localStorage and server-side caching mechanisms.
+## Architecture Changes
 
-### Dashboard-Level Caching
+### Previous Implementation (localStorage)
+- ❌ Client-side only storage
+- ❌ Device-specific cache
+- ❌ No user isolation
+- ❌ Fixed expiration times
+- ❌ Memory limitations
 
-The central component managing SEC filing data is the `SECFilingsDashboard`, which implements:
+### Current Implementation (PostgreSQL)
+- ✅ Server-side database storage
+- ✅ Cross-device synchronization
+- ✅ User-specific isolation
+- ✅ Tier-based expiration
+- ✅ Scalable storage
+- ✅ Credit system integration
 
-```typescript
-// Cached data state with localStorage persistence
-const [insiderTradesData, setInsiderTradesData] = useState<any[]>(() => {
-  try {
-    const cached = localStorage.getItem('secFilings_insiderTrades');
-    return cached ? JSON.parse(cached) : [];
-  } catch (e) {
-    console.error('Error loading cached insider trades:', e);
-    return [];
+## Database Schema
+
+### Core Tables
+1. **`user_sec_cache`** - Main cache metadata and small payloads
+2. **`user_sec_insider_trades`** - Optimized insider trading data storage
+3. **`user_sec_institutional_holdings`** - 13F filings and institutional data
+
+See [Database Schema Documentation](../../Data/user_sec_cache-postgres.md) for detailed table structures.
+
+## Cache Service Architecture
+
+### userSecCacheService.js
+
+Located at: `backend/services/userSecCacheService.js`
+
+```javascript
+class UserSecCacheService {
+  // Tier-based expiration times
+  static getExpirationTime(tier) {
+    const expirationTimes = {
+      'free': 3600,        // 1 hour
+      'pro': 21600,        // 6 hours  
+      'elite': 43200,      // 12 hours
+      'institutional': 86400 // 24 hours
+    };
+    return expirationTimes[tier] || expirationTimes.free;
   }
-});
 
-const [institutionalHoldingsData, setInstitutionalHoldingsData] = useState<any[]>(() => {
-  try {
-    const cached = localStorage.getItem('secFilings_institutionalHoldings');
-    return cached ? JSON.parse(cached) : [];
-  } catch (e) {
-    console.error('Error loading cached institutional holdings:', e);
-    return [];
+  // Generate cache key
+  static generateCacheKey(dataType, timeRange, tier) {
+    return `${dataType}_${timeRange}_${tier}_${Date.now()}`;
   }
-});
+
+  // Main cache management
+  async getSecData(userId, dataType, timeRange, tier, forceRefresh = false)
+  async clearUserCache(userId)
+}
 ```
 
-The dashboard loads cached data from localStorage on initialization, providing immediate data display without waiting for API responses.
+### Cache Flow
 
-## 2. Cache Freshness Management
+```mermaid
+graph TD
+    A[API Request] --> B{Force Refresh?}
+    B -->|No| C[Check Cache]
+    B -->|Yes| H[Check Credits]
+    C --> D{Cache Hit?}
+    D -->|Yes| E[Return Cached Data]
+    D -->|No| F[Check Credits]
+    F --> G{Sufficient Credits?}
+    G -->|Yes| I[Fetch from SEC API]
+    G -->|No| J[Return Credit Error]
+    H --> K{Sufficient Credits?}
+    K -->|Yes| L[Clear Cache & Fetch]
+    K -->|No| J
+    I --> M[Store in Cache Tables]
+    L --> M
+    M --> N[Deduct Credits]
+    N --> E
+```
 
-The SEC Filings dashboard implements sophisticated cache freshness management:
+## API Integration
 
-```typescript
-// Helper function to check if data is stale (older than 30 minutes)
-const isDataStale = (timestamp: number | null): boolean => {
-  if (!timestamp) return true;
-  const thirtyMinutesInMs = 30 * 60 * 1000;
-  return Date.now() - timestamp > thirtyMinutesInMs;
+### Controller Updates
+
+**secController.js** - Updated to use database caching:
+
+```javascript
+// Insider Trades
+exports.getInsiderTrades = async (req, res) => {
+  const { timeRange } = req.query;
+  const userId = req.user?.id;
+  const tier = req.user?.tier || 'free';
+  
+  try {
+    const data = await userSecCacheService.getSecData(
+      userId, 
+      'insider_trades', 
+      timeRange, 
+      tier, 
+      req.query.refresh === 'true'
+    );
+    
+    res.json(data);
+  } catch (error) {
+    if (error.message.includes('INSUFFICIENT_CREDITS')) {
+      return res.status(402).json({ error: error.message });
+    }
+    res.status(500).json({ error: error.message });
+  }
 };
 
-// Track the last fetch time for each data type
-const [lastFetchTime, setLastFetchTime] = useState<{
-  insiderTrades: number | null,
-  institutionalHoldings: number | null
-}>(() => {
-  try {
-    const cached = localStorage.getItem('secFilings_lastFetchTime');
-    return cached ? JSON.parse(cached) : { insiderTrades: null, institutionalHoldings: null };
-  } catch (e) {
-    console.error('Error loading cached fetch times:', e);
-    return { insiderTrades: null, institutionalHoldings: null };
-  }
-});
+// Institutional Holdings  
+exports.getInstitutionalHoldings = async (req, res) => {
+  // Similar implementation for institutional data
+};
+
+// Cache Management
+exports.clearUserSecCache = async (req, res) => {
+  const userId = req.user?.id;
+  await userSecCacheService.clearUserCache(userId);
+  res.json({ success: true });
+};
 ```
 
-Key features:
-- Tracks last fetch time for different data types
-- Uses a 30-minute staleness threshold
-- Automatically triggers reload for stale data
-- Persists timestamps in localStorage for persistence across sessions
+### API Endpoints
 
-## 3. User Preferences Caching
-
-The SEC Filings page also caches user preferences for a consistent experience:
-
-```typescript
-const [timeRange, setTimeRange] = useState<TimeRange>(() => {
-  try {
-    return (localStorage.getItem('secFilings_timeRange') as TimeRange) || '1m';
-  } catch (e) {
-    return '1m';
-  }
-});
-
-const [activeTab, setActiveTab] = useState<'insider' | 'institutional'>(() => {
-  try {
-    return (localStorage.getItem('secFilings_activeTab') as 'insider' | 'institutional') || 'insider';
-  } catch (e) {
-    return 'insider';
-  }
-});
+```
+GET  /api/sec/insider-trades?timeRange=1m&refresh=false
+GET  /api/sec/institutional-holdings?timeRange=1m&refresh=false  
+GET  /api/sec/insider-trades/stream?timeRange=1m&refresh=true
+POST /api/sec/clear-user-cache
 ```
 
-This ensures the user's selected time range and active tab are preserved across sessions.
+## Frontend Integration
 
-## 4. API-Level Caching
+### API Service Updates
 
-The SEC filing data is fetched through the application's API service, which implements caching control parameters:
+**frontend/src/services/api.ts**:
 
 ```typescript
-export async function fetchInsiderTrades(timeRange: TimeRange = '1m', refresh: boolean = false, signal?: AbortSignal): Promise<InsiderTrade[]> {
+// Updated to use user cache system
+export const fetchInsiderTradesWithUserCache = async (
+  timeRange: TimeRange, 
+  refresh: boolean = false
+): Promise<InsiderTrade[]> => {
+  const params = new URLSearchParams({
+    timeRange,
+    refresh: refresh.toString()
+  });
+  
+  const response = await apiClient.get(`/sec/insider-trades?${params}`);
+  return response.data;
+};
+
+export const clearUserSecCache = async (): Promise<void> => {
+  await apiClient.post('/sec/clear-user-cache');
+};
+```
+
+### Component Updates
+
+**SECFilingsDashboard.tsx** - Removed localStorage dependencies:
+
+```typescript
+// REMOVED: localStorage state management
+// const [data, setData] = useState(() => {
+//   try {
+//     const cached = localStorage.getItem('secFilings_data');
+//     return cached ? JSON.parse(cached) : [];
+//   } catch (e) {
+//     return [];
+//   }
+// });
+
+// NEW: Simple state management, server handles caching
+const [insiderTradesData, setInsiderTradesData] = useState<any[]>([]);
+const [institutionalHoldingsData, setInstitutionalHoldingsData] = useState<any[]>([]);
+
+// Cache refresh now clears backend cache
+const handleRefresh = async () => {
   try {
-    const proxyUrl = getProxyUrl();
-    const refreshParam = refresh ? '&refresh=true' : '';
-    const response = await fetch(`${proxyUrl}/api/sec/insider-trades?timeRange=${timeRange}${refreshParam}`, { signal });
-    
-    if (!response.ok) {
-      throw new Error(`Proxy server returned error: ${response.status}`);
+    await clearUserSecCache(); // Clear server-side cache
+    // Trigger fresh data fetch
+  } catch (error) {
+    console.error('Error clearing cache:', error);
+  }
+};
+```
+
+## Cache Management Features
+
+### Tier-Based Expiration
+
+Cache expiration varies by user tier:
+
+```javascript
+const expirationTimes = {
+  'free': 3600,        // 1 hour - encourages upgrades
+  'pro': 21600,        // 6 hours - good balance
+  'elite': 43200,      // 12 hours - premium experience
+  'institutional': 86400 // 24 hours - enterprise level
+};
+```
+
+### Credit Integration
+
+```javascript
+async function checkAndDeductCredits(userId, tier, dataType) {
+  const creditCost = getCreditCost(dataType); // 10 credits for SEC data
+  
+  const userCredits = await getUserCredits(userId);
+  if (userCredits < creditCost) {
+    throw new Error('INSUFFICIENT_CREDITS');
+  }
+  
+  await deductCredits(userId, creditCost, {
+    service: 'sec_filings',
+    data_type: dataType,
+    tier: tier
+  });
+}
+```
+
+### Cross-Device Synchronization
+
+Data is automatically synchronized across devices for the same user:
+
+1. **User A** fetches insider trades on Desktop → Cached in database
+2. **User A** opens mobile app → Same cached data served
+3. **Cache expires** based on tier → Next request fetches fresh data
+
+### Force Refresh Mechanism
+
+```javascript
+// Force refresh bypasses cache entirely
+if (forceRefresh) {
+  // Clear existing cache for this data type
+  await this.clearCache(userId, dataType, timeRange);
+  
+  // Fetch fresh data from SEC API
+  const freshData = await fetchFromSecAPI(dataType, timeRange);
+  
+  // Store in cache with new expiration
+  await this.storeCache(userId, dataType, timeRange, tier, freshData);
+  
+  return freshData;
+}
+```
+
+## Error Handling
+
+### Credit Errors
+
+```typescript
+// Frontend error handling
+catch (error) {
+  if (error.message?.includes('credits') || error.message?.includes('INSUFFICIENT_CREDITS')) {
+    setError('You need 10 credits to access SEC filings data. Please upgrade your plan or wait for credits to refresh.');
+    return; // Don't retry on credit errors
+  }
+  setError(errorMessage);
+}
+```
+
+### Cache Failures
+
+```javascript
+// Backend fallback to direct API
+async getSecData(userId, dataType, timeRange, tier, forceRefresh = false) {
+  try {
+    // Try cache first
+    if (!forceRefresh) {
+      const cached = await this.checkCache(userId, dataType, timeRange);
+      if (cached) return cached;
     }
     
-    const data = await response.json();
-    return data.insiderTrades as InsiderTrade[];
-  } catch (error) {
-    console.error('Insider trades API error:', error);
-    throw new Error(error instanceof Error ? error.message : 'Failed to fetch insider trades data');
+    // Fetch fresh data
+    return await this.fetchAndCache(userId, dataType, timeRange, tier);
+    
+  } catch (cacheError) {
+    console.error('Cache error, falling back to direct API:', cacheError);
+    
+    // Fallback: direct API call without caching
+    return await fetchFromSecAPI(dataType, timeRange);
   }
 }
 ```
 
-Key features:
-- `refresh` parameter to force server-side cache refresh
-- Signal support for request cancellation
-- Error handling with specific error messages
+## Performance Optimizations
 
-## 5. Cache Clearing Functionality
+### Database Indexes
 
-The SEC Filings feature provides explicit cache clearing functionality:
+Optimized queries with strategic indexes:
 
-```typescript
-export const clearSecCache = async (signal?: AbortSignal): Promise<{success: boolean, message: string}> => {
-  try {
-    const proxyUrl = getProxyUrl();
-    const response = await fetch(`${proxyUrl}/api/sec/clear-cache`, { signal });
-    
-    if (!response.ok) {
-      throw new Error(`Proxy server returned error: ${response.status}`);
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('Error clearing SEC cache:', error);
-    throw error;
-  }
-};
+```sql
+-- User-specific queries
+CREATE INDEX idx_user_sec_cache_user_id ON user_sec_cache(user_id);
+
+-- Expiration cleanup
+CREATE INDEX idx_user_sec_cache_expires_at ON user_sec_cache(expires_at);
+
+-- Data type filtering  
+CREATE INDEX idx_user_sec_cache_data_type ON user_sec_cache(data_type);
+
+-- Ticker-based searches
+CREATE INDEX idx_user_sec_insider_trades_ticker ON user_sec_insider_trades(ticker);
 ```
 
-This allows users to explicitly clear the server-side cache to ensure they get the freshest data when needed.
+### Query Optimization
 
-## 6. User Interface Cache Controls
-
-The SEC Filings dashboard exposes cache management to users through UI controls:
-
-```typescript
-<button
-  onClick={handleClearCache}
-  disabled={isClearingCache}
-  className={`p-2 rounded-full ${isLight ? 'hover:bg-stone-400' : 'hover:bg-gray-800'} ${isClearingCache ? 'opacity-50' : ''}`}
-  title="Clear SEC data cache"
->
-  {isClearingCache ? (
-    <Loader2 size={18} className={`${textColor} animate-spin`} />
-  ) : (
-    <Trash2 size={18} className={textColor} />
-  )}
-</button>
-
-<button
-  onClick={() => {
-    // Trigger reload by setting loading states and reload flags
-    setLoading({
-      insiderTrades: true,
-      institutionalHoldings: true
-    });
-    // Also set reload flags
-    setShouldReload({
-      insiderTrades: true,
-      institutionalHoldings: true
-    });
-    // Clear cached last fetch time to force fresh data
-    setLastFetchTime({
-      insiderTrades: null,
-      institutionalHoldings: null
-    });
-    localStorage.removeItem('secFilings_lastFetchTime');
-  }}
-  disabled={loading.insiderTrades || loading.institutionalHoldings}
-  className={`p-2 rounded-full ${isLight ? 'hover:bg-stone-400' : 'hover:bg-gray-800'} ${(loading.insiderTrades || loading.institutionalHoldings) ? 'opacity-50' : ''}`}
-  title="Refresh data"
->
-  {(loading.insiderTrades || loading.institutionalHoldings) ? (
-    <Loader2 size={18} className={`${textColor} animate-spin`} />
-  ) : (
-    <RefreshCw size={18} className={textColor} />
-  )}
-</button>
+```javascript
+// Efficient cache lookup
+async checkCache(userId, dataType, timeRange) {
+  const query = `
+    SELECT cache_key, expires_at 
+    FROM user_sec_cache 
+    WHERE user_id = $1 
+      AND data_type = $2 
+      AND time_range = $3 
+      AND expires_at > CURRENT_TIMESTAMP
+    ORDER BY created_at DESC 
+    LIMIT 1
+  `;
+  
+  const result = await db.query(query, [userId, dataType, timeRange]);
+  return result.rows[0];
+}
 ```
 
-These controls provide:
-- Visual feedback during cache operations
-- Explicit refresh and cache clearing options
-- Status indicators for in-progress operations
+### Memory Management
 
-## 7. Caching Lifecycle
+- **JSONB Storage**: Efficient storage for complex SEC data
+- **Lazy Loading**: Data tables only queried when cache hit confirmed
+- **Batch Operations**: Multiple cache entries processed in single transactions
 
-The SEC Filings caching follows a well-defined lifecycle:
+## Monitoring & Analytics
 
-1. **Initialization**:
-   - Load cached data from localStorage
-   - Check cache freshness
-   - Display cached data immediately
+### Cache Hit Rate Tracking
 
-2. **Auto Refresh**:
-   - Check if cached data is stale (>30 minutes)
-   - Trigger refresh for stale data
-   - Update cache with fresh data
+```javascript
+// Track cache performance
+async logCacheAccess(userId, dataType, cacheHit, tier) {
+  await db.query(`
+    INSERT INTO cache_analytics (user_id, data_type, cache_hit, tier, timestamp)
+    VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+  `, [userId, dataType, cacheHit, tier]);
+}
+```
 
-3. **Manual Operations**:
-   - Refresh: Force reload data while preserving cache
-   - Clear: Remove server-side cache and reload
+### Performance Metrics
 
-4. **Persistence**:
-   - Save data to localStorage after fetching
-   - Update last fetch timestamps
-   - Persist user preferences
+- **Cache Hit Rate**: % of requests served from cache
+- **Credit Efficiency**: Credits saved through caching
+- **Response Times**: Database vs API fetch times
+- **Storage Usage**: Cache table sizes and growth
 
-## 8. Future Improvements
+## Migration from localStorage
 
-Potential improvements to the SEC Filings caching implementation could include:
+### Breaking Changes
 
-1. **IndexedDB Integration**:
-   - Move from localStorage to IndexedDB for larger datasets
-   - Better handle large institutional holdings data
-   - Implement structured queries for filtered access
+1. **No localStorage dependency** - All caching moved to backend
+2. **Authentication required** - User must be logged in for caching
+3. **Credit integration** - Failed credit checks prevent data access
+4. **Tier-aware expiration** - Cache duration varies by user tier
 
-2. **Progressive Caching**:
-   - Implement incremental updates
-   - Cache only changes since last fetch
-   - Reduce data transfer volume
+### Backward Compatibility
 
-3. **Cross-Tab Synchronization**:
-   - Add BroadcastChannel API support
-   - Synchronize cache operations across tabs
-   - Prevent duplicate API calls
+The system gracefully handles users with existing localStorage data:
 
-4. **Offline Support**:
-   - Add ServiceWorker caching
-   - Enable complete offline access
-   - Implement background sync for deferred updates
+```typescript
+// Frontend migration helper (temporary)
+useEffect(() => {
+  // Clear any existing localStorage SEC data
+  localStorage.removeItem('secFilings_insiderTrades');
+  localStorage.removeItem('secFilings_institutionalHoldings');
+  localStorage.removeItem('secFilings_lastFetchTime');
+}, []);
+```
+
+## Security Considerations
+
+### User Data Isolation
+
+- All cache queries include `user_id` filter
+- No cross-user data access possible
+- Cache keys include user-specific components
+
+### Cache Poisoning Prevention
+
+- Tier information embedded in cache keys
+- Prevents tier escalation attacks
+- Automatic expiration prevents stale privileged data
+
+### Credit Validation
+
+- Credits checked before expensive operations
+- Prevents abuse of SEC API endpoints
+- Audit trail for all credit transactions
+
+## Future Enhancements
+
+### Planned Features
+
+1. **Cache Warming** - Preload popular data combinations
+2. **Smart Expiration** - Adjust based on data freshness patterns
+3. **Compression** - Reduce storage footprint for large datasets
+4. **Regional Caching** - Geographic distribution for global users
+5. **Cache Sharing** - Optional sharing between team members
+
+### Performance Targets
+
+- **Cache Hit Rate**: >80% for repeat requests
+- **Response Time**: <200ms for cached data
+- **Storage Efficiency**: <50MB per user average
+- **Credit Savings**: 60%+ reduction in API costs
+
+This new caching system provides a robust foundation for scalable SEC data access while maintaining excellent user experience across all tiers and devices.

@@ -90,13 +90,15 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
     // Show chart data
     if (chartData.length > 0) {
       return (
-        <SentimentChart 
-          data={chartData} 
-          isLoading={loading}
-          loadingProgress={loadingProgress}
-          loadingStage={loadingStage}
-          hasRedditAccess={hasRedditAccess}
-        />
+        <>
+          <SentimentChart 
+            data={chartData} 
+            isLoading={loading}
+            loadingProgress={loadingProgress}
+            loadingStage={loadingStage}
+            hasRedditAccess={hasRedditAccess}
+          />
+        </>
       );
     }
 

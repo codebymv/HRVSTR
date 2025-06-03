@@ -56,6 +56,13 @@ export interface ChartData {
   bearish: number;
   neutral: number;
   sources?: Record<string, number>; // Count of data points from each source
+  // Synthetic data metadata
+  isSynthetic?: boolean; // Flag to identify synthetic vs real data
+  syntheticInfo?: {
+    basedOnRealData: number; // Number of real data points used as basis
+    timeRange: string; // Time range for synthetic generation
+    note: string; // Explanation for users
+  };
 }
 
 export interface RedditPost {
@@ -152,4 +159,4 @@ export interface EarningsAnalysis {
   };
 }
 
-export type TimeRange = '1d' | '3d' | '1w';
+export type TimeRange = '1d' | '3d' | '1w' | '1m' | '3m' | '6m';

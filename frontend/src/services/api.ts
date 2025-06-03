@@ -528,9 +528,9 @@ export const clearSecCache = async (signal?: AbortSignal): Promise<{success: boo
 };
 
 /**
- * Fetch Yahoo Finance market sentiment data
+ * Fetch Yahoo Finance market sentiment data (aggregated from major indices)
  */
-export const fetchYahooMarketSentiment = async (signal?: AbortSignal): Promise<SentimentData[]> => {
+export const fetchYahooMarketSentiment = async (timeRange: TimeRange = '1w', signal?: AbortSignal): Promise<SentimentData[]> => {
   try {
     const proxyUrl = getProxyUrl();
     const token = localStorage.getItem('auth_token');
@@ -542,7 +542,7 @@ export const fetchYahooMarketSentiment = async (signal?: AbortSignal): Promise<S
       headers['Authorization'] = `Bearer ${token}`;
     }
     
-    const response = await fetch(`${proxyUrl}/api/sentiment/yahoo/market`, { 
+    const response = await fetch(`${proxyUrl}/api/sentiment/yahoo-market?timeRange=${timeRange}`, { 
       signal,
       headers
     });
@@ -554,7 +554,7 @@ export const fetchYahooMarketSentiment = async (signal?: AbortSignal): Promise<S
     const data = await response.json();
     
     if (data.sentimentData && Array.isArray(data.sentimentData)) {
-      console.log(`Fetched ${data.sentimentData.length} Yahoo market sentiment data points`);
+      console.log(`Fetched ${data.sentimentData.length} Yahoo Finance historical sentiment data points for ${timeRange}`);
       return data.sentimentData;
     }
     
@@ -569,12 +569,9 @@ export const fetchYahooMarketSentiment = async (signal?: AbortSignal): Promise<S
 /**
  * Fetch FinViz market sentiment data (aggregated from major tickers)
  */
-export const fetchFinvizMarketSentiment = async (signal?: AbortSignal): Promise<SentimentData[]> => {
+export const fetchFinvizMarketSentiment = async (timeRange: TimeRange = '1w', signal?: AbortSignal): Promise<SentimentData[]> => {
   try {
     const proxyUrl = getProxyUrl();
-    // Use major market ETFs to represent overall market sentiment
-    // Note: Free tier allows max 3 tickers, so we use SPY,QQQ,IWM (removed VIX)
-    const marketTickers = 'SPY,QQQ,IWM';
     const token = localStorage.getItem('auth_token');
     const headers: HeadersInit = {
       'Content-Type': 'application/json'
@@ -584,7 +581,7 @@ export const fetchFinvizMarketSentiment = async (signal?: AbortSignal): Promise<
       headers['Authorization'] = `Bearer ${token}`;
     }
     
-    const response = await fetch(`${proxyUrl}/api/finviz/ticker-sentiment?tickers=${marketTickers}`, { 
+    const response = await fetch(`${proxyUrl}/api/sentiment/finviz-market?timeRange=${timeRange}`, { 
       signal,
       headers
     });
@@ -596,32 +593,11 @@ export const fetchFinvizMarketSentiment = async (signal?: AbortSignal): Promise<
     const data = await response.json();
     
     if (data.sentimentData && Array.isArray(data.sentimentData)) {
-      // Calculate average market sentiment from major ETFs
-      const avgScore = data.sentimentData.reduce((sum: number, item: any) => sum + (item.score || 0), 0) / data.sentimentData.length;
-      const avgConfidence = Math.round(data.sentimentData.reduce((sum: number, item: any) => sum + (item.confidence || 0), 0) / data.sentimentData.length);
-      
-      // Determine overall sentiment
-      let sentiment: 'bullish' | 'bearish' | 'neutral' = 'neutral';
-      if (avgScore > 0.15) sentiment = 'bullish';
-      else if (avgScore < -0.15) sentiment = 'bearish';
-      
-      const marketSentiment: SentimentData[] = [{
-        ticker: 'MARKET',
-        score: avgScore,
-        sentiment,
-        source: 'finviz' as const,
-        timestamp: new Date().toISOString(),
-        confidence: avgConfidence,
-        postCount: data.sentimentData.length,
-        commentCount: 0,
-        upvotes: 0
-      }];
-      
-      console.log(`Aggregated FinViz market sentiment from ${data.sentimentData.length} ETFs:`, marketSentiment[0]);
-      return marketSentiment;
+      console.log(`Fetched ${data.sentimentData.length} FinViz historical sentiment data points for ${timeRange}`);
+      return data.sentimentData;
     }
     
-    console.warn('Unexpected response format from FinViz sentiment API:', data);
+    console.warn('Unexpected response format from FinViz market sentiment API:', data);
     return [];
   } catch (error) {
     console.error('Failed to fetch FinViz market sentiment:', error);
@@ -639,8 +615,8 @@ export const fetchAggregatedMarketSentiment = async (timeRange: TimeRange = '1w'
     
     // Conditionally fetch data based on tier access
     const promises = [
-      fetchYahooMarketSentiment(signal),
-      fetchFinvizMarketSentiment(signal)
+      fetchYahooMarketSentiment(timeRange, signal),
+      fetchFinvizMarketSentiment(timeRange, signal)
     ];
     
     // Only include Reddit if user has access
@@ -909,4 +885,287 @@ const cleanInsiderName = (rawName: string): string => {
   }
   
   return clean;
+};
+
+/**
+ * Fetch insider trades using the new user-specific caching system
+ * This function integrates with the backend's user-specific database caching
+ */
+export const fetchInsiderTradesWithUserCache = async (
+  timeRange: TimeRange = '1w', 
+  refresh: boolean = false, 
+  signal?: AbortSignal,
+  onProgress?: (progressData: any) => void
+): Promise<InsiderTrade[]> => {
+  try {
+    const proxyUrl = getProxyUrl();
+    const token = localStorage.getItem('auth_token');
+    
+    if (!token) {
+      // Fall back to old API for non-authenticated users
+      return fetchInsiderTrades(timeRange, refresh, signal);
+    }
+    
+    const headers: HeadersInit = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    };
+    
+    const refreshParam = refresh ? '&refresh=true' : '';
+    const response = await fetch(
+      `${proxyUrl}/api/sec/insider-trades?timeRange=${timeRange}${refreshParam}`, 
+      { signal, headers }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 402) {
+        const errorData = await response.json();
+        throw new Error(errorData.userMessage || 'Insufficient credits for this request');
+      } else if (response.status === 403) {
+        const errorData = await response.json();
+        throw new Error(errorData.userMessage || 'Access denied - upgrade required');
+      }
+      throw new Error(`Server returned error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // Handle cached vs fresh data response - ensure we always get an array
+    if (data && Array.isArray(data.insiderTrades)) {
+      console.log(`Fetched ${data.insiderTrades.length} insider trades using user cache system`);
+      if (data.fromCache) {
+        console.log('Data served from user-specific cache');
+      } else {
+        console.log('Fresh data fetched and cached for user');
+      }
+      return data.insiderTrades as InsiderTrade[];
+    } else if (data && data.insiderTrades === null) {
+      // Handle explicit null response (no data available)
+      console.log('No insider trades data available from user cache system');
+      return [];
+    } else {
+      // Handle undefined, missing property, or invalid format
+      console.warn('Invalid or missing insider trades data in response:', data);
+      return [];
+    }
+  } catch (error) {
+    console.error('User cache insider trades API error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Fetch institutional holdings using the new user-specific caching system
+ * This function integrates with the backend's user-specific database caching
+ */
+export const fetchInstitutionalHoldingsWithUserCache = async (
+  timeRange: TimeRange = '1w', 
+  refresh: boolean = false, 
+  signal?: AbortSignal
+): Promise<InstitutionalHolding[]> => {
+  try {
+    const proxyUrl = getProxyUrl();
+    const token = localStorage.getItem('auth_token');
+    
+    if (!token) {
+      throw new Error('Authentication required for institutional holdings');
+    }
+    
+    const headers: HeadersInit = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    };
+    
+    const refreshParam = refresh ? '&refresh=true' : '';
+    const response = await fetch(
+      `${proxyUrl}/api/sec/institutional-holdings?timeRange=${timeRange}${refreshParam}`, 
+      { signal, headers }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 402) {
+        const errorData = await response.json();
+        throw new Error(errorData.userMessage || 'Insufficient credits for this request');
+      } else if (response.status === 403) {
+        const errorData = await response.json();
+        throw new Error(errorData.userMessage || 'Upgrade to Pro to access institutional holdings');
+      }
+      throw new Error(`Server returned error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // Handle cached vs fresh data response - ensure we always get an array
+    if (data && Array.isArray(data.institutionalHoldings)) {
+      console.log(`Fetched ${data.institutionalHoldings.length} institutional holdings using user cache system`);
+      if (data.fromCache) {
+        console.log('Data served from user-specific cache');
+      } else {
+        console.log('Fresh data fetched and cached for user');
+      }
+      return data.institutionalHoldings as InstitutionalHolding[];
+    } else if (data && data.institutionalHoldings === null) {
+      // Handle explicit null response (no data available)
+      console.log('No institutional holdings data available from user cache system');
+      return [];
+    } else {
+      // Handle undefined, missing property, or invalid format
+      console.warn('Invalid or missing institutional holdings data in response:', data);
+      return [];
+    }
+  } catch (error) {
+    console.error('User cache institutional holdings API error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Stream insider trades using the new user-specific caching system
+ * This integrates with the backend's SSE streaming that uses user-specific caching
+ */
+export const streamInsiderTradesWithUserCache = (
+  timeRange: TimeRange = '1w', 
+  refresh: boolean = false,
+  onProgress: (progressData: {
+    stage: string;
+    progress: number;
+    total: number;
+    current: number;
+    error?: string;
+    data?: any;
+    completed?: boolean;
+    timestamp: string;
+    fromCache?: boolean;
+  }) => void,
+  onComplete: (data: any) => void,
+  onError: (error: string) => void,
+  signal?: AbortSignal
+): EventSource => {
+  const proxyUrl = getProxyUrl();
+  const token = localStorage.getItem('auth_token');
+  
+  if (!token) {
+    // Fall back to old streaming API for non-authenticated users
+    return streamInsiderTrades(timeRange, refresh, onProgress, onComplete, onError, signal);
+  }
+  
+  const refreshParam = refresh ? '&refresh=true' : '';
+  
+  // For authenticated requests, we need to pass the token as a query parameter
+  // since EventSource doesn't support custom headers
+  const tokenParam = `&token=${encodeURIComponent(token)}`;
+  const url = `${proxyUrl}/api/sec/insider-trades/stream?timeRange=${timeRange}${refreshParam}${tokenParam}`;
+  
+  console.log('Starting SSE stream for insider trades with user cache:', url.replace(tokenParam, '&token=[REDACTED]'));
+  
+  // Create EventSource
+  const eventSource = new EventSource(url);
+  
+  eventSource.onmessage = (event) => {
+    try {
+      const progressData = JSON.parse(event.data);
+      console.log('SSE Progress (User Cache):', progressData);
+      
+      if (progressData.completed) {
+        if (progressData.error) {
+          onError(progressData.error.userMessage || progressData.error.message || 'Stream error');
+        } else if (progressData.data) {
+          onComplete(progressData.data);
+        }
+        eventSource.close();
+      } else {
+        onProgress(progressData);
+      }
+    } catch (error) {
+      console.error('Error parsing SSE data:', error);
+      onError('Error parsing progress data');
+    }
+  };
+  
+  eventSource.onerror = (error) => {
+    console.error('SSE Error:', error);
+    onError('Connection error occurred');
+    eventSource.close();
+  };
+  
+  // Handle abort signal
+  if (signal) {
+    signal.addEventListener('abort', () => {
+      eventSource.close();
+    });
+  }
+  
+  return eventSource;
+};
+
+/**
+ * Get user's SEC cache status
+ */
+export const getUserSecCacheStatus = async (signal?: AbortSignal): Promise<any> => {
+  try {
+    const proxyUrl = getProxyUrl();
+    const token = localStorage.getItem('auth_token');
+    
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+    
+    const headers: HeadersInit = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    };
+    
+    const response = await fetch(`${proxyUrl}/api/sec/cache/status`, { signal, headers });
+    
+    if (!response.ok) {
+      throw new Error(`Server returned error: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching user cache status:', error);
+    throw error;
+  }
+};
+
+/**
+ * Clear user's SEC cache
+ */
+export const clearUserSecCache = async (dataType?: string, timeRange?: string, signal?: AbortSignal): Promise<any> => {
+  try {
+    const proxyUrl = getProxyUrl();
+    const token = localStorage.getItem('auth_token');
+    
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+    
+    const headers: HeadersInit = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    };
+    
+    let url = `${proxyUrl}/api/sec/cache/clear`;
+    const params = new URLSearchParams();
+    if (dataType) params.append('dataType', dataType);
+    if (timeRange) params.append('timeRange', timeRange);
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+    
+    const response = await fetch(url, { 
+      method: 'DELETE',
+      signal, 
+      headers 
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Server returned error: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error clearing user cache:', error);
+    throw error;
+  }
 };

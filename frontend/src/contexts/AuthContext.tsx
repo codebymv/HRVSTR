@@ -8,6 +8,7 @@ interface User {
   email: string;
   picture?: string;
   token: string; // Add token to user object for compatibility
+  tier?: string; // Add tier property for subscription tier
 }
 
 interface AuthContextType {

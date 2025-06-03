@@ -103,14 +103,16 @@ export async function fetchWatchlistRedditSentiment(
 
 /**
  * Fetch FinViz sentiment data from user's watchlist
+ * @param timeRange Time range for sentiment analysis
  * @param signal AbortSignal for request cancellation
  * @returns Promise<SentimentData[]>
  */
 export async function fetchWatchlistFinvizSentiment(
+  timeRange: TimeRange = '1w',
   signal?: AbortSignal
 ): Promise<SentimentData[]> {
   try {
-    console.log('Watchlist FinViz sentiment API call starting');
+    console.log('Watchlist FinViz sentiment API call starting for timeRange:', timeRange);
     
     // Get auth token from localStorage
     const token = localStorage.getItem('auth_token');
@@ -120,6 +122,7 @@ export async function fetchWatchlistFinvizSentiment(
 
     const response = await axios.get<WatchlistSentimentResponse>(`${API_BASE_URL}/api/sentiment/finviz/tickers`, {
       params: {
+        timeRange,
         // Add cache busting to avoid 304 responses that don't include data
         _t: Date.now(),
         _r: Math.random()
@@ -175,14 +178,16 @@ export async function fetchWatchlistFinvizSentiment(
 
 /**
  * Fetch Yahoo Finance sentiment data from user's watchlist
+ * @param timeRange Time range for sentiment analysis
  * @param signal AbortSignal for request cancellation
  * @returns Promise<SentimentData[]>
  */
 export async function fetchWatchlistYahooSentiment(
+  timeRange: TimeRange = '1w',
   signal?: AbortSignal
 ): Promise<SentimentData[]> {
   try {
-    console.log('Watchlist Yahoo sentiment API call starting');
+    console.log('Watchlist Yahoo sentiment API call starting for timeRange:', timeRange);
     
     // Get auth token from localStorage
     const token = localStorage.getItem('auth_token');
@@ -192,6 +197,7 @@ export async function fetchWatchlistYahooSentiment(
 
     const response = await axios.get<WatchlistSentimentResponse>(`${API_BASE_URL}/api/sentiment/yahoo/tickers`, {
       params: {
+        timeRange,
         // Add cache busting to avoid 304 responses that don't include data
         _t: Date.now(),
         _r: Math.random()
