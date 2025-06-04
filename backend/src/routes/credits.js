@@ -551,6 +551,64 @@ router.post('/manual-cleanup', authenticateToken, async (req, res) => {
 });
 
 /**
+ * GET /api/credits/component-access/:component
+ * Check if user has access to a specific component
+ */
+router.get('/component-access/:component', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const component = req.params.component;
+    
+    if (!component) {
+      return res.status(400).json({
+        success: false,
+        error: 'Component parameter is required'
+      });
+    }
+    
+    // Clean up expired sessions first
+    await pool.query('SELECT cleanup_expired_sessions()');
+    
+    // Check for active session for this component
+    const sessionResult = await pool.query(
+      'SELECT session_id, component, credits_used, expires_at, status, metadata FROM research_sessions WHERE user_id = $1 AND component = $2 AND status = $3 AND expires_at > CURRENT_TIMESTAMP ORDER BY unlocked_at DESC LIMIT 1',
+      [userId, component, 'active']
+    );
+    
+    const hasAccess = sessionResult.rows.length > 0;
+    const session = hasAccess ? sessionResult.rows[0] : null;
+    
+    // Calculate time remaining if there's an active session
+    let timeRemainingHours = 0;
+    if (session) {
+      const timeRemaining = new Date(session.expires_at) - new Date();
+      timeRemainingHours = Math.max(0, Math.round(timeRemaining / (1000 * 60 * 60) * 10) / 10);
+    }
+    
+    res.json({
+      success: true,
+      hasAccess,
+      component,
+      session: session ? {
+        session_id: session.session_id,
+        component: session.component,
+        credits_used: session.credits_used,
+        expires_at: session.expires_at,
+        status: session.status,
+        metadata: session.metadata,
+        timeRemainingHours
+      } : null
+    });
+  } catch (error) {
+    console.error('Error checking component access:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to check component access'
+    });
+  }
+});
+
+/**
  * GET /api/credits/session-debug/:userId?
  * Debug endpoint to check specific user's sessions
  */

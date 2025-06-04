@@ -9,7 +9,69 @@ export interface UnlockSession {
   tier: string;
 }
 
+// Database session interface for API responses
+export interface DatabaseSession {
+  session_id: string;
+  component: string;
+  credits_used: number;
+  expires_at: string;
+  status: string;
+  metadata?: any;
+}
+
 const SESSION_STORAGE_PREFIX = 'hrvstr_unlock_';
+
+/**
+ * Check if component is unlocked by querying the database first, then localStorage as fallback
+ */
+export const checkComponentAccess = async (component: string): Promise<UnlockSession | null> => {
+  try {
+    // First check database sessions via API
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
+      
+      const response = await fetch(`${proxyUrl}/api/credits/component-access/${component}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.hasAccess && data.session) {
+          // Convert database session to UnlockSession format
+          const dbSession: DatabaseSession = data.session;
+          const unlockSession: UnlockSession = {
+            unlocked: true,
+            timestamp: Date.now(),
+            expiresAt: new Date(dbSession.expires_at).getTime(),
+            sessionId: dbSession.session_id,
+            component: dbSession.component,
+            creditsUsed: dbSession.credits_used,
+            tier: dbSession.metadata?.tier || 'free'
+          };
+          
+          // Optionally sync to localStorage for offline access
+          storeUnlockSession(component, {
+            sessionId: dbSession.session_id,
+            expiresAt: dbSession.expires_at,
+            creditsUsed: dbSession.credits_used,
+            tier: dbSession.metadata?.tier || 'free'
+          });
+          
+          return unlockSession;
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to check database session, falling back to localStorage:', error);
+  }
+  
+  // Fallback to localStorage check
+  return checkUnlockSession(component);
+};
 
 /**
  * Store component unlock session in localStorage
@@ -54,7 +116,7 @@ export const storeUnlockSession = (
 };
 
 /**
- * Check if component is unlocked in current session
+ * Check if component is unlocked in current session (localStorage only)
  */
 export const checkUnlockSession = (component: string): UnlockSession | null => {
   try {

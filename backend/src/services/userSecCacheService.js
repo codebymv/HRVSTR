@@ -242,6 +242,107 @@ async function getSecDataForUser(userId, userTier, dataType, timeRange, forceRef
         tierRequired: 'pro'
       };
     }
+
+    // IMPORTANT: Check for active unlock session first
+    const componentName = dataType === 'insider_trades' ? 'insiderTrading' : 'institutionalHoldings';
+    const sessionQuery = `
+      SELECT session_id, expires_at, credits_used, metadata
+      FROM research_sessions 
+      WHERE user_id = $1 
+        AND component = $2 
+        AND status = 'active' 
+        AND expires_at > CURRENT_TIMESTAMP
+      ORDER BY unlocked_at DESC 
+      LIMIT 1
+    `;
+    
+    const sessionResult = await db.query(sessionQuery, [userId, componentName]);
+    const hasActiveSession = sessionResult.rows.length > 0;
+    
+    if (hasActiveSession) {
+      const session = sessionResult.rows[0];
+      const timeRemaining = new Date(session.expires_at) - new Date();
+      const hoursRemaining = Math.round(timeRemaining / (1000 * 60 * 60) * 10) / 10;
+      
+      console.log(`[userSecCache] User ${userId} has active session for ${componentName}, ${hoursRemaining}h remaining`);
+      
+      // Check cache first (unless force refresh)
+      if (!forceRefresh) {
+        const cachedData = await getCachedSecData(userId, dataType, timeRange);
+        if (cachedData) {
+          console.log(`[userSecCache] Returning cached data for user ${userId} with active session`);
+          
+          if (progressCallback) {
+            progressCallback({
+              stage: `${dataType === 'insider_trades' ? 'Insider trades' : 'Institutional holdings'} loaded from cache`,
+              progress: 100,
+              total: cachedData.metadata?.dataCount || 0,
+              current: cachedData.metadata?.dataCount || 0,
+              fromCache: true,
+              hasActiveSession: true
+            });
+          }
+          
+          return {
+            success: true,
+            data: cachedData.data,
+            metadata: cachedData.metadata,
+            fromCache: true,
+            expiresAt: cachedData.expiresAt,
+            secondsUntilExpiry: cachedData.secondsUntilExpiry,
+            hasActiveSession: true,
+            creditsUsed: 0 // No credits used for active sessions
+          };
+        }
+      }
+      
+      // If active session but no cache, fetch data without charging credits
+      console.log(`[userSecCache] Active session found but no cache, fetching data for free for user ${userId}`);
+      
+      // Fetch fresh data (no credit deduction for active sessions)
+      let freshData;
+      if (dataType === 'insider_trades') {
+        const result = await secService.getInsiderTrades(timeRange, 100, progressCallback);
+        if (!result.success) {
+          return result;
+        }
+        freshData = {
+          timeRange,
+          insiderTrades: result.data,
+          count: result.count,
+          source: 'sec-edgar',
+          refreshed: true,
+          lastUpdated: new Date().toISOString()
+        };
+      } else if (dataType === 'institutional_holdings') {
+        const holdings = await secService.getInstitutionalHoldings(timeRange, 50);
+        freshData = {
+          timeRange,
+          institutionalHoldings: holdings,
+          count: holdings.length,
+          source: 'sec-edgar',
+          refreshed: true,
+          lastUpdated: new Date().toISOString()
+        };
+      }
+      
+      // Cache the fresh data (no credits charged)
+      await cacheSecData(userId, dataType, timeRange, freshData, 0, userTier);
+      
+      console.log(`[userSecCache] Successfully fetched and cached ${dataType} for user ${userId} with active session (no credits charged)`);
+      
+      return {
+        success: true,
+        data: freshData,
+        creditsUsed: 0,
+        fromCache: false,
+        freshlyFetched: true,
+        hasActiveSession: true
+      };
+    }
+
+    // No active session - proceed with normal credit-based flow
+    console.log(`[userSecCache] No active session found for user ${userId}, proceeding with credit-based access`);
     
     // Check cache first (unless force refresh)
     if (!forceRefresh) {
@@ -265,10 +366,14 @@ async function getSecDataForUser(userId, userTier, dataType, timeRange, forceRef
           metadata: cachedData.metadata,
           fromCache: true,
           expiresAt: cachedData.expiresAt,
-          secondsUntilExpiry: cachedData.secondsUntilExpiry
+          secondsUntilExpiry: cachedData.secondsUntilExpiry,
+          hasActiveSession: false
         };
       }
     }
+    
+    // No cache available, need to fetch fresh data and charge credits
+    let creditsUsed = 0;
     
     // Calculate credits cost
     const creditsQuery = `SELECT get_sec_data_credits_cost($1::user_tier_enum, $2::sec_data_type_enum, $3) as cost`;
@@ -308,7 +413,30 @@ async function getSecDataForUser(userId, userTier, dataType, timeRange, forceRef
         creditsAvailable: availableCredits
       };
     }
+
+    // Deduct credits by incrementing credits_used
+    const updateCreditsQuery = `UPDATE users SET credits_used = credits_used + $1 WHERE id = $2`;
+    await db.query(updateCreditsQuery, [creditsRequired, userId]);
     
+    creditsUsed = creditsRequired;
+    
+    // Log credit transaction
+    const logQuery = `
+      INSERT INTO credit_transactions (user_id, action, credits_used, credits_remaining, metadata)
+      VALUES ($1, $2, $3, (
+        SELECT (monthly_credits + COALESCE(credits_purchased, 0) - credits_used) 
+        FROM users WHERE id = $1
+      ), $4)
+    `;
+    await db.query(logQuery, [
+      userId, 
+      `sec_${dataType}`, 
+      creditsRequired, 
+      JSON.stringify({ dataType, timeRange, hasActiveSession: false })
+    ]);
+    
+    console.log(`[userSecCache] Deducted ${creditsRequired} credits for user ${userId}`);
+
     // Fetch fresh data
     console.log(`[userSecCache] Fetching fresh ${dataType} data for user ${userId}`);
     
@@ -338,36 +466,18 @@ async function getSecDataForUser(userId, userTier, dataType, timeRange, forceRef
       };
     }
     
-    // Deduct credits by incrementing credits_used
-    const updateCreditsQuery = `UPDATE users SET credits_used = credits_used + $1 WHERE id = $2`;
-    await db.query(updateCreditsQuery, [creditsRequired, userId]);
-    
-    // Log credit transaction
-    const logQuery = `
-      INSERT INTO credit_transactions (user_id, action, credits_used, credits_remaining, metadata)
-      VALUES ($1, $2, $3, (
-        SELECT (monthly_credits + COALESCE(credits_purchased, 0) - credits_used) 
-        FROM users WHERE id = $1
-      ), $4)
-    `;
-    await db.query(logQuery, [
-      userId, 
-      `sec_${dataType}`, 
-      creditsRequired, 
-      JSON.stringify({ dataType, timeRange, dataCount: freshData.count })
-    ]);
-    
     // Cache the fresh data
-    await cacheSecData(userId, dataType, timeRange, freshData, creditsRequired, userTier);
+    await cacheSecData(userId, dataType, timeRange, freshData, creditsUsed, userTier);
     
     console.log(`[userSecCache] Successfully fetched and cached ${dataType} for user ${userId}`);
     
     return {
       success: true,
       data: freshData,
-      creditsUsed: creditsRequired,
+      creditsUsed,
       fromCache: false,
-      freshlyFetched: true
+      freshlyFetched: true,
+      hasActiveSession: false
     };
     
   } catch (error) {

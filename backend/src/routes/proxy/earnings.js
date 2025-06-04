@@ -17,9 +17,9 @@ router.use(validateDataSource('earnings'));
 /**
  * @route GET /api/earnings/upcoming
  * @desc Get upcoming earnings data with user-specific caching
- * @access Public - Available to all tiers (with different limits)
+ * @access Public - Available to all tiers, but uses session-based caching for authenticated users
  */
-router.get('/upcoming', async (req, res) => {
+router.get('/upcoming', authenticateToken, async (req, res) => {
   try {
     const { timeRange = '1w', withProgress = 'false' } = req.query;
     

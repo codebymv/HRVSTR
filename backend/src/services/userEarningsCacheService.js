@@ -488,85 +488,162 @@ async function storeEarningsDataInCache(userId, dataType, timeRange, data, tier,
  */
 async function getEarningsData(userId, dataType, timeRange, tier, forceRefresh = false, options = {}) {
   try {
-    console.log(`📊 getEarningsData: userId=${userId}, dataType=${dataType}, timeRange=${timeRange}, tier=${tier}, forceRefresh=${forceRefresh}`);
+    console.log(`[userEarningsCache] Getting earnings data for user ${userId}, type: ${dataType}, tier: ${tier}`);
+    
+    // Check if user has access to this data type
+    if (dataType === 'earnings_analysis' && tier === 'free') {
+      return {
+        success: false,
+        error: 'TIER_RESTRICTION',
+        message: 'Earnings analysis requires Pro tier or higher',
+        userMessage: 'Upgrade to Pro to access earnings analysis',
+        tierRequired: 'pro'
+      };
+    }
 
-    // Check cache first unless force refresh
+    // IMPORTANT: Check for active unlock session first
+    const componentName = dataType === 'earnings_analysis' ? 'earningsAnalysis' : 'upcomingEarnings';
+    const sessionQuery = `
+      SELECT session_id, expires_at, credits_used, metadata
+      FROM research_sessions 
+      WHERE user_id = $1 
+        AND component = $2 
+        AND status = 'active' 
+        AND expires_at > CURRENT_TIMESTAMP
+      ORDER BY unlocked_at DESC 
+      LIMIT 1
+    `;
+    
+    const sessionResult = await db.query(sessionQuery, [userId, componentName]);
+    const hasActiveSession = sessionResult.rows.length > 0;
+    
+    if (hasActiveSession) {
+      const session = sessionResult.rows[0];
+      const timeRemaining = new Date(session.expires_at) - new Date();
+      const hoursRemaining = Math.round(timeRemaining / (1000 * 60 * 60) * 10) / 10;
+      
+      console.log(`[userEarningsCache] User ${userId} has active session for ${componentName}, ${hoursRemaining}h remaining`);
+      
+      // Check cache first when user has active session
+      if (!forceRefresh) {
+        const cachedData = await getCachedEarningsData(userId, dataType, timeRange, options);
+        if (cachedData) {
+          console.log(`[userEarningsCache] Found valid cache for user ${userId}, expires in ${Math.round((new Date(cachedData.metadata.expiresAt) - new Date()) / 1000)} seconds`);
+          console.log(`[userEarningsCache] Returning cached data for user ${userId} with active session`);
+          
+          return {
+            success: true,
+            data: cachedData.data,
+            source: 'cache',
+            count: Array.isArray(cachedData.data) ? cachedData.data.length : 1,
+            metadata: {
+              ...cachedData.metadata,
+              sessionId: session.session_id,
+              sessionTimeRemaining: hoursRemaining,
+              creditsUsed: 0 // No additional credits used when accessing during active session
+            }
+          };
+        }
+      }
+      
+      // If no cache or force refresh, fetch fresh data but don't deduct credits
+      console.log(`[userEarningsCache] No cache found for user ${userId} with active session, fetching fresh data`);
+    }
+
+    // Original logic continues here...
+    const limit = getDataLimit(tier, dataType);
+    const cacheKey = generateCacheKey(dataType, timeRange, options);
+    
+    console.log(`[userEarningsCache] Attempting to get earnings data: userId=${userId}, dataType=${dataType}, timeRange=${timeRange}, limit=${limit}, cacheKey=${cacheKey}`);
+
+    // Check cache first (unless force refresh)
     if (!forceRefresh) {
       const cachedData = await getCachedEarningsData(userId, dataType, timeRange, options);
       if (cachedData) {
-        const limit = getDataLimit(tier, dataType);
-        const limitedData = Array.isArray(cachedData.data) ? cachedData.data.slice(0, limit) : cachedData.data;
+        console.log(`[userEarningsCache] Cache HIT for user ${userId}, returning cached data`);
         
         return {
           success: true,
-          data: limitedData,
-          count: Array.isArray(limitedData) ? limitedData.length : 1,
+          data: cachedData.data,
           source: 'cache',
+          count: Array.isArray(cachedData.data) ? cachedData.data.length : 1,
           metadata: cachedData.metadata
         };
       }
     }
 
-    // Fetch fresh data from earnings service
-    console.log(`🔄 Fetching fresh earnings data from service...`);
-    let freshData;
-    
-    switch (dataType) {
-      case 'upcoming_earnings':
-        const limit = options.limit || getDataLimit(tier, dataType);
-        freshData = await earningsService.getUpcomingEarnings(timeRange, limit, options.progressCallback);
-        break;
-        
-      case 'earnings_analysis':
-        if (!options.ticker) {
-          throw new Error('Ticker required for earnings analysis');
-        }
-        freshData = await earningsService.getEarningsAnalysis(options.ticker);
-        break;
-        
-      case 'historical_earnings':
-        if (!options.ticker) {
-          throw new Error('Ticker required for historical earnings');
-        }
-        const histLimit = options.limit || getDataLimit(tier, 'historical_earnings');
-        freshData = await earningsService.getHistoricalEarnings(options.ticker, histLimit);
-        break;
-        
-      default:
-        throw new Error(`Unsupported data type: ${dataType}`);
-    }
+    console.log(`[userEarningsCache] No valid cache found, fetching fresh data for user ${userId}`);
 
-    if (!freshData.success) {
-      return freshData;
+    // Fetch fresh data based on data type
+    let freshData;
+    let metadata = {};
+    
+    if (dataType === 'upcoming_earnings') {
+      const result = await earningsService.getUpcomingEarnings(timeRange, limit);
+      if (!result.success) {
+        return result;
+      }
+      freshData = result.data;
+      metadata = result.metadata || {};
+    } else if (dataType === 'earnings_analysis') {
+      if (!options.ticker) {
+        return {
+          success: false,
+          error: 'MISSING_TICKER',
+          message: 'Ticker is required for earnings analysis'
+        };
+      }
+      
+      const result = await earningsService.getEarningsAnalysis(options.ticker, timeRange);
+      if (!result.success) {
+        return result;
+      }
+      freshData = result.data;
+      metadata = result.metadata || {};
+    } else {
+      return {
+        success: false,
+        error: 'UNSUPPORTED_DATA_TYPE',
+        message: `Data type ${dataType} is not supported`
+      };
     }
 
     // Store in cache
-    await storeEarningsDataInCache(userId, dataType, timeRange, freshData.data, tier, options);
-    
-    // Apply tier limits to response
-    const limit = getDataLimit(tier, dataType);
-    const limitedData = Array.isArray(freshData.data) ? freshData.data.slice(0, limit) : freshData.data;
+    await storeEarningsDataInCache(userId, dataType, timeRange, freshData, tier, options);
+
+    console.log(`[userEarningsCache] Successfully fetched and cached fresh data for user ${userId}`);
 
     return {
       success: true,
-      data: limitedData,
-      count: Array.isArray(limitedData) ? limitedData.length : 1,
+      data: freshData,
       source: 'fresh',
+      count: Array.isArray(freshData) ? freshData.length : 1,
       metadata: {
-        fromCache: false,
-        fetchedAt: new Date().toISOString(),
+        ...metadata,
         tier,
-        originalCount: Array.isArray(freshData.data) ? freshData.data.length : 1,
-        limitedCount: Array.isArray(limitedData) ? limitedData.length : 1
+        dataType,
+        timeRange,
+        creditsUsed: hasActiveSession ? 0 : (metadata.creditsUsed || 0)
       }
     };
+
   } catch (error) {
-    console.error('❌ Error in getEarningsData:', error);
+    console.error(`❌ [userEarningsCache] Error getting earnings data for user ${userId}:`, error);
+    
+    if (error.message && error.message.includes('INSUFFICIENT_CREDITS')) {
+      return {
+        success: false,
+        error: 'INSUFFICIENT_CREDITS',
+        message: 'Insufficient credits for this operation',
+        userMessage: 'You have reached your earnings data limit for this billing period.'
+      };
+    }
+    
     return {
       success: false,
-      error: 'EARNINGS_FETCH_ERROR',
-      message: error.message,
-      userMessage: 'Failed to fetch earnings data. Please try again.'
+      error: 'EARNINGS_CACHE_ERROR',
+      message: 'Failed to get earnings data',
+      userMessage: 'Unable to load earnings data at the moment. Please try again.'
     };
   }
 }

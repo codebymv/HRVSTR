@@ -16,16 +16,16 @@ const validateSecInstitutional = validateDataSource('sec_institutional');
 /**
  * @route GET /api/sec/insider-trades
  * @desc Get insider trades data from SEC (all recent filings)
- * @access Public - Available to all tiers
+ * @access Public - Available to all tiers, but uses session-based caching for authenticated users
  */
-router.get('/insider-trades', validateSecInsider, secController.getInsiderTrades);
+router.get('/insider-trades', authenticateToken, validateSecInsider, secController.getInsiderTrades);
 
 /**
  * @route GET /api/sec/insider-trades/stream
  * @desc Stream insider trades data with real-time progress updates using SSE
- * @access Public - Available to all tiers
+ * @access Public - Available to all tiers, but uses session-based caching for authenticated users
  */
-router.get('/insider-trades/stream', validateSecInsider, secController.streamInsiderTrades);
+router.get('/insider-trades/stream', authenticateToken, validateSecInsider, secController.streamInsiderTrades);
 
 /**
  * @route GET /api/sec/insider-trades/:ticker

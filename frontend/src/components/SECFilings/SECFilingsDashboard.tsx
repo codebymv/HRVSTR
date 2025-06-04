@@ -8,7 +8,8 @@ import {
   checkUnlockSession, 
   storeUnlockSession, 
   getAllUnlockSessions,
-  getSessionTimeRemainingFormatted 
+  getSessionTimeRemainingFormatted,
+  checkComponentAccess
 } from '../../utils/sessionStorage';
 import InsiderTradesTab from './InsiderTradesTab';
 import InstitutionalHoldingsTab from './InstitutionalHoldingsTab';
@@ -103,24 +104,47 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
   useEffect(() => {
     if (!tierInfo) return;
     
-    const checkExistingSessions = () => {
-      const insiderSession = checkUnlockSession('insiderTrading');
-      const institutionalSession = checkUnlockSession('institutionalHoldings');
+    const checkExistingSessions = async () => {
+      try {
+        // Use new database-based checking
+        const insiderSession = await checkComponentAccess('insiderTrading');
+        const institutionalSession = await checkComponentAccess('institutionalHoldings');
 
-      setUnlockedComponents({
-        insiderTrading: !!insiderSession,
-        institutionalHoldings: !!institutionalSession
-      });
+        setUnlockedComponents({
+          insiderTrading: !!insiderSession,
+          institutionalHoldings: !!institutionalSession
+        });
 
-      // Update active sessions for display
-      const sessions = getAllUnlockSessions();
-      setActiveSessions(sessions);
+        // Update active sessions for display (fallback to localStorage sessions for display)
+        const sessions = getAllUnlockSessions();
+        setActiveSessions(sessions);
+        
+        console.log('🔍 SEC DASHBOARD - Component access check:', {
+          insiderTrading: !!insiderSession,
+          institutionalHoldings: !!institutionalSession,
+          insiderSessionId: insiderSession?.sessionId,
+          institutionalSessionId: institutionalSession?.sessionId
+        });
+      } catch (error) {
+        console.warn('Failed to check database sessions, falling back to localStorage:', error);
+        // Fallback to localStorage checking
+        const insiderSession = checkUnlockSession('insiderTrading');
+        const institutionalSession = checkUnlockSession('institutionalHoldings');
+
+        setUnlockedComponents({
+          insiderTrading: !!insiderSession,
+          institutionalHoldings: !!institutionalSession
+        });
+
+        const sessions = getAllUnlockSessions();
+        setActiveSessions(sessions);
+      }
     };
 
-    // Check sessions for all users
+    // Check sessions immediately
     checkExistingSessions();
     
-    // Check for expired sessions every minute for all users
+    // Check for expired sessions every minute
     const interval = setInterval(checkExistingSessions, 60000);
     return () => clearInterval(interval);
   }, [tierInfo, currentTier]);
@@ -489,6 +513,25 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
           ...prev,
           [component]: true
         }));
+        
+        // IMPORTANT: Trigger data loading for the unlocked component
+        if (component === 'institutionalHoldings') {
+          setLoadingState(prev => ({
+            ...prev,
+            institutionalHoldings: { 
+              isLoading: false, 
+              needsRefresh: true 
+            }
+          }));
+        } else if (component === 'insiderTrading') {
+          setLoadingState(prev => ({
+            ...prev,
+            insiderTrades: { 
+              isLoading: false, 
+              needsRefresh: true 
+            }
+          }));
+        }
         
         // Store session in localStorage
         storeUnlockSession(component, {

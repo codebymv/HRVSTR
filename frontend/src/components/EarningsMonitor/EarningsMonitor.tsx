@@ -12,7 +12,8 @@ import {
   checkUnlockSession, 
   storeUnlockSession, 
   getAllUnlockSessions,
-  getSessionTimeRemainingFormatted 
+  getSessionTimeRemainingFormatted,
+  checkComponentAccess
 } from '../../utils/sessionStorage';
 import ProgressBar from '../ProgressBar';
 import TierLimitDialog from '../UI/TierLimitDialog';
@@ -58,22 +59,41 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
   useEffect(() => {
     if (!tierInfo) return;
     
-    const checkExistingSessions = () => {
-      const analysisSession = checkUnlockSession('earningsAnalysis');
+    const checkExistingSessions = async () => {
+      try {
+        // Use new database-based checking
+        const analysisSession = await checkComponentAccess('earningsAnalysis');
 
-      setUnlockedComponents({
-        earningsAnalysis: !!analysisSession
-      });
+        setUnlockedComponents({
+          earningsAnalysis: !!analysisSession
+        });
 
-      // Update active sessions for display
-      const sessions = getAllUnlockSessions();
-      setActiveSessions(sessions);
+        // Update active sessions for display (fallback to localStorage sessions for display)
+        const sessions = getAllUnlockSessions();
+        setActiveSessions(sessions);
+        
+        console.log('🔍 EARNINGS MONITOR - Component access check:', {
+          earningsAnalysis: !!analysisSession,
+          analysisSessionId: analysisSession?.sessionId
+        });
+      } catch (error) {
+        console.warn('Failed to check database sessions, falling back to localStorage:', error);
+        // Fallback to localStorage checking
+        const analysisSession = checkUnlockSession('earningsAnalysis');
+
+        setUnlockedComponents({
+          earningsAnalysis: !!analysisSession
+        });
+
+        const sessions = getAllUnlockSessions();
+        setActiveSessions(sessions);
+      }
     };
 
-    // Check sessions for all users
+    // Check sessions immediately
     checkExistingSessions();
     
-    // Check for expired sessions every minute for all users
+    // Check for expired sessions every minute
     const interval = setInterval(checkExistingSessions, 60000);
     return () => clearInterval(interval);
   }, [tierInfo, currentTier]);
@@ -446,6 +466,12 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
           ...prev,
           [component]: true
         }));
+        
+        // IMPORTANT: Trigger analysis loading if ticker is selected and earningsAnalysis was unlocked
+        if (component === 'earningsAnalysis' && selectedTicker) {
+          // Trigger analysis loading for the selected ticker
+          loadAnalysis(selectedTicker);
+        }
         
         // Store session in localStorage
         storeUnlockSession(component, {
