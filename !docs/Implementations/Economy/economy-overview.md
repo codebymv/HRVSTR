@@ -1,188 +1,240 @@
-# HRVSTR Freemium Economy Model Overview
+# HRVSTR Cross-Device Session Economy Model
 
 ## Executive Summary
 
-HRVSTR implements an innovative **granular freemium economy** that gives users precise control over their spending while maximizing value delivery. Unlike traditional all-or-nothing subscription models, our approach allows users to unlock individual features and components on-demand, creating a transparent and flexible pricing experience.
+HRVSTR implements an innovative **session-based freemium economy** that combines granular component pricing with sophisticated cross-device access management. Unlike traditional subscription models, our approach provides session-based component unlocking with database-backed persistence, creating a transparent, efficient, and cross-device seamless pricing experience.
 
 ## Economy Philosophy
 
 ### Core Principles
 
-1. **Transparency First**: Users see exactly what they're buying before spending
-2. **Granular Control**: Unlock only desired features, not forced bundles
-3. **Value-Based Pricing**: Different components cost different amounts based on computational complexity
-4. **Progressive Disclosure**: Start free, scale with usage and needs
-5. **Credit-Based Flexibility**: Use credits across any features vs. rigid feature gates
+1. **Cross-Device Transparency**: Users see exactly what they're buying and can access it on any device
+2. **Session-Based Control**: Unlock components for time-based sessions, not single uses
+3. **No Double-Charging**: Active session validation prevents charging users multiple times across devices
+4. **Progressive Scaling**: Start free, scale with usage and session needs
+5. **Credit Efficiency**: Session-based unlocks provide better value than per-use charging
 
 ### User Experience Goals
 
-- **No Surprise Charges**: Clear cost display before any action
-- **Flexible Spending**: Mix and match features based on research needs
-- **Immediate Value**: Instant access upon payment, no waiting
-- **Usage Transparency**: Real-time credit tracking and history
-- **Fair Pricing**: Pay only for what you use and when you use it
+- **Cross-Device Consistency**: Unlock on phone, continue seamlessly on desktop
+- **Fair Session Billing**: Pay once for timed access across all devices
+- **Immediate Synchronization**: Instant access upon payment on all logged-in devices
+- **Usage Transparency**: Real-time credit tracking and cross-device session status
+- **Value Optimization**: Extended session access vs. repeated per-use charges
 
-## Tier Structure
+## Tier Structure with Session Benefits
 
 ### Free Tier
-- **Monthly Credits**: 50
-- **Watchlist Limit**: 5 stocks
-- **Features**: Basic sentiment (FinViz, Earnings)
-- **Purpose**: Evaluation and light usage
+- **Monthly Credits**: 0 (trial access only)
+- **Watchlist Limit**: 3 stocks
+- **Session Duration**: 30 minutes
+- **Features**: Basic sentiment (FinViz preview), basic earnings
+- **Cross-Device Access**: ✅ Full synchronization
+- **Purpose**: Evaluation and trial experience
 
 ### Pro Tier ($19/month)
 - **Monthly Credits**: 500
-- **Watchlist Limit**: 25 stocks
+- **Watchlist Limit**: 15 stocks
+- **Session Duration**: 2 hours
 - **Features**: All Free + Reddit sentiment, Yahoo Finance, SEC data
-- **Bonus**: 20% discount on all credit costs
-- **Purpose**: Active traders and researchers
+- **Cross-Device Benefits**: Extended sessions across all devices
+- **Bonus**: Session-based efficiency reduces effective per-use costs
+- **Purpose**: Active traders with multi-device workflows
 
 ### Elite Tier ($49/month)
 - **Monthly Credits**: 2,000
-- **Watchlist Limit**: Unlimited
+- **Watchlist Limit**: 50 stocks
+- **Session Duration**: 4 hours
 - **Features**: All Pro + Advanced analytics, AlphaVantage integration
-- **Bonus**: 33% discount on all credit costs
-- **Purpose**: Professional analysts and institutions
+- **Cross-Device Benefits**: Professional workflow support across devices
+- **Bonus**: Extended sessions provide superior cost efficiency
+- **Purpose**: Professional analysts with extended research needs
 
 ### Institutional Tier ($199/month)
 - **Monthly Credits**: 10,000
 - **Watchlist Limit**: Unlimited
-- **Features**: All Elite + Priority support, custom integrations
-- **Bonus**: 50% discount on all credit costs
-- **Purpose**: Enterprises and trading firms
+- **Session Duration**: 8 hours
+- **Features**: All Elite + Priority support, team collaboration
+- **Cross-Device Benefits**: Enterprise-grade access across unlimited devices
+- **Bonus**: All-day sessions with team sharing capabilities
+- **Purpose**: Enterprises and trading firms with team coordination needs
 
-## Credit Economy Design
+## Session-Based Credit Economy
 
-### Component-Level Pricing
+### Component Session Pricing
 
-| Component | Base Cost | Description |
-|-----------|-----------|-------------|
-| **Market Sentiment Chart** | 8 credits | Real-time sentiment timeline with multiple timeframes |
-| **Sentiment Scores** | 12 credits | Individual stock analysis with confidence scores |
-| **Reddit Posts** | 5 credits | Social media sentiment and community insights |
-| **SEC Filings** | 6 credits | Regulatory filing analysis |
-| **Earnings Analysis** | 10 credits | Comprehensive earnings data and predictions |
+| Component | Free | Pro | Elite | Institutional | Session Benefits |
+|-----------|------|-----|-------|---------------|------------------|
+| **Earnings Analysis** | Trial | 5 credits | 3 credits | 1 credit | 2-8 hour access across devices |
+| **SEC Insider Trading** | Preview | 6 credits | 4 credits | 2 credits | Full session access, all devices |
+| **SEC Institutional Holdings** | ❌ | 9 credits | 6 credits | 3 credits | Cross-device institutional data |
+| **Sentiment Research** | Basic | 4 credits | 2 credits | 1 credit | Multi-source sentiment across devices |
 
-### Dynamic Pricing Benefits
+### Session Value Proposition
 
-- **Higher-value components cost more**: Complex analytics = higher cost
-- **Tier discounts apply automatically**: Elite users get 33% off all costs
-- **Bundle discounts available**: Unlock multiple components with "Research Session" for 15% savings
-- **Additional credits purchasable**: 250 credits for $10 when monthly allocation runs low
+**Traditional Per-Use vs. HRVSTR Session Model:**
 
-## Granular Control Implementation
+❌ **Traditional Model**: Pay for each API call or data request
+- Mobile research: 5 credits
+- Desktop continuation: Another 5 credits  
+- Tablet review: Another 5 credits
+- **Total**: 15 credits for same research
 
-### Component-Level Gating
+✅ **HRVSTR Session Model**: Pay once for time-based component access
+- Mobile unlock: 5 credits for 2-hour session
+- Desktop continuation: 0 additional credits (same session)
+- Tablet review: 0 additional credits (same session)
+- **Total**: 5 credits for complete cross-device research
 
-Instead of traditional feature-gating by subscription tier, HRVSTR implements **component-level credit gating**:
+### Cross-Device Session Benefits
+
+- **Unlock Once, Access Everywhere**: Component unlocks work seamlessly across desktop, mobile, and tablet
+- **Real-Time Synchronization**: Session status updates instantly across all logged-in devices
+- **No Device Limitations**: No restrictions on number of devices or switching frequency
+- **Session Recovery**: Automatic restoration of active sessions when returning to HRVSTR
+- **Fair Billing Protection**: Never charged twice for accessing same data across devices
+
+## Advanced Session Management
+
+### Database-Backed Persistence
+
+Unlike traditional localStorage-based systems, HRVSTR implements enterprise-grade session management:
 
 ```
-Traditional Model:
-Free: No access to advanced features
-Pro: All features unlocked
-
-HRVSTR Model:
-Any Tier: Choose which components to unlock
-Credits: Deducted only when components are accessed
+PostgreSQL Session Storage:
+├── Cross-device accessibility
+├── Real-time synchronization
+├── Automatic cleanup
+├── Audit trail maintenance
+└── Session validation
 ```
 
-### User Journey
+### Three-Tier Access Pattern
 
-1. **Dashboard View**: All components visible but locked with overlays
-2. **Cost Preview**: Clear display of credit cost for each component
-3. **Selective Unlocking**: Users choose which components to unlock
-4. **Immediate Access**: Component unlocks instantly upon payment
-5. **Session Persistence**: Unlocked components remain available during session
-6. **Credit Tracking**: Real-time toast notifications and usage meter updates
+1. **Active Session Check**: Validate existing component access across devices
+2. **Cache Utilization**: Serve fresh or cached data during active sessions
+3. **Credit Deduction**: Only charge when no active session exists
+
+### Session Synchronization
+
+- **Instant Propagation**: Session changes sync across devices in real-time
+- **Conflict Resolution**: Intelligent handling of concurrent device usage
+- **Session Transfer**: Seamless handoff between devices
+- **State Preservation**: Complete session state maintained across devices
 
 ## Economic Advantages
 
 ### For Users
 
-- **Budget Control**: Spend only on needed features
-- **Value Optimization**: Try before committing to higher tiers
-- **Flexible Research**: Different research needs = different costs
-- **No Waste**: Don't pay for unused features
-- **Transparent Billing**: See exactly where credits go
+- **Cross-Device Freedom**: Research seamlessly across all devices without additional costs
+- **Session Efficiency**: Time-based access provides better value than per-use charging
+- **Predictable Costs**: Clear session duration and cross-device access included
+- **No Device Penalties**: Switch devices freely without losing access or paying extra
+- **Fair Value Exchange**: Extended access periods vs. single-use charges
 
 ### For Business
 
-- **Higher Conversion**: Lower barrier to entry with granular pricing
-- **Revenue Optimization**: Users often spend more when they control spending
-- **Usage Analytics**: Detailed insights into feature value and demand
-- **Retention Improvement**: Users can downgrade usage without losing access
-- **Scalable Pricing**: Automatic scaling with computational costs
+- **Higher User Satisfaction**: Cross-device convenience increases user loyalty
+- **Reduced Support Load**: Fewer billing disputes and access issues
+- **Increased Engagement**: Multi-device access encourages deeper platform usage
+- **Premium Tier Value**: Longer sessions create clear upgrade incentives
+- **Scalable Architecture**: Database-backed sessions support unlimited users
 
 ## Technical Innovation
 
-### Real-Time Credit Management
+### Cross-Device Session Architecture
 
-- **Instant Deduction**: Credits deducted upon component unlock
-- **Live Tracking**: Usage meter updates immediately
-- **Transaction Logging**: Complete audit trail for billing transparency
-- **Error Handling**: Graceful handling of insufficient credits
-- **Rollback Support**: Failed operations don't deduct credits
+```javascript
+// Session validation prevents double-charging across devices
+const validateActiveSession = async (userId, component) => {
+  const activeSession = await db.query(`
+    SELECT session_id, expires_at, credits_used
+    FROM research_sessions 
+    WHERE user_id = $1 AND component = $2 
+      AND status = 'active' AND expires_at > CURRENT_TIMESTAMP
+  `, [userId, component]);
+  
+  return activeSession.rows.length > 0 ? activeSession.rows[0] : null;
+};
+```
+
+### Real-Time Session Management
+
+- **Instant Credit Deduction**: Credits deducted upon component unlock
+- **Cross-Device Sync**: Session status propagates to all devices immediately
+- **Session Monitoring**: Real-time tracking across all user devices
+- **Automatic Cleanup**: Background processes maintain database integrity
+- **Error Resilience**: Graceful handling of network issues and device switching
 
 ### Integration Points
 
-- **Toast Notifications**: "X credits used" feedback
-- **Usage Dashboard**: Comprehensive credit tracking at `/settings/usage`
-- **Component Overlays**: Beautiful locked state with unlock buttons
-- **Tier Benefits**: Automatic discount application
-- **Credit Purchase**: Seamless add-on credit buying
+- **Cross-Device Notifications**: Session status updates across all devices
+- **Universal Session Dashboard**: Comprehensive session tracking accessible anywhere
+- **Device-Agnostic Overlays**: Consistent unlock experience across platforms
+- **Session Recovery**: Automatic restoration of sessions across device switches
+- **Unified Billing**: Single transaction for multi-device access
 
 ## Market Differentiation
 
 ### Competitive Advantages
 
-1. **Granular Transparency**: No other platform shows exact costs before usage
-2. **Component Flexibility**: Mix-and-match approach vs. rigid tiers
-3. **Credit Efficiency**: Only pay for what you unlock and use
-4. **Professional UX**: Beautiful locked overlays vs. aggressive upgrade prompts
-5. **Fair Pricing**: Computational complexity reflected in pricing
+1. **Cross-Device Session Innovation**: No other platform provides seamless multi-device session management
+2. **No Double-Charging Protection**: Industry-leading fair billing practices
+3. **Session-Based Efficiency**: Superior value compared to per-use charging models
+4. **Professional Workflow Support**: Extended sessions designed for serious analysis
+5. **Database-Backed Reliability**: Enterprise-grade session persistence
 
 ### Industry Innovation
 
-HRVSTR's approach solves common freemium problems:
+HRVSTR's session-based economy solves critical freemium problems:
 
-- **The Paywall Problem**: Instead of blocking access, we show value first
-- **The Feature Confusion**: Clear component-level pricing eliminates guesswork
-- **The Upgrade Pressure**: Users upgrade naturally when they need more credits
-- **The Value Perception**: Granular control increases perceived value
+- **The Multi-Device Problem**: Seamless access across all user devices
+- **The Double-Charging Issue**: Active session validation prevents repeat charges
+- **The Session Value Problem**: Time-based access provides superior value
+- **The Professional Workflow Problem**: Extended sessions support deep analysis
+- **The Billing Transparency Problem**: Clear session costs and cross-device access
 
 ## Success Metrics
 
-### User Engagement
-- Component unlock rate by tier
-- Credit utilization efficiency
-- Session depth and component combinations
-- User satisfaction with pricing transparency
+### Session-Specific KPIs
+- **Session Utilization Rate**: Percentage of purchased session time actually used
+- **Cross-Device Adoption**: Percentage of users accessing from multiple devices  
+- **Session Renewal Rate**: Percentage of users who extend or renew sessions
+- **Credit Efficiency**: Average credits spent per hour of session access
+- **Cross-Device Satisfaction**: User satisfaction with multi-device experience
 
 ### Business Performance
-- Average revenue per user (ARPU) growth
-- Credit purchase frequency
-- Tier upgrade conversion rates
-- Feature adoption and value correlation
+- **Conversion Rate Improvement**: Higher unlock rates due to session value
+- **Customer Lifetime Value**: Increased retention through cross-device convenience
+- **Tier Upgrade Rate**: Session benefits drive subscription upgrades
+- **Support Ticket Reduction**: Fewer billing and access issues
 
 ## Future Enhancements
 
-### Planned Features
-- **Credit Bundles**: Discounted credit packages for specific use cases
-- **Usage Predictions**: AI-powered credit usage forecasting
-- **Smart Recommendations**: Suggest optimal component combinations
-- **Team Accounts**: Shared credit pools for organizations
-- **API Access Tiers**: Credits for programmatic access
+### Advanced Session Features
+- **Team Session Sharing**: Institutional tier users can share sessions across team members
+- **Session Prediction**: AI-powered recommendations for optimal session lengths
+- **Usage Analytics**: Cross-device usage pattern analysis and optimization
+- **Session Bundles**: Multi-component session packages with additional discounts
+- **Custom Session Windows**: User-defined session durations for specific workflows
 
-### Economic Evolution
-- **Dynamic Pricing**: Adjust costs based on demand and computational load
-- **Personalized Discounts**: User-specific pricing based on usage patterns
-- **Seasonal Promotions**: Credit bonuses during market events
-- **Loyalty Programs**: Long-term user benefits and credit rewards
+### Cross-Device Evolution
+- **Session Handoff**: Active transfer of analysis context between devices
+- **Device-Specific Optimization**: Tailored experiences for mobile, tablet, desktop
+- **Offline Session Cache**: Limited offline access during network interruptions
+- **Session Collaboration**: Real-time sharing of session access with team members
+- **Session Analytics**: Detailed cross-device usage insights and recommendations
 
 ## Conclusion
 
-HRVSTR's granular freemium economy represents a paradigm shift from traditional subscription models. By giving users precise control over their spending while maintaining pricing transparency, we create a more satisfying user experience that drives both engagement and revenue growth.
+HRVSTR's cross-device session economy represents a paradigm shift from traditional freemium models. By combining session-based component unlocking with sophisticated cross-device access management, we create an experience that:
 
-The model's success lies in its respect for user agency—instead of forcing users into predetermined packages, we empower them to craft their own experience based on their specific research needs and budget constraints.
+- **Respects User Workflow**: Seamless device switching without penalties
+- **Provides Fair Value**: Time-based access vs. repeated per-use charges
+- **Builds Trust**: Transparent cross-device billing with no surprise charges
+- **Encourages Engagement**: Extended sessions support deeper analysis
+- **Drives Growth**: Premium session benefits create clear upgrade incentives
 
-This approach positions HRVSTR as an innovative leader in the fintech space, setting new standards for how SaaS applications can implement fair, transparent, and user-friendly pricing models. 
+This approach positions HRVSTR as the leader in modern financial analysis platforms, setting new standards for how applications can implement fair, transparent, and user-friendly pricing while supporting professional multi-device workflows.
+
+*For technical implementation details, see [Caching Architecture Documentation](/help/Implementations/Caching)* 

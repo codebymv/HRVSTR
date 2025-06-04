@@ -61,8 +61,8 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
     
     const checkExistingSessions = async () => {
       try {
-        // Use new database-based checking
-        const analysisSession = await checkComponentAccess('earningsAnalysis');
+        // Use new database-based checking with tier awareness
+        const analysisSession = await checkComponentAccess('earningsAnalysis', currentTier);
 
         setUnlockedComponents({
           earningsAnalysis: !!analysisSession
@@ -74,12 +74,13 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
         
         console.log('🔍 EARNINGS MONITOR - Component access check:', {
           earningsAnalysis: !!analysisSession,
-          analysisSessionId: analysisSession?.sessionId
+          analysisSessionId: analysisSession?.sessionId,
+          currentTier
         });
       } catch (error) {
         console.warn('Failed to check database sessions, falling back to localStorage:', error);
-        // Fallback to localStorage checking
-        const analysisSession = checkUnlockSession('earningsAnalysis');
+        // Fallback to localStorage checking with tier awareness
+        const analysisSession = checkUnlockSession('earningsAnalysis', currentTier);
 
         setUnlockedComponents({
           earningsAnalysis: !!analysisSession
@@ -430,8 +431,8 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
 
   // Handlers for unlocking individual components
   const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
-    // Check if already unlocked in current session
-    const existingSession = checkUnlockSession(component);
+    // Check if already unlocked in current session (with tier awareness)
+    const existingSession = checkUnlockSession(component, currentTier);
     if (existingSession) {
       const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
       info(`${component} already unlocked (${timeRemaining})`);
@@ -501,6 +502,55 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
     } catch (error) {
       info(`Failed to unlock ${component}. Please try again.`);
     }
+  };
+
+  // Earnings Analysis Upgrade Card Component for free users
+  const EarningsUpgradeCard: React.FC = () => {
+    const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-800';
+    const borderColor = isLight ? 'border-stone-400' : 'border-gray-700';
+    const gradientFrom = isLight ? 'from-blue-500' : 'from-blue-600';
+    const gradientTo = isLight ? 'to-purple-600' : 'to-purple-700';
+    const buttonBg = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
+    
+    return (
+      <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} text-center h-full flex flex-col justify-center`}>
+        <div className={`w-16 h-16 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-full flex items-center justify-center mx-auto mb-4`}>
+          <Lock className="w-8 h-8 text-white" />
+        </div>
+        
+        <h3 className={`text-xl font-bold ${textColor} mb-2`}>
+          Earnings Analysis
+        </h3>
+        
+        <p className={`${subTextColor} mb-4 max-w-md mx-auto`}>
+          Access comprehensive earnings analysis with performance metrics, risk assessment, and historical earnings data to enhance your investment research.
+        </p>
+        
+        <div className={`${isLight ? 'bg-stone-200' : 'bg-gray-900'} rounded-lg p-4 mb-6`}>
+          <h4 className={`font-semibold ${textColor} mb-2`}>Pro Features Include:</h4>
+          <ul className={`text-sm ${subTextColor} space-y-1 text-left max-w-xs mx-auto`}>
+            <li>• Earnings surprise analysis</li>
+            <li>• Historical performance tracking</li>
+            <li>• Risk assessment metrics</li>
+            <li>• Company financial overview</li>
+            <li>• Post-earnings drift analysis</li>
+          </ul>
+        </div>
+        
+        <button
+          onClick={() => showTierLimitDialog(
+            'Earnings Analysis',
+            'Earnings analysis is a Pro feature. Upgrade to access comprehensive company analysis, financial metrics, and professional insights.',
+            'Unlock advanced earnings analysis, sector information, trading ranges, and detailed financial insights with HRVSTR Pro.',
+            'general'
+          )}
+          className={`${buttonBg} text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center mx-auto`}
+        >
+          <Crown className="w-4 h-4 mr-2" />
+          Upgrade to Pro
+        </button>
+      </div>
+    );
   };
 
   return (
@@ -622,7 +672,10 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
               </h2>
             </div>
             <div className="p-4">
-              {unlockedComponents.earningsAnalysis ? (
+              {/* Check tier first - free users should see upgrade card, not unlock option */}
+              {currentTier === 'free' ? (
+                <EarningsUpgradeCard />
+              ) : unlockedComponents.earningsAnalysis ? (
                 <>
                   {!selectedTicker ? (
                     <div className={`flex flex-col items-center justify-center p-10 ${subTextColor} text-center`}>
@@ -782,33 +835,33 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
                               <div className="flex justify-between">
                                 <span className={isLight ? 'text-stone-700' : 'text-gray-300'}>Beat Frequency:</span>
                                 <span className={
-                                  earningsAnalysis.beatFrequency >= 70 ? 'text-green-500 font-medium' :
-                                  earningsAnalysis.beatFrequency >= 50 ? 'text-yellow-500 font-medium' :
+                                  (earningsAnalysis.beatFrequency ?? 0) >= 70 ? 'text-green-500 font-medium' :
+                                  (earningsAnalysis.beatFrequency ?? 0) >= 50 ? 'text-yellow-500 font-medium' :
                                   'text-red-500 font-medium'
                                 }>
-                                  {earningsAnalysis.beatFrequency !== null ? `${earningsAnalysis.beatFrequency}%` : 'N/A'}
+                                  {earningsAnalysis.beatFrequency !== null && earningsAnalysis.beatFrequency !== undefined ? `${earningsAnalysis.beatFrequency}%` : 'N/A'}
                                 </span>
                               </div>
                               <div className="flex justify-between">
                                 <span className={isLight ? 'text-stone-700' : 'text-gray-300'}>Avg Surprise:</span>
                                 <span className={
-                                  earningsAnalysis.averageSurprise > 0 ? 'text-green-500 font-medium' :
-                                  earningsAnalysis.averageSurprise < 0 ? 'text-red-500 font-medium' :
+                                  (earningsAnalysis.averageSurprise ?? 0) > 0 ? 'text-green-500 font-medium' :
+                                  (earningsAnalysis.averageSurprise ?? 0) < 0 ? 'text-red-500 font-medium' :
                                   isLight ? 'text-stone-900 font-medium' : 'text-white font-medium'
                                 }>
-                                  {earningsAnalysis.averageSurprise !== null 
-                                    ? `${earningsAnalysis.averageSurprise > 0 ? '+' : ''}${earningsAnalysis.averageSurprise.toFixed(2)}%`
+                                  {earningsAnalysis.averageSurprise !== null && earningsAnalysis.averageSurprise !== undefined
+                                    ? `${(earningsAnalysis.averageSurprise ?? 0) > 0 ? '+' : ''}${earningsAnalysis.averageSurprise.toFixed(2)}%`
                                     : 'N/A'}
                                 </span>
                               </div>
                               <div className="flex justify-between">
                                 <span className={isLight ? 'text-stone-700' : 'text-gray-300'}>Consistency:</span>
                                 <span className={
-                                  earningsAnalysis.consistency >= 70 ? 'text-green-500 font-medium' :
-                                  earningsAnalysis.consistency >= 50 ? 'text-yellow-500 font-medium' :
+                                  (earningsAnalysis.consistency ?? 0) >= 70 ? 'text-green-500 font-medium' :
+                                  (earningsAnalysis.consistency ?? 0) >= 50 ? 'text-yellow-500 font-medium' :
                                   'text-red-500 font-medium'
                                 }>
-                                  {earningsAnalysis.consistency !== null ? `${earningsAnalysis.consistency.toFixed(1)}%` : 'N/A'}
+                                  {earningsAnalysis.consistency !== null && earningsAnalysis.consistency !== undefined ? `${earningsAnalysis.consistency.toFixed(1)}%` : 'N/A'}
                                 </span>
                               </div>
                             </div>
@@ -816,32 +869,32 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
                               <div className="flex justify-between">
                                 <span className={isLight ? 'text-stone-700' : 'text-gray-300'}>Latest Surprise:</span>
                                 <span className={
-                                  earningsAnalysis.latestEarnings?.surprise > 0 ? 'text-green-500 font-medium' :
-                                  earningsAnalysis.latestEarnings?.surprise < 0 ? 'text-red-500 font-medium' :
+                                  (earningsAnalysis.latestEarnings?.surprise ?? 0) > 0 ? 'text-green-500 font-medium' :
+                                  (earningsAnalysis.latestEarnings?.surprise ?? 0) < 0 ? 'text-red-500 font-medium' :
                                   isLight ? 'text-stone-900 font-medium' : 'text-white font-medium'
                                 }>
-                                  {earningsAnalysis.latestEarnings?.surprise !== null 
-                                    ? `${earningsAnalysis.latestEarnings?.surprise > 0 ? '+' : ''}${earningsAnalysis.latestEarnings?.surprise.toFixed(2)}%`
+                                  {earningsAnalysis.latestEarnings?.surprise !== null && earningsAnalysis.latestEarnings?.surprise !== undefined
+                                    ? `${(earningsAnalysis.latestEarnings?.surprise ?? 0) > 0 ? '+' : ''}${earningsAnalysis.latestEarnings.surprise.toFixed(2)}%`
                                     : 'N/A'}
                                 </span>
                               </div>
                               <div className="flex justify-between">
                                 <span className={isLight ? 'text-stone-700' : 'text-gray-300'}>Surprise Magnitude:</span>
                                 <span className={isLight ? 'text-stone-900 font-medium' : 'text-white font-medium'}>
-                                  {earningsAnalysis.latestEarnings?.magnitude !== null 
-                                    ? `${earningsAnalysis.latestEarnings?.magnitude.toFixed(2)}%`
+                                  {earningsAnalysis.latestEarnings?.magnitude !== null && earningsAnalysis.latestEarnings?.magnitude !== undefined
+                                    ? `${earningsAnalysis.latestEarnings.magnitude.toFixed(2)}%`
                                     : 'N/A'}
                                 </span>
                               </div>
                               <div className="flex justify-between">
                                 <span className={isLight ? 'text-stone-700' : 'text-gray-300'}>Post-Earnings Drift:</span>
                                 <span className={
-                                  earningsAnalysis.postEarningsDrift > 0 ? 'text-green-500 font-medium' :
-                                  earningsAnalysis.postEarningsDrift < 0 ? 'text-red-500 font-medium' :
+                                  (earningsAnalysis.postEarningsDrift ?? 0) > 0 ? 'text-green-500 font-medium' :
+                                  (earningsAnalysis.postEarningsDrift ?? 0) < 0 ? 'text-red-500 font-medium' :
                                   isLight ? 'text-stone-900 font-medium' : 'text-white font-medium'
                                 }>
-                                  {earningsAnalysis.postEarningsDrift !== null 
-                                    ? `${earningsAnalysis.postEarningsDrift > 0 ? '+' : ''}${earningsAnalysis.postEarningsDrift.toFixed(2)}%`
+                                  {earningsAnalysis.postEarningsDrift !== null && earningsAnalysis.postEarningsDrift !== undefined
+                                    ? `${(earningsAnalysis.postEarningsDrift ?? 0) > 0 ? '+' : ''}${earningsAnalysis.postEarningsDrift.toFixed(2)}%`
                                     : 'N/A'}
                                 </span>
                               </div>
@@ -901,6 +954,7 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
                   )}
                 </>
               ) : (
+                // Pro+ users without unlock get credit unlock option
                 <LockedOverlay
                   title="Earnings Analysis"
                   description="Unlock comprehensive earnings analysis with performance metrics, risk assessment, and historical earnings data."

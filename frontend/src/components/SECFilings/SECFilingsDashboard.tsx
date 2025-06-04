@@ -44,6 +44,15 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
   const tabInactiveBg = isLight ? 'bg-gray-100' : 'bg-gray-800';
   const tabInactiveText = isLight ? 'text-gray-700' : 'text-gray-300';
 
+  // Simple browser session memory for tier upgrade edge case
+  const [sessionUnlockMemory, setSessionUnlockMemory] = useState<{
+    insiderTrading: boolean;
+    institutionalHoldings: boolean;
+  }>({
+    insiderTrading: false,
+    institutionalHoldings: false
+  });
+
   // Component unlock state - managed by sessions
   const [unlockedComponents, setUnlockedComponents] = useState<{
     insiderTrading: boolean;
@@ -106,37 +115,67 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     
     const checkExistingSessions = async () => {
       try {
-        // Use new database-based checking
-        const insiderSession = await checkComponentAccess('insiderTrading');
-        const institutionalSession = await checkComponentAccess('institutionalHoldings');
+        // Use new database-based checking like other components with tier awareness
+        const insiderSession = await checkComponentAccess('insiderTrading', currentTier);
+        const institutionalSession = await checkComponentAccess('institutionalHoldings', currentTier);
 
-        setUnlockedComponents({
+        // For institutional holdings, check session memory if no active session but tier supports it
+        const hasInstitutionalAccess = !!institutionalSession || 
+          (sessionUnlockMemory.institutionalHoldings && ['pro', 'elite', 'institutional'].includes(currentTier.toLowerCase())) ||
+          // AUTO-GRANT: Pro+ users get institutional holdings as part of tier benefits (no session needed)
+          ['pro', 'elite', 'institutional'].includes(currentTier.toLowerCase());
+
+        const newUnlockedState = {
           insiderTrading: !!insiderSession,
-          institutionalHoldings: !!institutionalSession
-        });
+          institutionalHoldings: hasInstitutionalAccess
+        };
+
+        // Log session restoration scenarios
+        if (!unlockedComponents.institutionalHoldings && newUnlockedState.institutionalHoldings) {
+          if (institutionalSession) {
+            console.log('🎉 SEC DASHBOARD - Institutional holdings session restored from database after tier upgrade!');
+          } else if (sessionUnlockMemory.institutionalHoldings) {
+            console.log('🎉 SEC DASHBOARD - Institutional holdings restored from session memory after tier upgrade!');
+          } else if (['pro', 'elite', 'institutional'].includes(currentTier.toLowerCase())) {
+            console.log('🎉 SEC DASHBOARD - Institutional holdings auto-granted for Pro+ tier!');
+          }
+        }
+
+        setUnlockedComponents(newUnlockedState);
 
         // Update active sessions for display (fallback to localStorage sessions for display)
-        const sessions = getAllUnlockSessions();
+        const sessions = getAllUnlockSessions(currentTier);
         setActiveSessions(sessions);
         
         console.log('🔍 SEC DASHBOARD - Component access check:', {
           insiderTrading: !!insiderSession,
-          institutionalHoldings: !!institutionalSession,
+          institutionalHoldings: hasInstitutionalAccess,
+          institutionalFromSession: !!institutionalSession,
+          institutionalFromMemory: sessionUnlockMemory.institutionalHoldings,
           insiderSessionId: insiderSession?.sessionId,
-          institutionalSessionId: institutionalSession?.sessionId
+          institutionalSessionId: institutionalSession?.sessionId,
+          currentTier,
+          previousInstitutionalState: unlockedComponents.institutionalHoldings,
+          newInstitutionalState: newUnlockedState.institutionalHoldings
         });
       } catch (error) {
         console.warn('Failed to check database sessions, falling back to localStorage:', error);
-        // Fallback to localStorage checking
-        const insiderSession = checkUnlockSession('insiderTrading');
-        const institutionalSession = checkUnlockSession('institutionalHoldings');
+        // Fallback to localStorage checking with tier awareness
+        const insiderSession = checkUnlockSession('insiderTrading', currentTier);
+        const institutionalSession = checkUnlockSession('institutionalHoldings', currentTier);
+
+        // Also check session memory for institutional holdings
+        const hasInstitutionalAccess = !!institutionalSession || 
+          (sessionUnlockMemory.institutionalHoldings && ['pro', 'elite', 'institutional'].includes(currentTier.toLowerCase())) ||
+          // AUTO-GRANT: Pro+ users get institutional holdings as part of tier benefits (no session needed)
+          ['pro', 'elite', 'institutional'].includes(currentTier.toLowerCase());
 
         setUnlockedComponents({
           insiderTrading: !!insiderSession,
-          institutionalHoldings: !!institutionalSession
+          institutionalHoldings: hasInstitutionalAccess
         });
 
-        const sessions = getAllUnlockSessions();
+        const sessions = getAllUnlockSessions(currentTier);
         setActiveSessions(sessions);
       }
     };
@@ -147,7 +186,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     // Check for expired sessions every minute
     const interval = setInterval(checkExistingSessions, 60000);
     return () => clearInterval(interval);
-  }, [tierInfo, currentTier]);
+  }, [tierInfo, currentTier, sessionUnlockMemory]);
 
   // Check tier access using TierContext instead of AuthContext
   const hasInstitutionalAccess = Boolean(currentTier && ['pro', 'elite', 'institutional'].includes(currentTier));
@@ -477,8 +516,8 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
 
   // Handlers for unlocking individual components
   const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
-    // Check if already unlocked in current session
-    const existingSession = checkUnlockSession(component);
+    // Check if already unlocked in current session (with tier awareness)
+    const existingSession = checkUnlockSession(component, currentTier);
     if (existingSession) {
       const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
       info(`${component} already unlocked (${timeRemaining})`);
@@ -513,6 +552,12 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
           ...prev,
           [component]: true
         }));
+
+        // Record in session memory for tier upgrade edge case
+        setSessionUnlockMemory(prev => ({
+          ...prev,
+          [component]: true
+        }));
         
         // IMPORTANT: Trigger data loading for the unlocked component
         if (component === 'institutionalHoldings') {
@@ -542,7 +587,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
         });
         
         // Update active sessions
-        const sessions = getAllUnlockSessions();
+        const sessions = getAllUnlockSessions(currentTier);
         setActiveSessions(sessions);
         
         // Show appropriate toast message
@@ -608,6 +653,65 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
       </div>
     </div>
   );
+
+  // Auto-trigger data loading when components become unlocked (cross-device sync)
+  useEffect(() => {
+    // Only auto-trigger if the current tier supports the component
+    const tierSupportsInsider = true; // All tiers can unlock insider trading with credits
+    const tierSupportsInstitutional = ['pro', 'elite', 'institutional'].includes(currentTier.toLowerCase());
+    
+    // Trigger data loading for insider trading when it becomes unlocked
+    if (unlockedComponents.insiderTrading && 
+        tierSupportsInsider &&
+        !loadingState.insiderTrades.isLoading && 
+        !loadingState.insiderTrades.needsRefresh &&
+        insiderTradesData.length === 0) {
+      console.log('🔄 SEC DASHBOARD - Auto-triggering insider trades data load');
+      setLoadingState(prev => ({
+        ...prev,
+        insiderTrades: { 
+          isLoading: false, 
+          needsRefresh: true 
+        }
+      }));
+    }
+    
+    // Trigger data loading for institutional holdings when it becomes unlocked (Pro+ only)
+    if (unlockedComponents.institutionalHoldings && 
+        tierSupportsInstitutional &&
+        !loadingState.institutionalHoldings.isLoading && 
+        !loadingState.institutionalHoldings.needsRefresh &&
+        institutionalHoldingsData.length === 0) {
+      console.log('🔄 SEC DASHBOARD - Auto-triggering institutional holdings data load');
+      setLoadingState(prev => ({
+        ...prev,
+        institutionalHoldings: { 
+          isLoading: false, 
+          needsRefresh: true 
+        }
+      }));
+    }
+  }, [
+    unlockedComponents.insiderTrading, 
+    unlockedComponents.institutionalHoldings,
+    loadingState.insiderTrades.isLoading,
+    loadingState.institutionalHoldings.isLoading,
+    loadingState.insiderTrades.needsRefresh,
+    loadingState.institutionalHoldings.needsRefresh,
+    insiderTradesData.length,
+    institutionalHoldingsData.length,
+    currentTier // Add currentTier as dependency to react to tier changes
+  ]);
+
+  // Initialize session memory based on current unlock state
+  useEffect(() => {
+    if (unlockedComponents.insiderTrading || unlockedComponents.institutionalHoldings) {
+      setSessionUnlockMemory(prev => ({
+        insiderTrading: prev.insiderTrading || unlockedComponents.insiderTrading,
+        institutionalHoldings: prev.institutionalHoldings || unlockedComponents.institutionalHoldings
+      }));
+    }
+  }, [unlockedComponents.insiderTrading, unlockedComponents.institutionalHoldings]);
 
   return (
     <>
@@ -729,7 +833,10 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
           
           {activeTab === 'institutional' && (
             <>
-              {unlockedComponents.institutionalHoldings ? (
+              {/* Check tier first - free users should see upgrade card, not unlock option */}
+              {currentTier === 'free' ? (
+                <InstitutionalUpgradeCard />
+              ) : unlockedComponents.institutionalHoldings ? (
                 <>
                   {loadingState.institutionalHoldings.isLoading ? (
                     <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden h-full`}>
@@ -757,6 +864,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
                   )}
                 </>
               ) : (
+                // Pro+ users without unlock get credit unlock option
                 <LockedOverlay
                   title="Institutional Holdings"
                   description="Access comprehensive 13F filing data, institutional investment tracking, and hedge fund position analysis."

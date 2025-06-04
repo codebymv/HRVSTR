@@ -241,9 +241,9 @@ const SentimentDashboard: React.FC = () => {
     if (!tierInfo) return;
     
     const checkExistingSessions = () => {
-      const chartSession = checkUnlockSession('chart');
-      const scoresSession = checkUnlockSession('scores');
-      const redditSession = checkUnlockSession('reddit');
+      const chartSession = checkUnlockSession('chart', currentTier);
+      const scoresSession = checkUnlockSession('scores', currentTier);
+      const redditSession = checkUnlockSession('reddit', currentTier);
 
       setUnlockedComponents({
         chart: !!chartSession,
@@ -294,8 +294,8 @@ const SentimentDashboard: React.FC = () => {
 
   // Handlers for unlocking individual components
   const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
-    // Check if already unlocked in current session
-    const existingSession = checkUnlockSession(component);
+    // Check if already unlocked in current session (with tier awareness)
+    const existingSession = checkUnlockSession(component, currentTier);
     if (existingSession) {
       const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
       info(`${component} already unlocked (${timeRemaining})`);
