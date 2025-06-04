@@ -57,6 +57,7 @@ async function storeSentimentData(userId, sessionId, queryType, data, timeRange 
  */
 async function getActiveSessionId(userId, component = 'chart') {
   try {
+    // TIMEZONE FIX: Use explicit UTC comparison for session lookup
     const result = await pool.query(`
       SELECT session_id FROM research_sessions 
       WHERE user_id = $1 AND component = $2 AND status = 'active'

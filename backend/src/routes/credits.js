@@ -255,6 +255,19 @@ router.post('/research-session', authenticateToken, async (req, res) => {
 });
 
 /**
+ * Get session duration based on user tier
+ */
+function getSessionDuration(tier) {
+  const tierSessionDurations = {
+    free: 30 * 60 * 1000,        // 30 minutes
+    pro: 2 * 60 * 60 * 1000,     // 2 hours
+    elite: 4 * 60 * 60 * 1000,   // 4 hours
+    institutional: 8 * 60 * 60 * 1000 // 8 hours
+  };
+  return tierSessionDurations[tier.toLowerCase()] || tierSessionDurations.free;
+}
+
+/**
  * POST /api/credits/unlock-component
  * Unlock a component by deducting credits (with session persistence)
  */
@@ -286,40 +299,37 @@ router.post('/unlock-component', authenticateToken, async (req, res) => {
     
     const user = userResult.rows[0];
     
-    // Check for existing active session for this component
+    // TIMEZONE FIX: Check for existing active session using explicit UTC comparison
     const existingSession = await pool.query(
-      'SELECT session_id, expires_at, credits_used FROM research_sessions WHERE user_id = $1 AND component = $2 AND status = $3 AND expires_at > CURRENT_TIMESTAMP',
+      'SELECT session_id, expires_at, credits_used FROM research_sessions WHERE user_id = $1 AND component = $2 AND status = $3 AND expires_at > (NOW() AT TIME ZONE \'UTC\')',
       [userId, component, 'active']
     );
     
     if (existingSession.rows.length > 0) {
       const session = existingSession.rows[0];
-      const timeRemaining = new Date(session.expires_at) - new Date();
-      const hoursRemaining = Math.round(timeRemaining / (1000 * 60 * 60) * 10) / 10;
+      // TIMEZONE FIX: Use UTC for time calculations
+      const nowUtc = new Date().toISOString();
+      const expiresAtUtc = new Date(session.expires_at).toISOString();
+      const timeRemaining = new Date(expiresAtUtc) - new Date(nowUtc);
+      const hoursRemaining = Math.max(0, Math.round(timeRemaining / (1000 * 60 * 60) * 10) / 10);
+      
+      console.log(`[TIMEZONE DEBUG] Existing session check:
+        NOW UTC: ${nowUtc}
+        EXPIRES UTC: ${expiresAtUtc}
+        TIME REMAINING: ${timeRemaining}ms (${hoursRemaining}h)`);
       
       return res.json({
         success: true,
         message: `Component already unlocked in active session`,
         creditsUsed: 0,
         sessionId: session.session_id,
-        expiresAt: session.expires_at,
+        expiresAt: expiresAtUtc,
         timeRemaining: hoursRemaining,
         existingSession: true
       });
     }
-    
-    // Calculate session duration based on tier if not provided
-    const tierSessionDurations = {
-      free: 30 * 60 * 1000,        // 30 minutes
-      pro: 2 * 60 * 60 * 1000,     // 2 hours
-      elite: 4 * 60 * 60 * 1000,   // 4 hours
-      institutional: 8 * 60 * 60 * 1000 // 8 hours
-    };
-    
-    const defaultDuration = tierSessionDurations[user.tier.toLowerCase()] || tierSessionDurations.free;
-    const finalSessionDuration = sessionDuration || defaultDuration;
-    
-    // Check if user has sufficient credits (existing logic)
+
+    // Check if user has sufficient credits
     const totalCredits = user.monthly_credits + (user.credits_purchased || 0);
     const remainingCredits = totalCredits - user.credits_used;
     
@@ -331,7 +341,7 @@ router.post('/unlock-component', authenticateToken, async (req, res) => {
         remaining: remainingCredits
       });
     }
-    
+
     // Begin transaction for atomic operation
     const client = await pool.connect();
     
@@ -346,56 +356,65 @@ router.post('/unlock-component', authenticateToken, async (req, res) => {
       
       const updatedUser = result.rows[0];
       const newTotalCredits = updatedUser.monthly_credits + (updatedUser.credits_purchased || 0);
-      const newRemainingCredits = newTotalCredits - updatedUser.credits_used;
+      const newCreditsUsed = updatedUser.credits_used;
+
+      // TIMEZONE FIX: Calculate session expiration in UTC
+      const nowUtc = new Date();
+      const sessionDurationMs = sessionDuration || getSessionDuration(user.tier);
+      const expiresAtUtc = new Date(nowUtc.getTime() + sessionDurationMs);
       
-      // Generate session ID and calculate expiry
+      console.log(`[TIMEZONE DEBUG] Creating new session:
+        NOW UTC: ${nowUtc.toISOString()}
+        DURATION: ${sessionDurationMs}ms
+        EXPIRES UTC: ${expiresAtUtc.toISOString()}`);
+
+      // Generate unique session ID
       const sessionId = `session_${userId}_${component}_${Date.now()}`;
-      const expiresAt = new Date(Date.now() + finalSessionDuration);
       
-      // Create research session
+      // Create new session with UTC timestamps
       await client.query(`
         INSERT INTO research_sessions (
-          user_id, 
-          session_id, 
-          component, 
-          credits_used, 
-          expires_at,
-          metadata
-        ) VALUES ($1, $2, $3, $4, $5, $6)
+          user_id, session_id, component, credits_used, 
+          unlocked_at, expires_at, metadata
+        ) VALUES ($1, $2, $3, $4, $5 AT TIME ZONE 'UTC', $6 AT TIME ZONE 'UTC', $7)
       `, [
         userId,
         sessionId,
         component,
         cost,
-        expiresAt,
+        nowUtc.toISOString(),
+        expiresAtUtc.toISOString(),
         JSON.stringify({
           tier: user.tier,
           component_cost: cost,
-          session_duration_ms: finalSessionDuration
+          session_duration_ms: sessionDurationMs,
+          created_timestamp_utc: nowUtc.toISOString()
         })
       ]);
-      
+
       // Log the transaction
       await client.query(`
         INSERT INTO credit_transactions (
           user_id, 
-          action, 
-          credits_used, 
-          credits_remaining, 
+          transaction_type, 
+          amount, 
+          balance_after,
+          description,
           metadata,
           created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
       `, [
         userId,
         `unlock_${component}`,
         cost,
-        newRemainingCredits,
+        newTotalCredits - newCreditsUsed,
+        `Unlocked ${component} component`,
         JSON.stringify({
           component,
           tier: user.tier,
           component_cost: cost,
           session_id: sessionId,
-          expires_at: expiresAt
+          expires_at: expiresAtUtc.toISOString()
         }),
         new Date().toISOString()
       ]);
@@ -408,25 +427,23 @@ router.post('/unlock-component', authenticateToken, async (req, res) => {
           userId,
           'component_unlock',
           `Unlocked ${component}`,
-          `${cost} credits used to unlock ${component} component for ${Math.round(finalSessionDuration / (1000 * 60 * 60))} hours`
+          `${cost} credits used to unlock ${component} component for ${Math.round(sessionDurationMs / (1000 * 60 * 60))} hours`
         ]
       );
-      
+
       await client.query('COMMIT');
       
-      const hoursUnlocked = Math.round(finalSessionDuration / (1000 * 60 * 60) * 10) / 10;
-      
-      console.log(`💳 Component unlocked - User: ${userId}, Component: ${component}, Cost: ${cost}, Session: ${hoursUnlocked}h, Remaining: ${newRemainingCredits}`);
-      
+      console.log(`💳 Component unlocked - User: ${userId}, Component: ${component}, Cost: ${cost}, Session: ${Math.round(sessionDurationMs / (1000 * 60 * 60) * 10) / 10}h, Remaining: ${newTotalCredits - newCreditsUsed}`);
+
       res.json({
         success: true,
         message: `Successfully unlocked ${component}`,
         creditsUsed: cost,
-        creditsRemaining: newRemainingCredits,
+        creditsRemaining: newTotalCredits - newCreditsUsed,
         component,
         sessionId,
-        expiresAt,
-        sessionDurationHours: hoursUnlocked,
+        expiresAt: expiresAtUtc.toISOString(),
+        sessionDurationHours: Math.round(sessionDurationMs / (1000 * 60 * 60) * 10) / 10,
         existingSession: false
       });
       
@@ -436,7 +453,6 @@ router.post('/unlock-component', authenticateToken, async (req, res) => {
     } finally {
       client.release();
     }
-    
   } catch (error) {
     console.error('Error unlocking component:', error);
     res.status(500).json({
@@ -457,19 +473,23 @@ router.get('/active-sessions', authenticateToken, async (req, res) => {
     // Clean up expired sessions first
     await pool.query('SELECT cleanup_expired_sessions()');
     
-    // Get active sessions
+    // TIMEZONE FIX: Get active sessions using explicit UTC comparison
     const activeSessions = await pool.query(
-      'SELECT component, session_id, expires_at, credits_used, unlocked_at FROM research_sessions WHERE user_id = $1 AND status = $2 AND expires_at > CURRENT_TIMESTAMP ORDER BY unlocked_at DESC',
+      'SELECT component, session_id, expires_at, credits_used, unlocked_at FROM research_sessions WHERE user_id = $1 AND status = $2 AND expires_at > (NOW() AT TIME ZONE \'UTC\') ORDER BY unlocked_at DESC',
       [userId, 'active']
     );
     
-    // Calculate time remaining for each session
+    // TIMEZONE FIX: Calculate time remaining using UTC
+    const nowUtc = new Date().toISOString();
     const sessionsWithTimeRemaining = activeSessions.rows.map(session => {
-      const timeRemaining = new Date(session.expires_at) - new Date();
+      const expiresAtUtc = new Date(session.expires_at).toISOString();
+      const timeRemaining = new Date(expiresAtUtc) - new Date(nowUtc);
       const hoursRemaining = Math.max(0, Math.round(timeRemaining / (1000 * 60 * 60) * 10) / 10);
       
       return {
         ...session,
+        expires_at: expiresAtUtc,
+        unlocked_at: new Date(session.unlocked_at).toISOString(),
         timeRemainingHours: hoursRemaining,
         isExpired: timeRemaining <= 0
       };
@@ -569,20 +589,28 @@ router.get('/component-access/:component', authenticateToken, async (req, res) =
     // Clean up expired sessions first
     await pool.query('SELECT cleanup_expired_sessions()');
     
-    // Check for active session for this component
+    // TIMEZONE FIX: Check for active session using explicit UTC comparison
     const sessionResult = await pool.query(
-      'SELECT session_id, component, credits_used, expires_at, status, metadata FROM research_sessions WHERE user_id = $1 AND component = $2 AND status = $3 AND expires_at > CURRENT_TIMESTAMP ORDER BY unlocked_at DESC LIMIT 1',
+      'SELECT session_id, component, credits_used, expires_at, status, metadata FROM research_sessions WHERE user_id = $1 AND component = $2 AND status = $3 AND expires_at > (NOW() AT TIME ZONE \'UTC\') ORDER BY unlocked_at DESC LIMIT 1',
       [userId, component, 'active']
     );
     
     const hasAccess = sessionResult.rows.length > 0;
     const session = hasAccess ? sessionResult.rows[0] : null;
     
-    // Calculate time remaining if there's an active session
+    // TIMEZONE FIX: Calculate time remaining using UTC
     let timeRemainingHours = 0;
     if (session) {
-      const timeRemaining = new Date(session.expires_at) - new Date();
+      const nowUtc = new Date().toISOString();
+      const expiresAtUtc = new Date(session.expires_at).toISOString();
+      const timeRemaining = new Date(expiresAtUtc) - new Date(nowUtc);
       timeRemainingHours = Math.max(0, Math.round(timeRemaining / (1000 * 60 * 60) * 10) / 10);
+      
+      console.log(`[checkComponentAccess] TIMEZONE DEBUG for ${component}:
+        NOW UTC: ${nowUtc}
+        EXPIRES UTC: ${expiresAtUtc}
+        TIME REMAINING: ${timeRemaining}ms (${timeRemainingHours}h)
+        HAS ACCESS: ${hasAccess}`);
     }
     
     res.json({
@@ -593,7 +621,7 @@ router.get('/component-access/:component', authenticateToken, async (req, res) =
         session_id: session.session_id,
         component: session.component,
         credits_used: session.credits_used,
-        expires_at: session.expires_at,
+        expires_at: new Date(session.expires_at).toISOString(),
         status: session.status,
         metadata: session.metadata,
         timeRemainingHours

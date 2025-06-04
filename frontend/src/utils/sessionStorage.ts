@@ -24,30 +24,10 @@ const SESSION_STORAGE_PREFIX = 'hrvstr_unlock_';
 /**
  * Check if component is unlocked by querying the database ONLY
  * No localStorage fallback - everything goes through the database layer
- * Includes tier-based auto-grants for Pro+ users
+ * All users (including Pro+) must pay credits and have session expiration
  */
 export const checkComponentAccess = async (component: string, currentTier?: string): Promise<UnlockSession | null> => {
   try {
-    // TIER-BASED AUTO-GRANTS: Pro+ users get certain components as part of tier benefits
-    if (currentTier && ['pro', 'elite', 'institutional'].includes(currentTier.toLowerCase())) {
-      if (component === 'insiderTrading' || component === 'institutionalHoldings' || component === 'earningsAnalysis') {
-        console.log(`[checkComponentAccess] ✅ Auto-granted ${component} for ${currentTier} tier user`);
-        
-        // Create a virtual session for tier-based access
-        const virtualSession: UnlockSession = {
-          unlocked: true,
-          timestamp: Date.now(),
-          expiresAt: Date.now() + (365 * 24 * 60 * 60 * 1000), // 1 year expiry for tier benefits
-          sessionId: `tier-${currentTier}-${component}`,
-          component,
-          creditsUsed: 0,
-          tier: currentTier
-        };
-        
-        return virtualSession;
-      }
-    }
-
     const token = localStorage.getItem('auth_token');
     if (!token) {
       console.warn(`[checkComponentAccess] No auth token found for ${component}`);
@@ -78,6 +58,7 @@ export const checkComponentAccess = async (component: string, currentTier?: stri
       timeRemaining: data.session?.timeRemainingHours
     });
 
+    // Check for active paid sessions - ALL USERS must have active sessions
     if (data.success && data.hasAccess && data.session) {
       // TIER-AWARE VALIDATION: Check if current tier supports this component
       const tierSupportsComponent = checkTierSupportsComponent(component, currentTier);
@@ -101,10 +82,10 @@ export const checkComponentAccess = async (component: string, currentTier?: stri
       
       console.log(`[checkComponentAccess] ✅ Active database session found for ${component}`);
       return unlockSession;
-    } else {
-      console.log(`[checkComponentAccess] ❌ No active database session for ${component}`);
-      return null;
     }
+
+    console.log(`[checkComponentAccess] ❌ No active database session for ${component}`);
+    return null;
   } catch (error) {
     console.warn(`[checkComponentAccess] Error checking database session for ${component}:`, error);
     return null;
@@ -125,13 +106,13 @@ const checkTierSupportsComponent = (component: string, currentTier?: string): bo
   const tier = currentTier.toLowerCase();
   console.log(`[checkTierSupportsComponent] Normalized tier: ${tier}`);
   
-  // Define tier access rules - CORRECTED STRUCTURE
-  // Each tier maps to the components it can access
+  // Define tier access rules - what features each tier can access/unlock
+  // Free users are completely blocked from premium features
   const tierAccess: Record<string, string[]> = {
-    // Free tier gets basic access only
-    'free': ['insiderTrading'], // Free users can unlock insider trading with credits
+    // Free tier: Can only unlock insider trading with credits
+    'free': ['insiderTrading'],
     
-    // Pro tier and above get institutional holdings AND earnings analysis (Pro+ exclusive features)
+    // Pro tier and above: Can unlock all features with credits (including premium ones)
     'pro': ['insiderTrading', 'institutionalHoldings', 'earningsAnalysis'],
     'elite': ['insiderTrading', 'institutionalHoldings', 'earningsAnalysis'],
     'institutional': ['insiderTrading', 'institutionalHoldings', 'earningsAnalysis'],

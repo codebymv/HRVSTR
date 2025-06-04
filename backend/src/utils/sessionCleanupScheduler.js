@@ -187,16 +187,16 @@ class SessionCleanupScheduler {
       const longRunningSessions = await pool.query(`
         SELECT 
           rs.*,
-          EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - rs.unlocked_at))/3600 as hours_running,
+          EXTRACT(EPOCH FROM ((NOW() AT TIME ZONE 'UTC') - rs.unlocked_at))/3600 as hours_running,
           rs.metadata->>'tier' as tier
         FROM research_sessions rs
         WHERE rs.status = 'active'
           AND (
-            (rs.metadata->>'tier' = 'free' AND rs.unlocked_at < CURRENT_TIMESTAMP - INTERVAL '30 minutes') OR
-            (rs.metadata->>'tier' = 'pro' AND rs.unlocked_at < CURRENT_TIMESTAMP - INTERVAL '2 hours') OR
-            (rs.metadata->>'tier' = 'elite' AND rs.unlocked_at < CURRENT_TIMESTAMP - INTERVAL '4 hours') OR
-            (rs.metadata->>'tier' = 'institutional' AND rs.unlocked_at < CURRENT_TIMESTAMP - INTERVAL '8 hours') OR
-            (rs.metadata->>'tier' IS NULL AND rs.unlocked_at < CURRENT_TIMESTAMP - INTERVAL '30 minutes')
+            (rs.metadata->>'tier' = 'free' AND rs.unlocked_at < (NOW() AT TIME ZONE 'UTC') - INTERVAL '30 minutes') OR
+            (rs.metadata->>'tier' = 'pro' AND rs.unlocked_at < (NOW() AT TIME ZONE 'UTC') - INTERVAL '2 hours') OR
+            (rs.metadata->>'tier' = 'elite' AND rs.unlocked_at < (NOW() AT TIME ZONE 'UTC') - INTERVAL '4 hours') OR
+            (rs.metadata->>'tier' = 'institutional' AND rs.unlocked_at < (NOW() AT TIME ZONE 'UTC') - INTERVAL '8 hours') OR
+            (rs.metadata->>'tier' IS NULL AND rs.unlocked_at < (NOW() AT TIME ZONE 'UTC') - INTERVAL '30 minutes')
           )
       `);
 
@@ -209,7 +209,7 @@ class SessionCleanupScheduler {
         const sessionIds = longRunningSessions.rows.map(s => s.session_id);
         await pool.query(`
           UPDATE research_sessions 
-          SET status = 'expired', updated_at = CURRENT_TIMESTAMP
+          SET status = 'expired', updated_at = (NOW() AT TIME ZONE 'UTC')
           WHERE session_id = ANY($1)
         `, [sessionIds]);
         
@@ -247,8 +247,8 @@ class SessionCleanupScheduler {
       // Get session stats
       const sessionStats = await pool.query(`
         SELECT 
-          COUNT(*) FILTER (WHERE status = 'active' AND expires_at > CURRENT_TIMESTAMP) as active_sessions,
-          COUNT(*) FILTER (WHERE status = 'active' AND expires_at <= CURRENT_TIMESTAMP) as expired_sessions,
+          COUNT(*) FILTER (WHERE status = 'active' AND expires_at > (NOW() AT TIME ZONE 'UTC')) as active_sessions,
+          COUNT(*) FILTER (WHERE status = 'active' AND expires_at <= (NOW() AT TIME ZONE 'UTC')) as expired_sessions,
           COUNT(*) FILTER (WHERE status = 'expired') as cleaned_sessions
         FROM research_sessions
       `);

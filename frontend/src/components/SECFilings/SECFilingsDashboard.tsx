@@ -44,15 +44,6 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
   const tabInactiveBg = isLight ? 'bg-gray-100' : 'bg-gray-800';
   const tabInactiveText = isLight ? 'text-gray-700' : 'text-gray-300';
 
-  // Simple browser session memory for tier upgrade edge case
-  const [sessionUnlockMemory, setSessionUnlockMemory] = useState<{
-    insiderTrading: boolean;
-    institutionalHoldings: boolean;
-  }>({
-    insiderTrading: false,
-    institutionalHoldings: false
-  });
-
   // Component unlock state - managed by sessions
   const [unlockedComponents, setUnlockedComponents] = useState<{
     insiderTrading: boolean;
@@ -119,25 +110,15 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
         const insiderSession = await checkComponentAccess('insiderTrading', currentTier);
         const institutionalSession = await checkComponentAccess('institutionalHoldings', currentTier);
 
-        // For institutional holdings, check session memory if no active session but tier supports it
-        const hasInstitutionalAccess = !!institutionalSession || 
-          (sessionUnlockMemory.institutionalHoldings && ['pro', 'elite', 'institutional'].includes(currentTier.toLowerCase())) ||
-          // AUTO-GRANT: Pro+ users get institutional holdings as part of tier benefits (no session needed)
-          ['pro', 'elite', 'institutional'].includes(currentTier.toLowerCase());
-
         const newUnlockedState = {
           insiderTrading: !!insiderSession,
-          institutionalHoldings: hasInstitutionalAccess
+          institutionalHoldings: !!institutionalSession
         };
 
         // Log session restoration scenarios
         if (!unlockedComponents.institutionalHoldings && newUnlockedState.institutionalHoldings) {
           if (institutionalSession) {
-            console.log('🎉 SEC DASHBOARD - Institutional holdings session restored from database after tier upgrade!');
-          } else if (sessionUnlockMemory.institutionalHoldings) {
-            console.log('🎉 SEC DASHBOARD - Institutional holdings restored from session memory after tier upgrade!');
-          } else if (['pro', 'elite', 'institutional'].includes(currentTier.toLowerCase())) {
-            console.log('🎉 SEC DASHBOARD - Institutional holdings auto-granted for Pro+ tier!');
+            console.log('🎉 SEC DASHBOARD - Institutional holdings session restored from database!');
           }
         }
 
@@ -149,9 +130,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
         
         console.log('🔍 SEC DASHBOARD - Component access check (DATABASE ONLY):', {
           insiderTrading: !!insiderSession,
-          institutionalHoldings: hasInstitutionalAccess,
-          institutionalFromSession: !!institutionalSession,
-          institutionalFromMemory: sessionUnlockMemory.institutionalHoldings,
+          institutionalHoldings: !!institutionalSession,
           insiderSessionId: insiderSession?.sessionId,
           institutionalSessionId: institutionalSession?.sessionId,
           currentTier,
@@ -162,7 +141,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
         // No more localStorage fallback - just set to false if database fails
         setUnlockedComponents({
           insiderTrading: false,
-          institutionalHoldings: ['pro', 'elite', 'institutional'].includes(currentTier.toLowerCase()) // Auto-grant for Pro+
+          institutionalHoldings: false
         });
 
         setActiveSessions([]);
@@ -175,16 +154,17 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     // Check for expired sessions every minute
     const interval = setInterval(checkExistingSessions, 60000);
     return () => clearInterval(interval);
-  }, [tierInfo, currentTier, sessionUnlockMemory]);
+  }, [tierInfo, currentTier]);
 
-  // Check tier access using TierContext instead of AuthContext
-  const hasInstitutionalAccess = Boolean(currentTier && ['pro', 'elite', 'institutional'].includes(currentTier));
+  // Calculate component access state based on sessions (not tier)
+  const hasInsiderAccess = unlockedComponents.insiderTrading;
+  const hasInstitutionalAccess = unlockedComponents.institutionalHoldings;
   
-  console.log(`🔍 SEC DASHBOARD - Tier access check:`, {
+  console.log('🔐 SEC DASHBOARD - Access state:', {
     currentTier,
+    hasInsiderAccess,
     hasInstitutionalAccess,
-    tierInfo: tierInfo ? 'loaded' : 'not loaded',
-    user: user ? 'authenticated' : 'not authenticated'
+    unlockedComponents
   });
 
   // Handle loading updates from insider trades tab
@@ -294,58 +274,26 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     });
   };
   
-  // Function to refresh data - now clears backend cache
+  // Refresh data for unlocked components
   const handleRefresh = async () => {
+    if (isRefreshing) return;
+    
+    console.log('🔄 SEC DASHBOARD - Starting refresh for accessible components...');
+    
     try {
       setIsRefreshing(true);
-      
-      // Update loading stage to show cache clearing operation
       setLoadingProgress(0);
       setLoadingStage('Refreshing SEC data...');
       
-      // Propagate to parent if callback exists
       if (onLoadingProgressChange) {
         onLoadingProgressChange(0, 'Refreshing SEC data...');
       }
       
-      // Clear backend cache if user is authenticated, otherwise clear legacy cache
-      if (user?.id) {
-        // Clear user-specific cache via new API endpoint
-        try {
-          await clearUserSecCache();
-          console.log('Successfully cleared user-specific SEC cache');
-        } catch (error) {
-          console.warn('Error clearing user cache, falling back to legacy cache clear:', error);
-          await clearSecCache();
-        }
-      } else {
-        // Fall back to legacy cache clearing for non-authenticated users
-        await clearSecCache();
-      }
-      
-      // Now that cache is cleared, set the stage to 25% before fetching fresh data
-      setLoadingProgress(25);
-      setLoadingStage('Fetching fresh data...');
-      
-      if (onLoadingProgressChange) {
-        onLoadingProgressChange(25, 'Fetching fresh data...');
-      }
-      
-      // Clear current data
-      setInsiderTradesData([]);
-      setInstitutionalHoldingsData([]);
-      
-      // Clear any previous errors
-      setErrors({
-        insiderTrades: null,
-        institutionalHoldings: null
-      });
-      
-      // Set loading states to trigger data refresh based on tier
+      // Only trigger loading for components that are actually unlocked
       setLoadingState({
         insiderTrades: { 
-          isLoading: true, 
-          needsRefresh: true 
+          isLoading: hasInsiderAccess, 
+          needsRefresh: hasInsiderAccess 
         },
         institutionalHoldings: { 
           isLoading: hasInstitutionalAccess, 
@@ -406,14 +354,22 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
   // Monitor loading states and clear refresh state when all loading is complete
   useEffect(() => {
     if (isRefreshing) {
-      const insiderDone = !loadingState.insiderTrades.isLoading;
+      const insiderDone = !hasInsiderAccess || !loadingState.insiderTrades.isLoading;
       const institutionalDone = !hasInstitutionalAccess || !loadingState.institutionalHoldings.isLoading;
       
+      // If no components are accessible, end refresh immediately
+      if (!hasInsiderAccess && !hasInstitutionalAccess) {
+        console.log('🔄 SEC DASHBOARD - No components accessible, ending refresh');
+        setIsRefreshing(false);
+        return;
+      }
+      
       if (insiderDone && institutionalDone) {
+        console.log('🔄 SEC DASHBOARD - All accessible components loaded, ending refresh');
         setIsRefreshing(false);
       }
     }
-  }, [isRefreshing, loadingState.insiderTrades.isLoading, loadingState.institutionalHoldings.isLoading, hasInstitutionalAccess]);
+  }, [isRefreshing, loadingState.insiderTrades.isLoading, loadingState.institutionalHoldings.isLoading, hasInstitutionalAccess, hasInsiderAccess]);
   
   // Safety mechanism - clear refresh state after 5 seconds maximum
   useEffect(() => {
@@ -666,16 +622,6 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     institutionalHoldingsData.length,
     currentTier // Add currentTier as dependency to react to tier changes
   ]);
-
-  // Initialize session memory based on current unlock state
-  useEffect(() => {
-    if (unlockedComponents.insiderTrading || unlockedComponents.institutionalHoldings) {
-      setSessionUnlockMemory(prev => ({
-        insiderTrading: prev.insiderTrading || unlockedComponents.insiderTrading,
-        institutionalHoldings: prev.institutionalHoldings || unlockedComponents.institutionalHoldings
-      }));
-    }
-  }, [unlockedComponents.insiderTrading, unlockedComponents.institutionalHoldings]);
 
   return (
     <>

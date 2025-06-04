@@ -213,7 +213,16 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
   const sortedEarnings = sortEarnings(upcomingEarnings);
 
   const loadData = async (forceRefresh: boolean = false) => {
-    // Earnings table is always available for all users
+    // FIX: Don't auto-load data or set empty arrays - let the UI handle locked state
+    // Only proceed with data loading if user actually has an active session
+    const hasEarningsAccess = await checkComponentAccess('earningsAnalysis', currentTier);
+    if (!hasEarningsAccess) {
+      console.log('📊 No active earnings session - UI will show unlock prompt');
+      // Don't set empty arrays or change loading state - let UI handle it
+      return;
+    }
+    
+    console.log('📊 User has earnings access - loading data');
     setLoading(prev => ({ ...prev, upcomingEarnings: true }));
     setErrors(prev => ({ ...prev, upcomingEarnings: null }));
     
@@ -358,7 +367,7 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
     // Update time range
     setTimeRange(range);
     
-    // Trigger fresh data loading - earnings table is always available
+    // Trigger data loading only if user has access (session-controlled)
     loadData();
   };
 
@@ -588,13 +597,25 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Earnings Table Column - Always available */}
+          {/* Earnings Table Column - Session-based unlocking like Analysis */}
           <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden`}>
             <div className={`p-4 border-b ${borderColor}`}>
               <h2 className={`text-lg font-semibold ${textColor}`}>Upcoming Earnings</h2>
             </div>
             <div className="p-4">
-              {loading.upcomingEarnings ? (
+              {/* FIX: Make upcoming earnings section consistent with analysis section */}
+              {currentTier === 'free' ? (
+                <EarningsUpgradeCard />
+              ) : !unlockedComponents.earningsAnalysis ? (
+                // Pro+ users without unlock get credit unlock option for upcoming earnings too
+                <LockedOverlay
+                  title="Upcoming Earnings"
+                  description="Unlock access to upcoming earnings events and analysis data."
+                  cost={COMPONENT_COSTS.earningsAnalysis}
+                  componentKey="earningsAnalysis"
+                  icon={<BarChart2 className="w-8 h-8 text-white" />}
+                />
+              ) : loading.upcomingEarnings ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
                   <Loader2 className="mb-3 text-blue-500 animate-spin" size={32} />
                   <p className={`text-lg font-semibold ${textColor} mb-2`}>{loadingStage}</p>
@@ -673,7 +694,16 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
               {/* Check tier first - free users should see upgrade card, not unlock option */}
               {currentTier === 'free' ? (
                 <EarningsUpgradeCard />
-              ) : unlockedComponents.earningsAnalysis ? (
+              ) : !unlockedComponents.earningsAnalysis ? (
+                // Pro+ users without unlock get credit unlock option
+                <LockedOverlay
+                  title="Earnings Analysis"
+                  description="Unlock comprehensive earnings analysis with performance metrics, risk assessment, and historical earnings data."
+                  cost={COMPONENT_COSTS.earningsAnalysis}
+                  componentKey="earningsAnalysis"
+                  icon={<BarChart2 className="w-8 h-8 text-white" />}
+                />
+              ) : (
                 <>
                   {!selectedTicker ? (
                     <div className={`flex flex-col items-center justify-center p-10 ${subTextColor} text-center`}>
@@ -951,15 +981,6 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
                     </div>
                   )}
                 </>
-              ) : (
-                // Pro+ users without unlock get credit unlock option
-                <LockedOverlay
-                  title="Earnings Analysis"
-                  description="Unlock comprehensive earnings analysis with performance metrics, risk assessment, and historical earnings data."
-                  cost={COMPONENT_COSTS.earningsAnalysis}
-                  componentKey="earningsAnalysis"
-                  icon={<BarChart2 className="w-8 h-8 text-white" />}
-                />
               )}
             </div>
           </div>

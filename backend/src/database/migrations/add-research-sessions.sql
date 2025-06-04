@@ -35,7 +35,7 @@ CREATE TRIGGER update_research_sessions_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_research_sessions_updated_at();
 
--- Function to clean up expired sessions
+-- TIMEZONE FIX: Function to clean up expired sessions using explicit UTC
 CREATE OR REPLACE FUNCTION cleanup_expired_sessions()
 RETURNS INTEGER AS $$
 DECLARE
@@ -44,7 +44,7 @@ BEGIN
     UPDATE research_sessions 
     SET status = 'expired' 
     WHERE status = 'active' 
-    AND expires_at < CURRENT_TIMESTAMP;
+    AND expires_at < (NOW() AT TIME ZONE 'UTC');
     
     GET DIAGNOSTICS expired_count = ROW_COUNT;
     RETURN expired_count;

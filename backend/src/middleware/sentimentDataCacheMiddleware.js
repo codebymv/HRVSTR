@@ -140,12 +140,12 @@ async function checkSentimentCache(req, res, next) {
     // Get active session for the mapped component
     const sessionResult = await pool.query(`
       SELECT session_id, expires_at, 
-             EXTRACT(EPOCH FROM (expires_at - CURRENT_TIMESTAMP))/60 as minutes_remaining
+             EXTRACT(EPOCH FROM (expires_at - (NOW() AT TIME ZONE 'UTC')))/60 as minutes_remaining
       FROM research_sessions 
       WHERE user_id = $1 
         AND component = $2 
         AND status = 'active' 
-        AND expires_at > CURRENT_TIMESTAMP
+        AND expires_at > (NOW() AT TIME ZONE 'UTC')
       ORDER BY created_at DESC 
       LIMIT 1
     `, [userId, sessionComponent]);
@@ -167,7 +167,7 @@ async function checkSentimentCache(req, res, next) {
         AND tickers = $3 
         AND time_range = $4 
         AND COALESCE(subreddits, ARRAY[]::TEXT[]) = $5
-        AND expires_at > CURRENT_TIMESTAMP
+        AND expires_at > (NOW() AT TIME ZONE 'UTC')
       ORDER BY fetched_at DESC 
       LIMIT 1
     `, [session.session_id, queryType, tickers, timeRange, subreddits]);
