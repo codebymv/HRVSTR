@@ -1,7 +1,7 @@
 import React from 'react';
 import SECFilingsDashboard from './components/SECFilings/SECFilingsDashboard';
 import Settings from './components/Settings/Settings';
-import EarningsMonitor from './components/EarningsMonitor/EarningsMonitor';
+import EarningsMonitorTabbed from './components/EarningsMonitor/EarningsMonitorTabbed';
 
 // Common loading handler factory to keep code DRY
 const createLoadingHandler = (componentName: string) => {
@@ -31,6 +31,6 @@ export const EarningsMonitorPage: React.FC = () => {
   const handleLoadingProgressChange = createLoadingHandler('Earnings Monitor');
   
   return (
-    <EarningsMonitor onLoadingProgressChange={handleLoadingProgressChange} />
+    <EarningsMonitorTabbed onLoadingProgressChange={handleLoadingProgressChange} />
   );
 };

@@ -810,14 +810,14 @@ const UserHome: React.FC = () => {
             </div>
           ) : (
             // Normal upcoming events when Alpha Vantage is configured
-            <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} lg:col-span-2 h-[32rem] sm:h-96`}>
+            <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} lg:col-span-2 h-[32rem] sm:h-96 lg:h-[30rem]`}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className={`text-xl font-semibold ${textColor} flex items-center`}>
                   <Clock className="w-5 h-5 mr-2 text-blue-500" />
                   Upcoming Events
                 </h2>
               </div>
-              <div className="h-[26rem] sm:h-72 overflow-y-auto">
+              <div className="h-[26rem] sm:h-72 lg:h-[24rem] overflow-y-auto">
                 <UpcomingEventsSection
                   events={upcomingEvents}
                   isLoading={eventsLoading}

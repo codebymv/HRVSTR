@@ -162,8 +162,18 @@ router.get('/upcoming/stream', async (req, res) => {
           query: { timeRange, refresh },
           user: user // This will be null for unauthenticated users or proper user object for authenticated users
         };
+        
+        let earningsDataReceived = false;
+        
         const mockRes = {
           json: (data) => {
+            earningsDataReceived = true;
+            console.log(`📡 SSE: Earnings controller returned data:`, { 
+              success: data.success, 
+              count: data.count || (data.data ? data.data.length : 0),
+              source: data.source 
+            });
+            
             sendProgress({
               stage: 'Completed!',
               progress: 100,
@@ -175,14 +185,59 @@ router.get('/upcoming/stream', async (req, res) => {
             });
             res.end();
           },
-          status: (code) => mockRes,
-          // Add other methods that might be called
+          status: (code) => {
+            console.log(`📡 SSE: Earnings controller set status: ${code}`);
+            return mockRes;
+          },
+          // Add proper error handling methods
           writeHead: () => mockRes,
           write: () => mockRes,
-          end: () => res.end()
+          end: () => {
+            if (!earningsDataReceived) {
+              console.error(`📡 SSE: Earnings controller ended without sending data`);
+              sendProgress({
+                stage: 'Error occurred',
+                progress: 0,
+                total: 100,
+                current: 0,
+                error: 'No data received from earnings controller',
+                timestamp: new Date().toISOString()
+              });
+            }
+            res.end();
+          }
         };
         
-        await earningsController.getUpcomingEarnings(mockReq, mockRes);
+        console.log(`📡 SSE: Calling earnings controller with mockReq:`, { 
+          timeRange: mockReq.query.timeRange, 
+          refresh: mockReq.query.refresh, 
+          userId: mockReq.user?.id,
+          tier: mockReq.user?.tier 
+        });
+        
+        // Set timeout for SSE stream
+        const timeoutDuration = 240000; // 4 minutes in milliseconds
+        const timeoutId = setTimeout(() => {
+          console.log(`📡 SSE: Earnings controller timed out after ${timeoutDuration / 1000} seconds`);
+          sendProgress({
+            stage: 'Request timed out',
+            progress: 0,
+            total: 100,
+            current: 0,
+            error: 'Earnings controller request timed out - data may still be processing',
+            timestamp: new Date().toISOString()
+          });
+          res.end();
+        }, timeoutDuration);
+        
+        try {
+          await earningsController.getUpcomingEarnings(mockReq, mockRes);
+          clearTimeout(timeoutId);
+        } catch (controllerError) {
+          clearTimeout(timeoutId);
+          console.error(`📡 SSE: Earnings controller threw error:`, controllerError);
+          throw controllerError;
+        }
         
       } catch (error) {
         console.error(`❌ SSE earnings stream error:`, error);
