@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { TimeRange, EarningsEvent, EarningsAnalysis } from '../../types';
-import { fetchUpcomingEarningsWithProgress, ProgressUpdate } from '../../services/earningsService';
 import { fetchEarningsAnalysisWithUserCache } from '../../services/api';
 import { RefreshCw, AlertTriangle, Info, TrendingUp, TrendingDown, BarChart2, Loader2, Crown, Lock, Zap } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -9,21 +8,15 @@ import { useTier } from '../../contexts/TierContext';
 import { useTierLimits } from '../../hooks/useTierLimits';
 import { useToast } from '../../contexts/ToastContext';
 import { 
-  checkUnlockSession, 
   storeUnlockSession, 
   getAllUnlockSessions,
   getSessionTimeRemainingFormatted,
-  checkComponentAccess,
-  clearComponentAccessCache
+  checkComponentAccess
 } from '../../utils/sessionStorage';
 import ProgressBar from '../ProgressBar';
 import TierLimitDialog from '../UI/TierLimitDialog';
 import { 
-  fetchUpcomingEarningsWithUserCache, 
-  streamUpcomingEarnings,
-  clearUserEarningsCache,
-  getUserEarningsCacheStatus,
-  clearEarningsCache 
+  streamUpcomingEarnings
 } from '../../services/api';
 
 interface EarningsMonitorProps {
@@ -41,8 +34,10 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
   // Component unlock state - managed by sessions
   const [unlockedComponents, setUnlockedComponents] = useState<{
     earningsAnalysis: boolean;
+    upcomingEarnings: boolean;
   }>({
-    earningsAnalysis: false
+    earningsAnalysis: false,
+    upcomingEarnings: false
   });
 
   // Session state for time tracking
@@ -51,9 +46,10 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
   // Get tier info
   const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
   
-  // Credit costs for each component
+  // Credit costs for each component - UPDATED TO MATCH SEC FILINGS PATTERN
   const COMPONENT_COSTS = {
-    earningsAnalysis: 8, // Earnings analysis feature
+    earningsAnalysis: 8, // Earnings analysis feature  
+    upcomingEarnings: 12, // Upcoming earnings table access
   };
 
   // Check existing sessions for all users
@@ -63,19 +59,32 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
     const checkExistingSessions = async () => {
       try {
         // Use database-only checking - no more localStorage fallback
-        const analysisSession = await checkComponentAccess('earningsAnalysis', currentTier);
+        const earningsAnalysisSession = await checkComponentAccess('earningsAnalysis', currentTier);
+        const upcomingEarningsSession = await checkComponentAccess('upcomingEarnings', currentTier);
 
-        setUnlockedComponents({
-          earningsAnalysis: !!analysisSession
-        });
+        const newUnlockedState = {
+          earningsAnalysis: !!earningsAnalysisSession,
+          upcomingEarnings: !!upcomingEarningsSession
+        };
+
+        // Log session restoration scenarios
+        if (!unlockedComponents.upcomingEarnings && newUnlockedState.upcomingEarnings) {
+          if (upcomingEarningsSession) {
+            console.log('🎉 EARNINGS MONITOR - Upcoming earnings session restored from database!');
+          }
+        }
+
+        setUnlockedComponents(newUnlockedState);
 
         // Update active sessions for display - NOW QUERIES DATABASE ONLY
-        const sessions = await getAllUnlockSessions();
+        const sessions = await getAllUnlockSessions(currentTier);
         setActiveSessions(sessions);
         
         console.log('🔍 EARNINGS MONITOR - Component access check (DATABASE ONLY):', {
-          earningsAnalysis: !!analysisSession,
-          analysisSessionId: analysisSession?.sessionId,
+          earningsAnalysis: !!earningsAnalysisSession,
+          upcomingEarnings: !!upcomingEarningsSession,
+          earningsAnalysisSessionId: earningsAnalysisSession?.sessionId,
+          upcomingEarningsSessionId: upcomingEarningsSession?.sessionId,
           currentTier,
           databaseSessions: sessions.length
         });
@@ -83,7 +92,8 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
         console.warn('Database session check failed:', error);
         // No more localStorage fallback - just set to false if database fails
         setUnlockedComponents({
-          earningsAnalysis: false
+          earningsAnalysis: false,
+          upcomingEarnings: false
         });
 
         setActiveSessions([]);
@@ -93,10 +103,21 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
     // Check sessions immediately
     checkExistingSessions();
     
-    // RATE LIMITING FIX: Check for expired sessions every 5 minutes instead of 1 minute
-    const interval = setInterval(checkExistingSessions, 5 * 60 * 1000); // Changed from 60000ms to 300000ms
+    // Check for expired sessions every minute
+    const interval = setInterval(checkExistingSessions, 60000);
     return () => clearInterval(interval);
   }, [tierInfo, currentTier]);
+
+  // Calculate component access state based on sessions (not tier)
+  const hasEarningsAnalysisAccess = unlockedComponents.earningsAnalysis;
+  const hasUpcomingEarningsAccess = unlockedComponents.upcomingEarnings;
+  
+  console.log('🔐 EARNINGS MONITOR - Access state:', {
+    currentTier,
+    hasEarningsAnalysisAccess,
+    hasUpcomingEarningsAccess,
+    unlockedComponents
+  });
   
   // Theme specific styling
   const cardBg = isLight ? 'bg-stone-300' : 'bg-gray-900';
@@ -160,17 +181,41 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
   
   // Calculate initial loading state based on cache freshness
   useEffect(() => {
+    // Only proceed if user has access to upcoming earnings
+    if (!hasUpcomingEarningsAccess) {
+      setLoading(prev => ({ ...prev, upcomingEarnings: false }));
+      return;
+    }
+
     const hasData = upcomingEarnings.length > 0;
     const dataIsStale = isDataStale(lastFetchTime);
     const needsRefresh = !hasData || dataIsStale;
     
-    // Set initial loading state based on cache freshness - earnings table is always available
+    // Set initial loading state based on cache freshness - only if user has access
     if (needsRefresh) {
       setLoading(prev => ({ ...prev, upcomingEarnings: true }));
     } else if (!needsRefresh) {
       setLoading(prev => ({ ...prev, upcomingEarnings: false }));
     }
-  }, []); // Only run on mount
+  }, [hasUpcomingEarningsAccess, upcomingEarnings.length, lastFetchTime]); // Add access as dependency
+
+  // Auto-trigger data loading when components become unlocked (cross-device sync)
+  useEffect(() => {
+    // Trigger data loading for upcoming earnings when it becomes unlocked
+    if (hasUpcomingEarningsAccess && 
+        !loading.upcomingEarnings && 
+        upcomingEarnings.length === 0) {
+      console.log('🔄 EARNINGS MONITOR - Auto-triggering upcoming earnings data load');
+      loadData(false);
+    }
+  }, [hasUpcomingEarningsAccess, loading.upcomingEarnings, upcomingEarnings.length]);
+
+  useEffect(() => {
+    // Only load data if user has access
+    if (hasUpcomingEarningsAccess) {
+      loadData();
+    }
+  }, [timeRange, hasUpcomingEarningsAccess]); // Add access dependency
   
   // Progress tracking states for better UX
   const [loadingProgress, setLoadingProgress] = useState(0);
@@ -214,16 +259,13 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
   const sortedEarnings = sortEarnings(upcomingEarnings);
 
   const loadData = async (forceRefresh: boolean = false) => {
-    // FIX: Don't auto-load data or set empty arrays - let the UI handle locked state
-    // Only proceed with data loading if user actually has an active session
-    const hasEarningsAccess = await checkComponentAccess('earningsAnalysis', currentTier);
-    if (!hasEarningsAccess) {
-      console.log('📊 No active earnings session - UI will show unlock prompt');
-      // Don't set empty arrays or change loading state - let UI handle it
+    // Check if user has access to upcoming earnings
+    if (!hasUpcomingEarningsAccess) {
+      console.log('🔒 EARNINGS MONITOR - User does not have access to upcoming earnings');
       return;
     }
-    
-    console.log('📊 User has earnings access - loading data');
+
+    // Earnings table is now locked behind session unlock
     setLoading(prev => ({ ...prev, upcomingEarnings: true }));
     setErrors(prev => ({ ...prev, upcomingEarnings: null }));
     
@@ -253,6 +295,7 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
           console.log('✅ Earnings stream completed:', data);
           if (data.success && data.data) {
             setUpcomingEarnings(data.data);
+            setLastFetchTime(Date.now()); // Update fetch time on successful load
           }
           setLoading(prev => ({ ...prev, upcomingEarnings: false }));
           
@@ -294,7 +337,7 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
 
   const loadAnalysis = async (ticker: string) => {
     // Only load if earnings analysis is unlocked
-    if (!unlockedComponents.earningsAnalysis) {
+    if (!hasEarningsAnalysisAccess) {
       return;
     }
 
@@ -327,79 +370,32 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
       // Step 1: Initialize analysis
       updateProgress(1, `Fetching historical data for ${ticker}...`);
       
-      // Step 2: Perform analysis with timeout
+      // Step 2: Perform analysis
       updateProgress(2, `Analyzing earnings surprises for ${ticker}...`);
+      const analysis = await fetchEarningsAnalysisWithUserCache(ticker);
       
-      // Create abort controller for timeout
-      const abortController = new AbortController();
-      const timeoutId = setTimeout(() => {
-        abortController.abort();
-      }, 30000); // 30 second timeout
-      
-      try {
-        const analysis = await fetchEarningsAnalysisWithUserCache(
-          ticker, 
-          '1m', 
-          false, 
-          abortController.signal
-        );
-        
-        clearTimeout(timeoutId);
-        
-        // Step 3: Complete analysis
-        updateProgress(3, `Finalizing ${ticker} earnings analysis...`);
-        setEarningsAnalysis(analysis);
-        
-        // Success - clear loading state
-        setLoading(prev => ({ ...prev, analysis: false }));
-        
-        // Final progress update
-        setLoadingProgress?.(100);
-        setLoadingStage?.('Analysis complete');
-        if (onLoadingProgressChange) {
-          onLoadingProgressChange(100, 'Analysis complete');
-        }
-        
-      } catch (apiError) {
-        clearTimeout(timeoutId);
-        
-        // Handle specific error types
-        if (abortController.signal.aborted) {
-          throw new Error('Analysis request timed out. Please try again.');
-        } else if (apiError instanceof Error && apiError.message.includes('404')) {
-          throw new Error(`No earnings data available for ${ticker}`);
-        } else if (apiError instanceof Error && apiError.message.includes('402')) {
-          throw new Error('Insufficient credits for earnings analysis');
-        } else {
-          throw apiError;
-        }
-      }
-      
+      // Step 3: Complete analysis
+      updateProgress(3, `Finalizing ${ticker} earnings analysis...`);
+      setEarningsAnalysis(analysis);
+      setLoading(prev => ({ ...prev, analysis: false }));
     } catch (error) {
       console.error('Earnings analysis error:', error);
-      
-      const errorMessage = error instanceof Error ? error.message : 'Failed to analyze earnings data';
       setErrors(prev => ({ 
         ...prev, 
-        analysis: errorMessage
+        analysis: error instanceof Error ? error.message : 'Failed to analyze earnings data' 
       }));
-      
-      // Always clear loading state on error
       setLoading(prev => ({ ...prev, analysis: false }));
-      
-      // Reset progress on error
-      setLoadingProgress?.(0);
-      setLoadingStage?.('Analysis failed');
-      if (onLoadingProgressChange) {
-        onLoadingProgressChange(0, `Analysis failed: ${errorMessage}`);
-      }
     }
   };
 
   const refreshData = () => {
-    loadData();
+    // Only refresh earnings data if user has access
+    if (hasUpcomingEarningsAccess) {
+      loadData();
+    }
     
-    if (selectedTicker && unlockedComponents.earningsAnalysis) {
+    // Only refresh analysis if user has access and a ticker is selected
+    if (selectedTicker && hasEarningsAnalysisAccess) {
       loadAnalysis(selectedTicker);
     }
   };
@@ -419,15 +415,17 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
     // Update time range
     setTimeRange(range);
     
-    // Trigger data loading only if user has access (session-controlled)
-    loadData();
+    // Trigger fresh data loading only if user has access
+    if (hasUpcomingEarningsAccess) {
+      loadData();
+    }
   };
 
   // Handle ticker selection with tier restrictions
   const handleTickerClick = (ticker: string) => {
     setSelectedTicker(ticker);
     
-    if (!unlockedComponents.earningsAnalysis) {
+    if (!hasEarningsAnalysisAccess) {
       // Show tier limit dialog for analysis
       showTierLimitDialog(
         'Earnings Analysis',
@@ -438,7 +436,7 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
       return;
     }
     
-    // Load analysis for Pro+ users
+    // Load analysis for users with access
     loadAnalysis(ticker);
   };
 
@@ -490,15 +488,15 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
 
   // Handlers for unlocking individual components
   const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
+    // Check if already unlocked using database-only approach
+    const existingSession = await checkComponentAccess(component, currentTier);
+    if (existingSession) {
+      const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
+      info(`${component} already unlocked (${timeRemaining})`);
+      return;
+    }
+    
     try {
-      // Check if already unlocked using database-only approach
-      const existingSession = await checkComponentAccess(component, currentTier);
-      if (existingSession) {
-        const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
-        info(`${component} already unlocked (${timeRemaining})`);
-        return;
-      }
-      
       const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
       const token = localStorage.getItem('auth_token');
       
@@ -521,9 +519,6 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
       }
       
       if (data.success) {
-        // RATE LIMITING FIX: Clear cache for this component to get fresh data
-        clearComponentAccessCache(component);
-        
         // Update component state
         setUnlockedComponents(prev => ({
           ...prev,
@@ -544,7 +539,7 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
           tier: tierInfo?.tier || 'free'
         });
         
-        // Update active sessions
+        // Update active sessions by querying database
         const sessions = await getAllUnlockSessions();
         setActiveSessions(sessions);
         
@@ -652,88 +647,88 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Earnings Table Column - Session-based unlocking like Analysis */}
+          {/* Earnings Table Column - Session-based unlocking */}
           <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden`}>
             <div className={`p-4 border-b ${borderColor}`}>
               <h2 className={`text-lg font-semibold ${textColor}`}>Upcoming Earnings</h2>
             </div>
             <div className="p-4">
-              {/* FIX: Make upcoming earnings section consistent with analysis section */}
-              {currentTier === 'free' ? (
-                <EarningsUpgradeCard />
-              ) : !unlockedComponents.earningsAnalysis ? (
-                // Pro+ users without unlock get credit unlock option for upcoming earnings too
+              {hasUpcomingEarningsAccess ? (
+                <>
+                  {loading.upcomingEarnings ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                      <Loader2 className="mb-3 text-blue-500 animate-spin" size={32} />
+                      <p className={`text-lg font-semibold ${textColor} mb-2`}>{loadingStage}</p>
+                      <div className="w-full max-w-sm mt-4 mb-2">
+                        <ProgressBar progress={loadingProgress} />
+                      </div>
+                      <div className="text-xs text-blue-400">{loadingProgress}% complete</div>
+                    </div>
+                  ) : errors.upcomingEarnings ? (
+                    <div className={`flex flex-col items-center justify-center p-10 ${subTextColor} text-center`}>
+                      <AlertTriangle className="mb-2 text-yellow-500" size={32} />
+                      <p>{errors.upcomingEarnings}</p>
+                    </div>
+                  ) : upcomingEarnings.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className={`min-w-full ${textColor}`}>
+                        <thead className={`${tableHeaderBg} ${borderColor}`}>
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Ticker</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Company</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Date</th>
+                          </tr>
+                        </thead>
+                        <tbody className={`divide-y ${borderColor}`}>
+                          {sortedEarnings.filter((earnings) => {
+                            // Final UI-level validation - filter out any invalid tickers
+                            if (!earnings.ticker || typeof earnings.ticker !== 'string' || earnings.ticker.trim() === '') {
+                              return false;
+                            }
+                            return true;
+                          }).map((earnings, index) => {
+                            // Defensive check for any remaining edge cases
+                            if (!earnings.ticker || typeof earnings.ticker !== 'string' || earnings.ticker.trim() === '') {
+                              // Skip rendering this item
+                              return null;
+                            }
+                            
+                            return (
+                              <tr 
+                                key={`earnings-${earnings.ticker}-${index}`} 
+                                className={`${hoverBg} ${selectedTicker === earnings.ticker ? selectedBg : ''} cursor-pointer transition-colors`}
+                                onClick={() => handleTickerClick(earnings.ticker)}
+                              >
+                                <td className="px-4 py-3 font-medium">{earnings.ticker}</td>
+                                <td className="px-4 py-3">
+                                  {earnings.companyName || 'Unknown Company'}
+                                </td>
+                                <td className="px-4 py-3">
+                                  {earnings.reportDate ? 
+                                    new Date(earnings.reportDate).toLocaleDateString() : 
+                                    'TBA'}
+                                </td>
+                              </tr>
+                            );
+                          }).filter(Boolean)}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className={`flex flex-col items-center justify-center p-10 ${subTextColor} text-center`}>
+                      <Info className="mb-2" size={32} />
+                      <p>No upcoming earnings found in the selected time range</p>
+                    </div>
+                  )}
+                </>
+              ) : (
                 <LockedOverlay
                   title="Upcoming Earnings"
-                  description="Unlock access to upcoming earnings events and analysis data."
-                  cost={COMPONENT_COSTS.earningsAnalysis}
-                  componentKey="earningsAnalysis"
+                  description="Unlock access to upcoming earnings calendar with comprehensive company event tracking and dates."
+                  cost={COMPONENT_COSTS.upcomingEarnings}
+                  componentKey="upcomingEarnings"
                   icon={<BarChart2 className="w-8 h-8 text-white" />}
                 />
-              ) : loading.upcomingEarnings ? (
-                <div className="flex flex-col items-center justify-center py-20 text-center">
-                  <Loader2 className="mb-3 text-blue-500 animate-spin" size={32} />
-                  <p className={`text-lg font-semibold ${textColor} mb-2`}>{loadingStage}</p>
-                  <div className="w-full max-w-sm mt-4 mb-2">
-                    <ProgressBar progress={loadingProgress} />
-                  </div>
-                  <div className="text-xs text-blue-400">{loadingProgress}% complete</div>
-                </div>
-              ) : errors.upcomingEarnings ? (
-                <div className={`flex flex-col items-center justify-center p-10 ${subTextColor} text-center`}>
-                  <AlertTriangle className="mb-2 text-yellow-500" size={32} />
-                  <p>{errors.upcomingEarnings}</p>
-                </div>
-              ) : upcomingEarnings.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className={`min-w-full ${textColor}`}>
-                    <thead className={`${tableHeaderBg} ${borderColor}`}>
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Ticker</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Company</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className={`divide-y ${borderColor}`}>
-                      {sortedEarnings.filter((earnings) => {
-                        // Final UI-level validation - filter out any invalid tickers
-                        if (!earnings.ticker || typeof earnings.ticker !== 'string' || earnings.ticker.trim() === '') {
-                          return false;
-                        }
-                        return true;
-                      }).map((earnings, index) => {
-                        // Defensive check for any remaining edge cases
-                        if (!earnings.ticker || typeof earnings.ticker !== 'string' || earnings.ticker.trim() === '') {
-                          // Skip rendering this item
-                          return null;
-                        }
-                        
-                        return (
-                          <tr 
-                            key={`earnings-${earnings.ticker}-${index}`} 
-                            className={`${hoverBg} ${selectedTicker === earnings.ticker ? selectedBg : ''} cursor-pointer transition-colors`}
-                            onClick={() => handleTickerClick(earnings.ticker)}
-                          >
-                            <td className="px-4 py-3 font-medium">{earnings.ticker}</td>
-                            <td className="px-4 py-3">
-                              {earnings.companyName || 'Unknown Company'}
-                            </td>
-                            <td className="px-4 py-3">
-                              {earnings.reportDate ? 
-                                new Date(earnings.reportDate).toLocaleDateString() : 
-                                'TBA'}
-                            </td>
-                          </tr>
-                        );
-                      }).filter(Boolean)}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className={`flex flex-col items-center justify-center p-10 ${subTextColor} text-center`}>
-                  <Info className="mb-2" size={32} />
-                  <p>No upcoming earnings found in the selected time range</p>
-                </div>
               )}
             </div>
           </div>
@@ -749,16 +744,7 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
               {/* Check tier first - free users should see upgrade card, not unlock option */}
               {currentTier === 'free' ? (
                 <EarningsUpgradeCard />
-              ) : !unlockedComponents.earningsAnalysis ? (
-                // Pro+ users without unlock get credit unlock option
-                <LockedOverlay
-                  title="Earnings Analysis"
-                  description="Unlock comprehensive earnings analysis with performance metrics, risk assessment, and historical earnings data."
-                  cost={COMPONENT_COSTS.earningsAnalysis}
-                  componentKey="earningsAnalysis"
-                  icon={<BarChart2 className="w-8 h-8 text-white" />}
-                />
-              ) : (
+              ) : hasEarningsAnalysisAccess ? (
                 <>
                   {!selectedTicker ? (
                     <div className={`flex flex-col items-center justify-center p-10 ${subTextColor} text-center`}>
@@ -1036,6 +1022,15 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
                     </div>
                   )}
                 </>
+              ) : (
+                // Pro+ users without unlock get credit unlock option
+                <LockedOverlay
+                  title="Earnings Analysis"
+                  description="Unlock comprehensive earnings analysis with performance metrics, risk assessment, and historical earnings data."
+                  cost={COMPONENT_COSTS.earningsAnalysis}
+                  componentKey="earningsAnalysis"
+                  icon={<BarChart2 className="w-8 h-8 text-white" />}
+                />
               )}
             </div>
           </div>
@@ -1055,4 +1050,4 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
   );
 };
 
-export default EarningsMonitor;
+export default EarningsMonitor; 

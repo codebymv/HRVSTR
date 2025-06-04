@@ -57,14 +57,22 @@ async function scrapeYahooEarningsCalendar(fromDate, toDate, progressCallback = 
         const url = `https://finance.yahoo.com/calendar/earnings?day=${dateStr}`;
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
         
-        // Wait for page to fully load - using Promise instead of waitForTimeout for compatibility
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        // Wait for page to fully load - INCREASED WAIT TIME for dynamic content
+        await new Promise(resolve => setTimeout(resolve, 10000)); // Increased from 5s to 10s
         
-        // Try to wait for any potential dynamic content
+        // Try to wait for any potential dynamic content with more specific selectors
         try {
-          await page.waitForSelector('table', { timeout: 15000 });
+          await page.waitForSelector('table', { timeout: 30000 }); // Increased timeout
         } catch (e) {
           console.log(`📊 No tables found initially, continuing with analysis...`);
+        }
+        
+        // ADDITIONAL WAIT: Try to wait for earnings-specific content
+        try {
+          await page.waitForSelector('[data-test*="earnings"], [data-testid*="earnings"], .earnings, [aria-label*="earnings"]', { timeout: 15000 });
+          console.log(`✅ Found earnings-specific elements!`);
+        } catch (e) {
+          console.log(`📊 No earnings-specific elements found, proceeding with general analysis...`);
         }
         
         // Extract earnings data from the table

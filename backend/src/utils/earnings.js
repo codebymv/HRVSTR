@@ -212,11 +212,11 @@ async function analyzeEarnings(ticker) {
   try {
     console.log(`📊 Analyzing earnings for ${ticker} using scraped historical data and real APIs`);
     
-    // Create a timeout promise that rejects after 60 seconds
+    // Create a timeout promise that rejects after 180 seconds
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => {
         reject(new Error(`Earnings analysis for ${ticker} timed out after 60 seconds`));
-      }, 60000);
+      }, 180000);
     });
     
     // Get company profile and basic financials from FMP (free tier) and historical earnings via scraping
