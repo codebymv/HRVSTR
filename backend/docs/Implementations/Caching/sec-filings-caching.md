@@ -1,247 +1,787 @@
 # SEC Filings Caching Implementation
 
-This document examines the caching implementation for the SEC Filings feature in the HRVSTR application.
+## Overview
 
-## 1. SEC Filings Dashboard Architecture
+The SEC filings caching system implements a **sophisticated session-based architecture** that integrates user account tracking, credit management, and database-backed caching. This system works identically across devices and prevents users from being charged multiple times for the same data access.
 
-The SEC Filings feature implements a comprehensive caching strategy using both localStorage and server-side caching mechanisms.
+## Core Architecture
 
-### Dashboard-Level Caching
+### 1. Session-Based Access Control
 
-The central component managing SEC filing data is the `SECFilingsDashboard`, which implements:
+The system uses the `research_sessions` table to track component unlocks:
 
-```typescript
-// Cached data state with localStorage persistence
-const [insiderTradesData, setInsiderTradesData] = useState<any[]>(() => {
-  try {
-    const cached = localStorage.getItem('secFilings_insiderTrades');
-    return cached ? JSON.parse(cached) : [];
-  } catch (e) {
-    console.error('Error loading cached insider trades:', e);
-    return [];
-  }
-});
-
-const [institutionalHoldingsData, setInstitutionalHoldingsData] = useState<any[]>(() => {
-  try {
-    const cached = localStorage.getItem('secFilings_institutionalHoldings');
-    return cached ? JSON.parse(cached) : [];
-  } catch (e) {
-    console.error('Error loading cached institutional holdings:', e);
-    return [];
-  }
-});
+```sql
+-- Active session check for SEC filings access
+SELECT session_id, expires_at, credits_used, metadata
+FROM research_sessions 
+WHERE user_id = $1 
+  AND component = $2  -- 'insiderTrading' or 'institutionalHoldings'
+  AND status = 'active' 
+  AND expires_at > CURRENT_TIMESTAMP
+ORDER BY unlocked_at DESC 
+LIMIT 1
 ```
 
-The dashboard loads cached data from localStorage on initialization, providing immediate data display without waiting for API responses.
+**Key Features:**
+- **Cross-device access**: Sessions stored in PostgreSQL, accessible from any device
+- **Prevents double-charging**: Active session check before credit deduction
+- **Tier-based expiration**: Session duration varies by user tier
+- **Automatic cleanup**: Expired sessions cleaned up automatically
 
-## 2. Cache Freshness Management
+### 2. Sophisticated Cache Flow
 
-The SEC Filings dashboard implements sophisticated cache freshness management:
+The `userSecCacheService.js` implements a three-tier access pattern:
 
-```typescript
-// Helper function to check if data is stale (older than 30 minutes)
-const isDataStale = (timestamp: number | null): boolean => {
-  if (!timestamp) return true;
-  const thirtyMinutesInMs = 30 * 60 * 1000;
-  return Date.now() - timestamp > thirtyMinutesInMs;
-};
-
-// Track the last fetch time for each data type
-const [lastFetchTime, setLastFetchTime] = useState<{
-  insiderTrades: number | null,
-  institutionalHoldings: number | null
-}>(() => {
-  try {
-    const cached = localStorage.getItem('secFilings_lastFetchTime');
-    return cached ? JSON.parse(cached) : { insiderTrades: null, institutionalHoldings: null };
-  } catch (e) {
-    console.error('Error loading cached fetch times:', e);
-    return { insiderTrades: null, institutionalHoldings: null };
-  }
-});
-```
-
-Key features:
-- Tracks last fetch time for different data types
-- Uses a 30-minute staleness threshold
-- Automatically triggers reload for stale data
-- Persists timestamps in localStorage for persistence across sessions
-
-## 3. User Preferences Caching
-
-The SEC Filings page also caches user preferences for a consistent experience:
-
-```typescript
-const [timeRange, setTimeRange] = useState<TimeRange>(() => {
-  try {
-    return (localStorage.getItem('secFilings_timeRange') as TimeRange) || '1m';
-  } catch (e) {
-    return '1m';
-  }
-});
-
-const [activeTab, setActiveTab] = useState<'insider' | 'institutional'>(() => {
-  try {
-    return (localStorage.getItem('secFilings_activeTab') as 'insider' | 'institutional') || 'insider';
-  } catch (e) {
-    return 'insider';
-  }
-});
-```
-
-This ensures the user's selected time range and active tab are preserved across sessions.
-
-## 4. API-Level Caching
-
-The SEC filing data is fetched through the application's API service, which implements caching control parameters:
-
-```typescript
-export async function fetchInsiderTrades(timeRange: TimeRange = '1m', refresh: boolean = false, signal?: AbortSignal): Promise<InsiderTrade[]> {
-  try {
-    const proxyUrl = getProxyUrl();
-    const refreshParam = refresh ? '&refresh=true' : '';
-    const response = await fetch(`${proxyUrl}/api/sec/insider-trades?timeRange=${timeRange}${refreshParam}`, { signal });
-    
-    if (!response.ok) {
-      throw new Error(`Proxy server returned error: ${response.status}`);
+```javascript
+async function getSecDataForUser(userId, userTier, dataType, timeRange, forceRefresh = false) {
+  // TIER 1: Check for active unlock session
+  const componentName = dataType === 'insider_trades' ? 'insiderTrading' : 'institutionalHoldings';
+  const sessionResult = await db.query(sessionQuery, [userId, componentName]);
+  const hasActiveSession = sessionResult.rows.length > 0;
+  
+  if (hasActiveSession) {
+    // User has paid for access - check cache first
+    const cachedData = await getCachedSecData(userId, dataType, timeRange);
+    if (cachedData && !forceRefresh) {
+      return {
+        success: true,
+        data: cachedData.data,
+        fromCache: true,
+        hasActiveSession: true,
+        creditsUsed: 0 // No credits charged during active session
+      };
     }
     
-    const data = await response.json();
-    return data.insiderTrades as InsiderTrade[];
-  } catch (error) {
-    console.error('Insider trades API error:', error);
-    throw new Error(error instanceof Error ? error.message : 'Failed to fetch insider trades data');
+    // No cache but has session - fetch fresh data without charging
+    const freshData = await secService.getSecData(dataType, timeRange);
+    await cacheSecData(userId, dataType, timeRange, freshData, 0, userTier);
+    
+    return {
+      success: true,
+      data: freshData,
+      creditsUsed: 0,
+      hasActiveSession: true,
+      freshlyFetched: true
+    };
   }
+  
+  // TIER 2: No active session - check cache
+  if (!forceRefresh) {
+    const cachedData = await getCachedSecData(userId, dataType, timeRange);
+    if (cachedData) {
+      return {
+        success: true,
+        data: cachedData.data,
+        fromCache: true,
+        hasActiveSession: false
+      };
+    }
+  }
+  
+  // TIER 3: No cache - charge credits and fetch
+  const creditsRequired = await getSecDataCreditsCost(userTier, dataType, timeRange);
+  const userCredits = await checkUserCredits(userId);
+  
+  if (userCredits < creditsRequired) {
+    return {
+      success: false,
+      error: 'INSUFFICIENT_CREDITS',
+      creditsRequired,
+      creditsAvailable: userCredits
+    };
+  }
+  
+  // Deduct credits and fetch fresh data
+  await deductCredits(userId, creditsRequired);
+  const freshData = await secService.getSecData(dataType, timeRange);
+  await cacheSecData(userId, dataType, timeRange, freshData, creditsRequired, userTier);
+  
+  return {
+    success: true,
+    data: freshData,
+    creditsUsed: creditsRequired,
+    freshlyFetched: true
+  };
 }
 ```
 
-Key features:
-- `refresh` parameter to force server-side cache refresh
-- Signal support for request cancellation
-- Error handling with specific error messages
+## Database Schema Implementation
 
-## 5. Cache Clearing Functionality
+### Core Cache Tables
 
-The SEC Filings feature provides explicit cache clearing functionality:
+**1. `user_sec_cache` - Main cache storage:**
+```sql
+CREATE TABLE user_sec_cache (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    data_type sec_data_type_enum NOT NULL, -- 'insider_trades', 'institutional_holdings'
+    time_range VARCHAR(10) NOT NULL,       -- '1d', '3d', '1w', '1m', '3m', '6m'
+    data_json JSONB NOT NULL,              -- Complete API response
+    metadata JSONB,                        -- Fetch info, counts, etc.
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    credits_used INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Ensure one cache entry per user per data type per time range
+    UNIQUE(user_id, data_type, time_range)
+);
+```
 
-```typescript
-export const clearSecCache = async (signal?: AbortSignal): Promise<{success: boolean, message: string}> => {
+**2. `user_sec_insider_trades` - Optimized insider trade storage:**
+```sql
+CREATE TABLE user_sec_insider_trades (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    cache_id UUID NOT NULL REFERENCES user_sec_cache(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    ticker VARCHAR(20) NOT NULL,
+    insider_name VARCHAR(255) NOT NULL,
+    title VARCHAR(255),
+    trade_type VARCHAR(20) NOT NULL, -- 'BUY', 'SELL'
+    shares BIGINT NOT NULL,
+    price DECIMAL(12,4),
+    value DECIMAL(15,2),
+    filing_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    transaction_date TIMESTAMP WITH TIME ZONE,
+    form_type VARCHAR(20),
+    raw_data JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**3. `user_sec_institutional_holdings` - 13F filings storage:**
+```sql
+CREATE TABLE user_sec_institutional_holdings (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    cache_id UUID NOT NULL REFERENCES user_sec_cache(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    ticker VARCHAR(20) NOT NULL,
+    institution_name VARCHAR(255) NOT NULL,
+    shares_held BIGINT NOT NULL,
+    value_held DECIMAL(15,2),
+    percent_change DECIMAL(8,4),
+    percentage_ownership DECIMAL(8,4),
+    quarterly_change DECIMAL(15,2),
+    filing_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    raw_data JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+## User Account & Session Integration
+
+### Cross-Device Session Management
+
+The system ensures consistent access across all user devices:
+
+```javascript
+// Frontend session checking (works on any device)
+const checkExistingSessions = async () => {
   try {
-    const proxyUrl = getProxyUrl();
-    const response = await fetch(`${proxyUrl}/api/sec/clear-cache`, { signal });
-    
-    if (!response.ok) {
-      throw new Error(`Proxy server returned error: ${response.status}`);
-    }
-    
-    return await response.json();
+    // Primary: Check database sessions via API
+    const insiderSession = await checkComponentAccess('insiderTrading');
+    const institutionalSession = await checkComponentAccess('institutionalHoldings');
+
+    setUnlockedComponents({
+      insiderTrading: !!insiderSession,
+      institutionalHoldings: !!institutionalSession
+    });
+
+    console.log('🔍 SEC FILINGS - Active sessions:', {
+      insiderTrading: insiderSession?.sessionId,
+      institutionalHoldings: institutionalSession?.sessionId
+    });
   } catch (error) {
-    console.error('Error clearing SEC cache:', error);
-    throw error;
+    // Fallback to localStorage for offline scenarios
+    console.warn('Database session check failed, using localStorage fallback');
+    const insiderSession = checkUnlockSession('insiderTrading');
+    const institutionalSession = checkUnlockSession('institutionalHoldings');
+    
+    setUnlockedComponents({
+      insiderTrading: !!insiderSession,
+      institutionalHoldings: !!institutionalSession
+    });
   }
 };
 ```
 
-This allows users to explicitly clear the server-side cache to ensure they get the freshest data when needed.
+### Component Unlock Process
 
-## 6. User Interface Cache Controls
+When users unlock SEC filings components:
 
-The SEC Filings dashboard exposes cache management to users through UI controls:
-
-```typescript
-<button
-  onClick={handleClearCache}
-  disabled={isClearingCache}
-  className={`p-2 rounded-full ${isLight ? 'hover:bg-stone-400' : 'hover:bg-gray-800'} ${isClearingCache ? 'opacity-50' : ''}`}
-  title="Clear SEC data cache"
->
-  {isClearingCache ? (
-    <Loader2 size={18} className={`${textColor} animate-spin`} />
-  ) : (
-    <Trash2 size={18} className={textColor} />
-  )}
-</button>
-
-<button
-  onClick={() => {
-    // Trigger reload by setting loading states and reload flags
-    setLoading({
-      insiderTrades: true,
-      institutionalHoldings: true
+```javascript
+const handleUnlockComponent = async (component, cost) => {
+  // 1. Check for existing session (prevents double-charging)
+  const existingSession = await checkComponentAccess(component);
+  if (existingSession) {
+    const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
+    info(`${component} already unlocked (${timeRemaining})`);
+    return;
+  }
+  
+  // 2. Create new session in database
+  const response = await fetch('/api/credits/unlock-component', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ component, cost })
+  });
+  
+  const data = await response.json();
+  
+  if (data.success) {
+    // 3. Update UI state immediately
+    setUnlockedComponents(prev => ({ ...prev, [component]: true }));
+    
+    // 4. Store in localStorage for offline fallback
+    storeUnlockSession(component, {
+      sessionId: data.sessionId,
+      expiresAt: data.expiresAt,
+      creditsUsed: data.creditsUsed,
+      tier: tierInfo?.tier
     });
-    // Also set reload flags
-    setShouldReload({
-      insiderTrades: true,
-      institutionalHoldings: true
-    });
-    // Clear cached last fetch time to force fresh data
-    setLastFetchTime({
-      insiderTrades: null,
-      institutionalHoldings: null
-    });
-    localStorage.removeItem('secFilings_lastFetchTime');
-  }}
-  disabled={loading.insiderTrades || loading.institutionalHoldings}
-  className={`p-2 rounded-full ${isLight ? 'hover:bg-stone-400' : 'hover:bg-gray-800'} ${(loading.insiderTrades || loading.institutionalHoldings) ? 'opacity-50' : ''}`}
-  title="Refresh data"
->
-  {(loading.insiderTrades || loading.institutionalHoldings) ? (
-    <Loader2 size={18} className={`${textColor} animate-spin`} />
-  ) : (
-    <RefreshCw size={18} className={textColor} />
-  )}
-</button>
+    
+    // 5. Trigger data loading for unlocked component
+    if (component === 'institutionalHoldings') {
+      setLoadingState(prev => ({
+        ...prev,
+        institutionalHoldings: { isLoading: false, needsRefresh: true }
+      }));
+    } else if (component === 'insiderTrading') {
+      setLoadingState(prev => ({
+        ...prev,
+        insiderTrades: { isLoading: false, needsRefresh: true }
+      }));
+    }
+    
+    // 6. Update session list
+    const sessions = getAllUnlockSessions();
+    setActiveSessions(sessions);
+    
+    // 7. Refresh tier info for credit usage display
+    if (refreshTierInfo) {
+      await refreshTierInfo();
+    }
+  }
+};
 ```
 
-These controls provide:
-- Visual feedback during cache operations
-- Explicit refresh and cache clearing options
-- Status indicators for in-progress operations
+## Tier-Based Expiration & Credits
 
-## 7. Caching Lifecycle
+### Dynamic Cache Expiration
 
-The SEC Filings caching follows a well-defined lifecycle:
+Cache duration adjusts based on user tier:
 
-1. **Initialization**:
-   - Load cached data from localStorage
-   - Check cache freshness
-   - Display cached data immediately
+```sql
+-- Function to get cache expiration based on tier and data type
+CREATE OR REPLACE FUNCTION get_sec_cache_expiration(
+  user_tier user_tier_enum,
+  data_type sec_data_type_enum
+) RETURNS INTERVAL AS $$
+BEGIN
+  RETURN CASE user_tier
+    WHEN 'free' THEN INTERVAL '1 hour'        -- Encourages upgrades
+    WHEN 'pro' THEN INTERVAL '6 hours'        -- Good balance
+    WHEN 'elite' THEN INTERVAL '12 hours'     -- Premium experience  
+    WHEN 'institutional' THEN INTERVAL '24 hours' -- Enterprise level
+    ELSE INTERVAL '1 hour'
+  END;
+END;
+$$ LANGUAGE plpgsql;
+```
 
-2. **Auto Refresh**:
-   - Check if cached data is stale (>30 minutes)
-   - Trigger refresh for stale data
-   - Update cache with fresh data
+### Credit Cost Calculation
 
-3. **Manual Operations**:
-   - Refresh: Force reload data while preserving cache
-   - Clear: Remove server-side cache and reload
+Credits vary by tier and data complexity:
 
-4. **Persistence**:
-   - Save data to localStorage after fetching
-   - Update last fetch timestamps
-   - Persist user preferences
+```sql
+-- Function to calculate credit costs
+CREATE OR REPLACE FUNCTION get_sec_data_credits_cost(
+  user_tier user_tier_enum,
+  data_type sec_data_type_enum,
+  time_range VARCHAR
+) RETURNS INTEGER AS $$
+BEGIN
+  RETURN CASE user_tier
+    WHEN 'free' THEN
+      CASE data_type
+        WHEN 'insider_trades' THEN
+          CASE time_range
+            WHEN '1d' THEN 5
+            WHEN '3d' THEN 10
+            WHEN '1w' THEN 15
+            WHEN '1m' THEN 25
+            WHEN '3m' THEN 40
+            WHEN '6m' THEN 60
+            ELSE 15
+          END
+        WHEN 'institutional_holdings' THEN 999999 -- Effectively blocked
+      END
+    WHEN 'pro' THEN
+      CASE data_type
+        WHEN 'insider_trades' THEN
+          CASE time_range
+            WHEN '1d' THEN 2
+            WHEN '3d' THEN 4
+            WHEN '1w' THEN 6
+            WHEN '1m' THEN 10
+            WHEN '3m' THEN 15
+            WHEN '6m' THEN 20
+            ELSE 6
+          END
+        WHEN 'institutional_holdings' THEN
+          CASE time_range
+            WHEN '1d' THEN 3
+            WHEN '3d' THEN 6
+            WHEN '1w' THEN 9
+            WHEN '1m' THEN 15
+            WHEN '3m' THEN 25
+            WHEN '6m' THEN 35
+            ELSE 9
+          END
+      END
+    WHEN 'elite', 'institutional' THEN
+      -- Minimal costs for premium tiers
+      CASE data_type
+        WHEN 'insider_trades' THEN 1
+        WHEN 'institutional_holdings' THEN 2
+      END
+    ELSE 15 -- Default fallback
+  END;
+END;
+$$ LANGUAGE plpgsql;
+```
 
-## 8. Future Improvements
+## Cache Cleanup & Maintenance
 
-Potential improvements to the SEC Filings caching implementation could include:
+### Automatic Cleanup Functions
 
-1. **IndexedDB Integration**:
-   - Move from localStorage to IndexedDB for larger datasets
-   - Better handle large institutional holdings data
-   - Implement structured queries for filtered access
+```sql
+-- Main cleanup function for SEC cache
+CREATE OR REPLACE FUNCTION cleanup_expired_sec_cache()
+RETURNS INTEGER AS $$
+DECLARE
+    expired_count INTEGER;
+BEGIN
+    -- Delete expired cache entries
+    DELETE FROM user_sec_cache 
+    WHERE expires_at < CURRENT_TIMESTAMP;
+    
+    GET DIAGNOSTICS expired_count = ROW_COUNT;
+    
+    -- Cleanup orphaned detail records
+    DELETE FROM user_sec_insider_trades 
+    WHERE cache_id NOT IN (SELECT id FROM user_sec_cache);
+    
+    DELETE FROM user_sec_institutional_holdings 
+    WHERE cache_id NOT IN (SELECT id FROM user_sec_cache);
+    
+    RETURN expired_count;
+END;
+$$ LANGUAGE plpgsql;
+```
 
-2. **Progressive Caching**:
-   - Implement incremental updates
-   - Cache only changes since last fetch
-   - Reduce data transfer volume
+### Scheduled Maintenance
 
-3. **Cross-Tab Synchronization**:
-   - Add BroadcastChannel API support
-   - Synchronize cache operations across tabs
-   - Prevent duplicate API calls
+```javascript
+// Backend cleanup scheduler
+class SecCacheCleanupScheduler {
+  constructor() {
+    this.isRunning = false;
+    this.intervals = new Map();
+  }
 
-4. **Offline Support**:
-   - Add ServiceWorker caching
-   - Enable complete offline access
-   - Implement background sync for deferred updates
+  start() {
+    if (this.isRunning) return;
+    
+    this.isRunning = true;
+    
+    // Main cleanup every 15 minutes
+    const mainCleanup = setInterval(async () => {
+      try {
+        const result = await db.query('SELECT cleanup_expired_sec_cache()');
+        const cleaned = result.rows[0].cleanup_expired_sec_cache;
+        
+        if (cleaned > 0) {
+          console.log(`✅ SEC cache cleanup: ${cleaned} records removed`);
+        }
+      } catch (error) {
+        console.error('❌ SEC cache cleanup failed:', error);
+      }
+    }, 15 * 60 * 1000);
+    
+    this.intervals.set('main', mainCleanup);
+    
+    // Session cleanup every 5 minutes
+    const sessionCleanup = setInterval(async () => {
+      try {
+        const result = await db.query('SELECT cleanup_expired_sessions()');
+        const cleaned = result.rows[0].cleanup_expired_sessions;
+        
+        if (cleaned > 0) {
+          console.log(`✅ Session cleanup: ${cleaned} sessions expired`);
+        }
+      } catch (error) {
+        console.error('❌ Session cleanup failed:', error);
+      }
+    }, 5 * 60 * 1000);
+    
+    this.intervals.set('sessions', sessionCleanup);
+    
+    console.log('🚀 SEC cache cleanup scheduler started');
+  }
+
+  stop() {
+    this.intervals.forEach((interval) => {
+      clearInterval(interval);
+    });
+    this.intervals.clear();
+    this.isRunning = false;
+    
+    console.log('⏹️ SEC cache cleanup scheduler stopped');
+  }
+}
+
+// Auto-start cleanup scheduler
+const cleanupScheduler = new SecCacheCleanupScheduler();
+cleanupScheduler.start();
+```
+
+## API Integration & Endpoints
+
+### Updated Controller Implementation
+
+```javascript
+// secController.js - Database-backed caching
+exports.getInsiderTrades = async (req, res) => {
+  const { timeRange, refresh } = req.query;
+  const userId = req.user?.id;
+  const tier = req.user?.tier || 'free';
+  
+  try {
+    const result = await userSecCacheService.getSecDataForUser(
+      userId, 
+      tier,
+      'insider_trades', 
+      timeRange, 
+      refresh === 'true'
+    );
+    
+    if (!result.success) {
+      if (result.error === 'INSUFFICIENT_CREDITS') {
+        return res.status(402).json({
+          success: false,
+          error: result.error,
+          message: result.userMessage,
+          creditsRequired: result.creditsRequired,
+          creditsAvailable: result.creditsAvailable
+        });
+      }
+      
+      if (result.error === 'TIER_RESTRICTION') {
+        return res.status(403).json({
+          success: false,
+          error: result.error,
+          message: result.userMessage,
+          tierRequired: result.tierRequired
+        });
+      }
+      
+      return res.status(500).json({ success: false, error: result.message });
+    }
+    
+    res.json({
+      success: true,
+      data: result.data,
+      metadata: {
+        fromCache: result.fromCache,
+        hasActiveSession: result.hasActiveSession,
+        creditsUsed: result.creditsUsed,
+        expiresAt: result.expiresAt,
+        freshlyFetched: result.freshlyFetched || false
+      }
+    });
+    
+  } catch (error) {
+    console.error('SEC Controller Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch insider trades data' 
+    });
+  }
+};
+
+exports.getInstitutionalHoldings = async (req, res) => {
+  // Similar implementation for institutional holdings
+  const { timeRange, refresh } = req.query;
+  const userId = req.user?.id;
+  const tier = req.user?.tier || 'free';
+  
+  try {
+    const result = await userSecCacheService.getSecDataForUser(
+      userId,
+      tier, 
+      'institutional_holdings', 
+      timeRange, 
+      refresh === 'true'
+    );
+    
+    // Handle result same as insider trades...
+    
+  } catch (error) {
+    console.error('SEC Controller Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch institutional holdings data' 
+    });
+  }
+};
+
+exports.clearUserSecCache = async (req, res) => {
+  const userId = req.user?.id;
+  
+  try {
+    // Clear user's SEC cache
+    await db.query('DELETE FROM user_sec_cache WHERE user_id = $1', [userId]);
+    
+    console.log(`🧹 Cleared SEC cache for user ${userId}`);
+    
+    res.json({ 
+      success: true, 
+      message: 'SEC cache cleared successfully' 
+    });
+  } catch (error) {
+    console.error('Error clearing SEC cache:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to clear SEC cache' 
+    });
+  }
+};
+```
+
+### API Endpoints
+
+```
+GET  /api/sec/insider-trades?timeRange=1m&refresh=false
+     - Returns insider trades with automatic session/cache checking
+     - Charges credits only if no active session and no cache
+
+GET  /api/sec/institutional-holdings?timeRange=1m&refresh=false  
+     - Returns institutional holdings (Pro+ tier required)
+     - Same session/cache logic as insider trades
+
+GET  /api/sec/insider-trades/stream?timeRange=1m&refresh=true
+     - Streaming endpoint with progress callbacks
+     - Bypasses cache if refresh=true
+
+POST /api/sec/clear-user-cache
+     - Clears user's SEC cache manually
+     - Useful for debugging and force refresh scenarios
+
+GET  /api/debug/sec-cache/:userId
+     - Debug endpoint for cache inspection
+     - Returns cache status and session info
+```
+
+## Frontend Integration Updates
+
+### Removed localStorage Dependencies
+
+The frontend has been updated to rely on database sessions:
+
+```typescript
+// OLD APPROACH (removed): localStorage management
+// const [data, setData] = useState(() => {
+//   try {
+//     const cached = localStorage.getItem('secFilings_data');
+//     return cached ? JSON.parse(cached) : [];
+//   } catch (e) {
+//     return [];
+//   }
+// });
+
+// NEW APPROACH: Simple state, backend handles caching
+const [insiderTradesData, setInsiderTradesData] = useState<any[]>([]);
+const [institutionalHoldingsData, setInstitutionalHoldingsData] = useState<any[]>([]);
+
+// Cache refresh now clears backend cache
+const handleRefresh = async () => {
+  try {
+    await clearUserSecCache(); // Clear server-side cache
+    // Trigger fresh data fetch
+    loadInsiderTrades(timeRange, true);
+    if (unlockedComponents.institutionalHoldings) {
+      loadInstitutionalHoldings(timeRange, true);
+    }
+  } catch (error) {
+    console.error('Error clearing cache:', error);
+  }
+};
+```
+
+### Updated API Service
+
+```typescript
+// frontend/src/services/api.ts - Database-backed API calls
+export const fetchInsiderTradesWithUserCache = async (
+  timeRange: TimeRange, 
+  refresh: boolean = false
+): Promise<{ success: boolean; data?: any; error?: string; metadata?: any }> => {
+  try {
+    const params = new URLSearchParams({
+      timeRange,
+      refresh: refresh.toString()
+    });
+    
+    const response = await apiClient.get(`/sec/insider-trades?${params}`);
+    
+    return {
+      success: true,
+      data: response.data.data,
+      metadata: response.data.metadata
+    };
+  } catch (error) {
+    console.error('Error fetching insider trades:', error);
+    
+    if (error.response?.status === 402) {
+      return {
+        success: false,
+        error: 'INSUFFICIENT_CREDITS',
+        message: error.response.data.message
+      };
+    }
+    
+    if (error.response?.status === 403) {
+      return {
+        success: false,
+        error: 'TIER_RESTRICTION',
+        message: error.response.data.message
+      };
+    }
+    
+    return {
+      success: false,
+      error: 'FETCH_ERROR',
+      message: 'Failed to fetch insider trades data'
+    };
+  }
+};
+
+export const clearUserSecCache = async (): Promise<void> => {
+  await apiClient.post('/sec/clear-user-cache');
+};
+
+export const getUserSecCacheStatus = async (): Promise<any> => {
+  const response = await apiClient.get('/sec/cache-status');
+  return response.data;
+};
+```
+
+## Performance & Monitoring
+
+### Database Indexes
+
+Strategic indexes for optimal performance:
+
+```sql
+-- Primary performance indexes
+CREATE INDEX IF NOT EXISTS idx_user_sec_cache_user_id 
+ON user_sec_cache(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_user_sec_cache_expires_at 
+ON user_sec_cache(expires_at);
+
+CREATE INDEX IF NOT EXISTS idx_user_sec_cache_user_type_range 
+ON user_sec_cache(user_id, data_type, time_range);
+
+-- Detail table indexes
+CREATE INDEX IF NOT EXISTS idx_user_sec_insider_trades_ticker 
+ON user_sec_insider_trades(ticker);
+
+CREATE INDEX IF NOT EXISTS idx_user_sec_insider_trades_user_id 
+ON user_sec_insider_trades(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_user_sec_institutional_holdings_ticker 
+ON user_sec_institutional_holdings(ticker);
+
+CREATE INDEX IF NOT EXISTS idx_user_sec_institutional_holdings_user_id 
+ON user_sec_institutional_holdings(user_id);
+
+-- Session-related indexes
+CREATE INDEX IF NOT EXISTS idx_research_sessions_user_component 
+ON research_sessions(user_id, component);
+
+CREATE INDEX IF NOT EXISTS idx_research_sessions_active 
+ON research_sessions(user_id, status) 
+WHERE status = 'active';
+```
+
+### Monitoring & Analytics
+
+```javascript
+// Cache performance monitoring
+const getCacheAnalytics = async () => {
+  const result = await db.query(`
+    SELECT 
+      data_type,
+      COUNT(*) as total_entries,
+      COUNT(*) FILTER (WHERE expires_at > CURRENT_TIMESTAMP) as active_entries,
+      COUNT(*) FILTER (WHERE expires_at <= CURRENT_TIMESTAMP) as expired_entries,
+      AVG(EXTRACT(EPOCH FROM (expires_at - created_at))/3600) as avg_cache_duration_hours,
+      SUM(CASE WHEN metadata->>'dataCount' IS NOT NULL 
+          THEN (metadata->>'dataCount')::INTEGER ELSE 0 END) as total_records_cached
+    FROM user_sec_cache
+    GROUP BY data_type
+  `);
+  
+  return result.rows;
+};
+
+// Session analytics
+const getSessionAnalytics = async () => {
+  const result = await db.query(`
+    SELECT 
+      component,
+      COUNT(*) as total_sessions,
+      COUNT(*) FILTER (WHERE status = 'active' AND expires_at > CURRENT_TIMESTAMP) as active_sessions,
+      AVG(credits_used) as avg_credits_per_session,
+      AVG(EXTRACT(EPOCH FROM (expires_at - unlocked_at))/3600) as avg_session_duration_hours
+    FROM research_sessions
+    WHERE component IN ('insiderTrading', 'institutionalHoldings')
+    GROUP BY component
+  `);
+  
+  return result.rows;
+};
+```
+
+## Security & Data Isolation
+
+### User Data Protection
+
+- All cache queries include `user_id` filter for complete data isolation
+- No cross-user data access possible through any API endpoint
+- Session validation prevents unauthorized access attempts
+- Automatic cleanup removes expired data to minimize storage exposure
+
+### Credit Validation
+
+- Credits checked before any expensive operations
+- Session validation prevents double-charging
+- Complete audit trail in `credit_transactions` table
+- Tier restrictions enforced at database level
+
+## System Summary
+
+The HRVSTR SEC filings caching system successfully implements:
+
+1. **✅ Cross-Device User Account Tracking**: PostgreSQL sessions accessible from any device
+2. **✅ Credit-Based Session Management**: Prevents double-charging with active session checks
+3. **✅ Database Layer Caching**: User-specific cache with tier-based expiration policies
+4. **✅ Automatic Cache Cleanup**: Scheduled maintenance and orphan record cleanup
+5. **✅ Session Validation**: Active session verification before credit deduction
+6. **✅ Performance Optimization**: Strategic indexing and efficient query patterns
+7. **✅ Developer Tools**: Comprehensive debugging and monitoring capabilities
+8. **✅ Security & Isolation**: Complete user data separation and audit trails
+
+This sophisticated architecture ensures optimal performance, cost efficiency, and user experience while maintaining strict data security and preventing credit system abuse across all HRVSTR premium features.

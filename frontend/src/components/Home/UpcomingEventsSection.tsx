@@ -202,9 +202,10 @@ const UpcomingEventsSection: React.FC<UpcomingEventsSectionProps> = ({
                       <p className={`font-medium ${textColor}`}>
                         {capitalizeFirstLetter(event.event_type || 'event')}
                       </p>
-                      <p className={`text-sm ${mutedTextColor}`}>
-                        {formatDate(event.scheduled_at)} at {formatTime(event.scheduled_at)}
-                      </p>
+                      <div className={`text-sm ${mutedTextColor}`}>
+                        <span className="block sm:inline">{formatDate(event.scheduled_at)}</span>
+                        <span className="block sm:inline sm:ml-1">at {formatTime(event.scheduled_at)}</span>
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center">
