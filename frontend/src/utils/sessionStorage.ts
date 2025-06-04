@@ -21,12 +21,58 @@ export interface DatabaseSession {
 
 const SESSION_STORAGE_PREFIX = 'hrvstr_unlock_';
 
+// RATE LIMITING FIX: Add client-side caching to prevent API spam
+const componentAccessCache = new Map<string, { data: UnlockSession | null; timestamp: number }>();
+const CACHE_TTL = 30000; // 30 seconds cache to prevent rate limiting
+const pendingRequests = new Map<string, Promise<UnlockSession | null>>();
+
 /**
  * Check if component is unlocked by querying the database ONLY
  * No localStorage fallback - everything goes through the database layer
  * All users (including Pro+) must pay credits and have session expiration
+ * RATE LIMITING FIX: Added caching and debouncing
  */
 export const checkComponentAccess = async (component: string, currentTier?: string): Promise<UnlockSession | null> => {
+  const cacheKey = `${component}_${currentTier || 'unknown'}`;
+  
+  // RATE LIMITING FIX: Check cache first
+  const cached = componentAccessCache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+    console.log(`[checkComponentAccess] ⚡ Using cached result for ${component} (${Math.round((Date.now() - cached.timestamp) / 1000)}s old)`);
+    return cached.data;
+  }
+  
+  // RATE LIMITING FIX: Debounce concurrent requests for same component
+  const existingRequest = pendingRequests.get(cacheKey);
+  if (existingRequest) {
+    console.log(`[checkComponentAccess] 🔄 Reusing pending request for ${component}`);
+    return existingRequest;
+  }
+  
+  // Create new request
+  const requestPromise = performComponentAccessCheck(component, currentTier);
+  pendingRequests.set(cacheKey, requestPromise);
+  
+  try {
+    const result = await requestPromise;
+    
+    // Cache the result
+    componentAccessCache.set(cacheKey, {
+      data: result,
+      timestamp: Date.now()
+    });
+    
+    return result;
+  } finally {
+    // Clean up pending request
+    pendingRequests.delete(cacheKey);
+  }
+};
+
+/**
+ * Perform the actual component access check (separated for caching)
+ */
+const performComponentAccessCheck = async (component: string, currentTier?: string): Promise<UnlockSession | null> => {
   try {
     const token = localStorage.getItem('auth_token');
     if (!token) {
@@ -46,6 +92,11 @@ export const checkComponentAccess = async (component: string, currentTier?: stri
     });
 
     if (!response.ok) {
+      if (response.status === 429) {
+        console.warn(`[checkComponentAccess] ⏰ Rate limited for ${component} - will retry with cached data`);
+        // Don't clear cache on rate limit - let existing cache serve requests
+        throw new Error('Rate limited');
+      }
       console.warn(`[checkComponentAccess] API response error for ${component}: ${response.status} ${response.statusText}`);
       return null;
     }
@@ -58,35 +109,34 @@ export const checkComponentAccess = async (component: string, currentTier?: stri
       timeRemaining: data.session?.timeRemainingHours
     });
 
-    // Check for active paid sessions - ALL USERS must have active sessions
+    // If we have a database response, use it (backend already validates tier access)
     if (data.success && data.hasAccess && data.session) {
-      // TIER-AWARE VALIDATION: Check if current tier supports this component
-      const tierSupportsComponent = checkTierSupportsComponent(component, currentTier);
+      const { session_id: sessionId, timeRemainingHours: timeRemaining } = data.session;
       
-      if (!tierSupportsComponent) {
-        console.warn(`[checkComponentAccess] Session exists for ${component} but current tier (${currentTier}) doesn't support it. Access denied.`);
-        return null;
-      }
-      
-      // Convert database session to UnlockSession format
-      const dbSession = data.session;
-      const unlockSession: UnlockSession = {
+      console.log(`✅ Active database session found for ${component}`);
+      return {
         unlocked: true,
+        sessionId,
         timestamp: Date.now(),
-        expiresAt: new Date(dbSession.expires_at).getTime(),
-        sessionId: dbSession.session_id,
-        component: dbSession.component,
-        creditsUsed: dbSession.credits_used,
-        tier: dbSession.metadata?.tier || 'free'
+        expiresAt: Date.now() + (timeRemaining * 60 * 60 * 1000), // Convert hours to milliseconds
+        component,
+        creditsUsed: 0, // Not available from database response
+        tier: currentTier || 'unknown'
       };
-      
-      console.log(`[checkComponentAccess] ✅ Active database session found for ${component}`);
-      return unlockSession;
+    } else {
+      console.log(`❌ No active database session for ${component}`);
+      return null;
     }
-
-    console.log(`[checkComponentAccess] ❌ No active database session for ${component}`);
-    return null;
   } catch (error) {
+    if (error instanceof Error && error.message === 'Rate limited') {
+      // For rate limit errors, return cached data if available
+      const cacheKey = `${component}_${currentTier || 'unknown'}`;
+      const cached = componentAccessCache.get(cacheKey);
+      if (cached) {
+        console.log(`[checkComponentAccess] 🛡️ Rate limited, using stale cache for ${component}`);
+        return cached.data;
+      }
+    }
     console.warn(`[checkComponentAccess] Error checking database session for ${component}:`, error);
     return null;
   }
@@ -265,4 +315,20 @@ export const getExpiringSoonSessions = async (currentTier?: string): Promise<Unl
     const timeRemaining = getSessionTimeRemaining(session);
     return timeRemaining > 0 && timeRemaining <= twentyFourHours;
   });
+};
+
+/**
+ * Clear component access cache (useful for testing or after unlock)
+ */
+export const clearComponentAccessCache = (component?: string): void => {
+  if (component) {
+    // Clear specific component cache entries
+    const keysToDelete = Array.from(componentAccessCache.keys()).filter(key => key.startsWith(component));
+    keysToDelete.forEach(key => componentAccessCache.delete(key));
+    console.log(`🗑️ Cleared cache for ${component}`);
+  } else {
+    // Clear all cache
+    componentAccessCache.clear();
+    console.log(`🗑️ Cleared all component access cache`);
+  }
 }; 

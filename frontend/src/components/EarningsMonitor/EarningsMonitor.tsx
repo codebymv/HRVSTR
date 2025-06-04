@@ -13,7 +13,8 @@ import {
   storeUnlockSession, 
   getAllUnlockSessions,
   getSessionTimeRemainingFormatted,
-  checkComponentAccess
+  checkComponentAccess,
+  clearComponentAccessCache
 } from '../../utils/sessionStorage';
 import ProgressBar from '../ProgressBar';
 import TierLimitDialog from '../UI/TierLimitDialog';
@@ -92,8 +93,8 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
     // Check sessions immediately
     checkExistingSessions();
     
-    // Check for expired sessions every minute
-    const interval = setInterval(checkExistingSessions, 60000);
+    // RATE LIMITING FIX: Check for expired sessions every 5 minutes instead of 1 minute
+    const interval = setInterval(checkExistingSessions, 5 * 60 * 1000); // Changed from 60000ms to 300000ms
     return () => clearInterval(interval);
   }, [tierInfo, currentTier]);
   
@@ -438,15 +439,15 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
 
   // Handlers for unlocking individual components
   const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
-    // Check if already unlocked using database-only approach
-    const existingSession = await checkComponentAccess(component, currentTier);
-    if (existingSession) {
-      const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
-      info(`${component} already unlocked (${timeRemaining})`);
-      return;
-    }
-    
     try {
+      // Check if already unlocked using database-only approach
+      const existingSession = await checkComponentAccess(component, currentTier);
+      if (existingSession) {
+        const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
+        info(`${component} already unlocked (${timeRemaining})`);
+        return;
+      }
+      
       const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
       const token = localStorage.getItem('auth_token');
       
@@ -469,6 +470,9 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
       }
       
       if (data.success) {
+        // RATE LIMITING FIX: Clear cache for this component to get fresh data
+        clearComponentAccessCache(component);
+        
         // Update component state
         setUnlockedComponents(prev => ({
           ...prev,
@@ -489,8 +493,8 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
           tier: tierInfo?.tier || 'free'
         });
         
-        // Update active sessions by querying database
-        const sessions = await getAllUnlockSessions();
+        // Update active sessions
+        const sessions = getAllUnlockSessions();
         setActiveSessions(sessions);
         
         // Show appropriate toast message

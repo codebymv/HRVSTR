@@ -396,27 +396,24 @@ router.post('/unlock-component', authenticateToken, async (req, res) => {
       await client.query(`
         INSERT INTO credit_transactions (
           user_id, 
-          transaction_type, 
-          amount, 
-          balance_after,
-          description,
-          metadata,
-          created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+          action, 
+          credits_used, 
+          credits_remaining,
+          metadata
+        ) VALUES ($1, $2, $3, $4, $5)
       `, [
         userId,
         `unlock_${component}`,
         cost,
         newTotalCredits - newCreditsUsed,
-        `Unlocked ${component} component`,
         JSON.stringify({
           component,
           tier: user.tier,
           component_cost: cost,
           session_id: sessionId,
-          expires_at: expiresAtUtc.toISOString()
-        }),
-        new Date().toISOString()
+          expires_at: expiresAtUtc.toISOString(),
+          description: `Unlocked ${component} component`
+        })
       ]);
       
       // Log the activity

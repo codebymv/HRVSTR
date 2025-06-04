@@ -9,7 +9,8 @@ import {
   storeUnlockSession, 
   getAllUnlockSessions,
   getSessionTimeRemainingFormatted,
-  checkComponentAccess
+  checkComponentAccess,
+  clearComponentAccessCache
 } from '../../utils/sessionStorage';
 import InsiderTradesTab from './InsiderTradesTab';
 import InstitutionalHoldingsTab from './InstitutionalHoldingsTab';
@@ -461,15 +462,15 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
 
   // Handlers for unlocking individual components
   const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
-    // Check if already unlocked using database-only approach
-    const existingSession = await checkComponentAccess(component, currentTier);
-    if (existingSession) {
-      const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
-      info(`${component} already unlocked (${timeRemaining})`);
-      return;
-    }
-    
     try {
+      // Check if already unlocked using database-only approach
+      const existingSession = await checkComponentAccess(component, currentTier);
+      if (existingSession) {
+        const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
+        info(`${component} already unlocked (${timeRemaining})`);
+        return;
+      }
+      
       const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
       const token = localStorage.getItem('auth_token');
       
@@ -492,6 +493,9 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
       }
       
       if (data.success) {
+        // RATE LIMITING FIX: Clear cache for this component to get fresh data
+        clearComponentAccessCache(component);
+        
         // Update component state
         setUnlockedComponents(prev => ({
           ...prev,
@@ -506,8 +510,8 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
           tier: tierInfo?.tier || 'free'
         });
         
-        // Update active sessions by querying database
-        const sessions = await getAllUnlockSessions(currentTier);
+        // Update active sessions
+        const sessions = getAllUnlockSessions();
         setActiveSessions(sessions);
         
         // Show appropriate toast message
@@ -565,10 +569,19 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
         
         <button
           onClick={() => handleUnlockComponent(componentKey, cost)}
-          className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-6 py-3 rounded-lg font-medium transition-all flex items-center justify-center mx-auto gap-2"
+          className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-medium transition-all flex items-center justify-center mx-auto gap-2"
         >
-          <Crown className="w-4 h-4" />
-          Unlock for {cost} Credits
+          {unlockedComponents[componentKey] ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Unlocking...
+            </>
+          ) : (
+            <>
+              <Crown className="w-4 h-4" />
+              Unlock for {cost} Credits
+            </>
+          )}
         </button>
       </div>
     </div>
