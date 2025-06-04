@@ -22,16 +22,36 @@ export interface DatabaseSession {
 const SESSION_STORAGE_PREFIX = 'hrvstr_unlock_';
 
 /**
- * Check if component is unlocked by querying the database first, then localStorage as fallback
- * Now includes tier-aware validation to prevent tier downgrade issues
+ * Check if component is unlocked by querying the database ONLY
+ * No localStorage fallback - everything goes through the database layer
+ * Includes tier-based auto-grants for Pro+ users
  */
 export const checkComponentAccess = async (component: string, currentTier?: string): Promise<UnlockSession | null> => {
   try {
-    // First check database sessions via API
+    // TIER-BASED AUTO-GRANTS: Pro+ users get certain components as part of tier benefits
+    if (currentTier && ['pro', 'elite', 'institutional'].includes(currentTier.toLowerCase())) {
+      if (component === 'insiderTrading' || component === 'institutionalHoldings' || component === 'earningsAnalysis') {
+        console.log(`[checkComponentAccess] ✅ Auto-granted ${component} for ${currentTier} tier user`);
+        
+        // Create a virtual session for tier-based access
+        const virtualSession: UnlockSession = {
+          unlocked: true,
+          timestamp: Date.now(),
+          expiresAt: Date.now() + (365 * 24 * 60 * 60 * 1000), // 1 year expiry for tier benefits
+          sessionId: `tier-${currentTier}-${component}`,
+          component,
+          creditsUsed: 0,
+          tier: currentTier
+        };
+        
+        return virtualSession;
+      }
+    }
+
     const token = localStorage.getItem('auth_token');
     if (!token) {
       console.warn(`[checkComponentAccess] No auth token found for ${component}`);
-      return checkUnlockSession(component, currentTier);
+      return null;
     }
 
     const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
@@ -47,8 +67,7 @@ export const checkComponentAccess = async (component: string, currentTier?: stri
 
     if (!response.ok) {
       console.warn(`[checkComponentAccess] API response error for ${component}: ${response.status} ${response.statusText}`);
-      // If API fails, fall back to localStorage
-      return checkUnlockSession(component, currentTier);
+      return null;
     }
 
     const data = await response.json();
@@ -64,10 +83,7 @@ export const checkComponentAccess = async (component: string, currentTier?: stri
       const tierSupportsComponent = checkTierSupportsComponent(component, currentTier);
       
       if (!tierSupportsComponent) {
-        console.warn(`[checkComponentAccess] Session exists for ${component} but current tier (${currentTier}) doesn't support it. Temporarily blocking access - session preserved for tier upgrade.`);
-        
-        // Don't clear the session - just temporarily block access
-        // This allows the session to be restored when user upgrades tier
+        console.warn(`[checkComponentAccess] Session exists for ${component} but current tier (${currentTier}) doesn't support it. Access denied.`);
         return null;
       }
       
@@ -83,27 +99,16 @@ export const checkComponentAccess = async (component: string, currentTier?: stri
         tier: dbSession.metadata?.tier || 'free'
       };
       
-      console.log(`[checkComponentAccess] Found active session for ${component}, syncing to localStorage`);
-      
-      // Sync to localStorage for offline access
-      storeUnlockSession(component, {
-        sessionId: dbSession.session_id,
-        expiresAt: dbSession.expires_at,
-        creditsUsed: dbSession.credits_used,
-        tier: dbSession.metadata?.tier || 'free'
-      });
-      
+      console.log(`[checkComponentAccess] ✅ Active database session found for ${component}`);
       return unlockSession;
     } else {
-      console.log(`[checkComponentAccess] No active database session for ${component}`);
+      console.log(`[checkComponentAccess] ❌ No active database session for ${component}`);
+      return null;
     }
   } catch (error) {
     console.warn(`[checkComponentAccess] Error checking database session for ${component}:`, error);
+    return null;
   }
-  
-  // Fallback to localStorage check
-  console.log(`[checkComponentAccess] Falling back to localStorage check for ${component}`);
-  return checkUnlockSession(component, currentTier);
 };
 
 /**
@@ -141,7 +146,8 @@ const checkTierSupportsComponent = (component: string, currentTier?: string): bo
 };
 
 /**
- * Store component unlock session in localStorage
+ * Store component unlock session in localStorage (DEPRECATED - keeping for backward compatibility only)
+ * This is now only used for legacy support, all session checking goes through database
  */
 export const storeUnlockSession = (
   component: string, 
@@ -172,7 +178,7 @@ export const storeUnlockSession = (
       JSON.stringify(unlockData)
     );
 
-    console.log(`📦 Stored unlock session for ${component}:`, {
+    console.log(`📦 [DEPRECATED] Stored unlock session for ${component} (legacy support only):`, {
       sessionId: sessionData.sessionId,
       expiresAt: new Date(expiresAtTimestamp).toLocaleString(),
       creditsUsed: sessionData.creditsUsed
@@ -183,134 +189,99 @@ export const storeUnlockSession = (
 };
 
 /**
- * Check if component is unlocked in current session (localStorage only)
+ * Check if component is unlocked in current session (localStorage only) - DEPRECATED
+ * This function is deprecated and should not be used. Use checkComponentAccess instead.
  */
 export const checkUnlockSession = (component: string, currentTier?: string): UnlockSession | null => {
-  try {
-    const stored = localStorage.getItem(`${SESSION_STORAGE_PREFIX}${component}`);
-    if (!stored) return null;
-
-    const data: UnlockSession = JSON.parse(stored);
-    
-    // Check if session has expired
-    if (Date.now() > data.expiresAt) {
-      localStorage.removeItem(`${SESSION_STORAGE_PREFIX}${component}`);
-      console.log(`⏰ Session expired for ${component}, removing from storage`);
-      return null;
-    }
-
-    // TIER-AWARE VALIDATION: Check if current tier supports this component
-    const tierSupportsComponent = checkTierSupportsComponent(component, currentTier);
-    
-    if (!tierSupportsComponent) {
-      console.warn(`[checkUnlockSession] Session exists for ${component} but current tier (${currentTier}) doesn't support it. Temporarily blocking access - session preserved for tier upgrade.`);
-      
-      // Don't clear the session - just temporarily block access
-      // This allows the session to be restored when user upgrades tier
-      return null;
-    }
-
-    return data;
-  } catch (error) {
-    console.error('Error checking unlock session:', error);
-    // Remove corrupted data
-    localStorage.removeItem(`${SESSION_STORAGE_PREFIX}${component}`);
-    return null;
-  }
+  console.warn(`[DEPRECATED] checkUnlockSession called for ${component}. Use checkComponentAccess instead which queries the database.`);
+  return null;
 };
 
 /**
- * Get all active unlock sessions
+ * Get all active unlock sessions - NOW QUERIES DATABASE ONLY
  */
-export const getAllUnlockSessions = (currentTier?: string): UnlockSession[] => {
+export const getAllUnlockSessions = async (currentTier?: string): Promise<UnlockSession[]> => {
   const sessions: UnlockSession[] = [];
+  const components = ['earningsAnalysis', 'insiderTrading', 'institutionalHoldings'];
   
   try {
-    // Get all localStorage keys that match our prefix
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith(SESSION_STORAGE_PREFIX)) {
-        const component = key.replace(SESSION_STORAGE_PREFIX, '');
-        const session = checkUnlockSession(component, currentTier);
-        if (session) {
-          sessions.push(session);
-        }
+    // Query database for all components
+    for (const component of components) {
+      const session = await checkComponentAccess(component, currentTier);
+      if (session) {
+        sessions.push(session);
       }
     }
   } catch (error) {
-    console.error('Error getting all unlock sessions:', error);
+    console.error('Error getting all unlock sessions from database:', error);
   }
 
   return sessions;
 };
 
 /**
- * Clear specific component session
+ * Clear component unlock session from localStorage (keeping for cleanup only)
  */
 export const clearUnlockSession = (component: string): void => {
   try {
     localStorage.removeItem(`${SESSION_STORAGE_PREFIX}${component}`);
-    console.log(`🗑️ Cleared unlock session for ${component}`);
+    console.log(`🗑️ Cleared localStorage session for ${component} (cleanup only)`);
   } catch (error) {
     console.error('Error clearing unlock session:', error);
   }
 };
 
 /**
- * Clear all unlock sessions
+ * Clear all unlock sessions from localStorage (keeping for cleanup only)
  */
 export const clearAllUnlockSessions = (): void => {
   try {
-    const keysToRemove: string[] = [];
+    const keys = Object.keys(localStorage);
+    const sessionKeys = keys.filter(key => key.startsWith(SESSION_STORAGE_PREFIX));
     
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith(SESSION_STORAGE_PREFIX)) {
-        keysToRemove.push(key);
-      }
-    }
+    sessionKeys.forEach(key => {
+      localStorage.removeItem(key);
+    });
     
-    keysToRemove.forEach(key => localStorage.removeItem(key));
-    console.log(`🗑️ Cleared ${keysToRemove.length} unlock sessions`);
+    console.log(`🗑️ Cleared ${sessionKeys.length} localStorage sessions (cleanup only)`);
   } catch (error) {
     console.error('Error clearing all unlock sessions:', error);
   }
 };
 
 /**
- * Get time remaining for a session in milliseconds
+ * Get session time remaining in milliseconds
  */
 export const getSessionTimeRemaining = (session: UnlockSession): number => {
   return Math.max(0, session.expiresAt - Date.now());
 };
 
 /**
- * Get time remaining for a session in human-readable format
+ * Get formatted time remaining for a session
  */
 export const getSessionTimeRemainingFormatted = (session: UnlockSession): string => {
   const timeRemaining = getSessionTimeRemaining(session);
-  
-  if (timeRemaining <= 0) return 'Expired';
-  
   const hours = Math.floor(timeRemaining / (1000 * 60 * 60));
   const minutes = Math.floor((timeRemaining % (1000 * 60 * 60)) / (1000 * 60));
   
   if (hours > 0) {
-    return `${hours}h ${minutes}m remaining`;
+    return `${hours}h ${minutes}m`;
+  } else if (minutes > 0) {
+    return `${minutes}m`;
   } else {
-    return `${minutes}m remaining`;
+    return 'Expired';
   }
 };
 
 /**
- * Check if any sessions are expiring soon (within 15 minutes)
+ * Get sessions that are expiring soon (within 24 hours) - NOW QUERIES DATABASE
  */
-export const getExpiringSoonSessions = (currentTier?: string): UnlockSession[] => {
-  const sessions = getAllUnlockSessions(currentTier);
-  const fifteenMinutes = 15 * 60 * 1000;
+export const getExpiringSoonSessions = async (currentTier?: string): Promise<UnlockSession[]> => {
+  const allSessions = await getAllUnlockSessions(currentTier);
+  const twentyFourHours = 24 * 60 * 60 * 1000;
   
-  return sessions.filter(session => {
+  return allSessions.filter(session => {
     const timeRemaining = getSessionTimeRemaining(session);
-    return timeRemaining > 0 && timeRemaining <= fifteenMinutes;
+    return timeRemaining > 0 && timeRemaining <= twentyFourHours;
   });
 }; 

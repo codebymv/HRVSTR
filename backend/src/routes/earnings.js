@@ -3,7 +3,7 @@ const router = express.Router();
 const controller = require('../controllers/earningsController');
 const { v4: uuidv4 } = require('uuid');
 
-// Get progress for a scraping operation
+// Get progress for a scraping operation (no auth needed for basic earnings data)
 router.get('/progress/:sessionId', async (req, res) => {
   try {
     const { sessionId } = req.params;
@@ -29,7 +29,7 @@ router.get('/progress/:sessionId', async (req, res) => {
   }
 });
 
-// Start earnings scraping with progress tracking
+// Start earnings scraping with progress tracking (no auth needed for basic earnings data)
 router.post('/start-scraping', async (req, res) => {
   try {
     const { timeRange = '1w' } = req.body;
@@ -63,6 +63,7 @@ router.post('/start-scraping', async (req, res) => {
 });
 
 // Update the existing upcoming earnings route to support both old and new ways
+// Basic earnings data is available to all users, no auth required
 router.get('/upcoming', async (req, res) => {
   try {
     const { timeRange = '1w', withProgress = 'false' } = req.query;

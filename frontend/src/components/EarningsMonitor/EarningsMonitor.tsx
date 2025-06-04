@@ -61,33 +61,31 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
     
     const checkExistingSessions = async () => {
       try {
-        // Use new database-based checking with tier awareness
+        // Use database-only checking - no more localStorage fallback
         const analysisSession = await checkComponentAccess('earningsAnalysis', currentTier);
 
         setUnlockedComponents({
           earningsAnalysis: !!analysisSession
         });
 
-        // Update active sessions for display (fallback to localStorage sessions for display)
-        const sessions = getAllUnlockSessions();
+        // Update active sessions for display - NOW QUERIES DATABASE ONLY
+        const sessions = await getAllUnlockSessions();
         setActiveSessions(sessions);
         
-        console.log('🔍 EARNINGS MONITOR - Component access check:', {
+        console.log('🔍 EARNINGS MONITOR - Component access check (DATABASE ONLY):', {
           earningsAnalysis: !!analysisSession,
           analysisSessionId: analysisSession?.sessionId,
-          currentTier
+          currentTier,
+          databaseSessions: sessions.length
         });
       } catch (error) {
-        console.warn('Failed to check database sessions, falling back to localStorage:', error);
-        // Fallback to localStorage checking with tier awareness
-        const analysisSession = checkUnlockSession('earningsAnalysis', currentTier);
-
+        console.warn('Database session check failed:', error);
+        // No more localStorage fallback - just set to false if database fails
         setUnlockedComponents({
-          earningsAnalysis: !!analysisSession
+          earningsAnalysis: false
         });
 
-        const sessions = getAllUnlockSessions();
-        setActiveSessions(sessions);
+        setActiveSessions([]);
       }
     };
 
@@ -431,8 +429,8 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
 
   // Handlers for unlocking individual components
   const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
-    // Check if already unlocked in current session (with tier awareness)
-    const existingSession = checkUnlockSession(component, currentTier);
+    // Check if already unlocked using database-only approach
+    const existingSession = await checkComponentAccess(component, currentTier);
     if (existingSession) {
       const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
       info(`${component} already unlocked (${timeRemaining})`);
@@ -474,7 +472,7 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
           loadAnalysis(selectedTicker);
         }
         
-        // Store session in localStorage
+        // Store session in localStorage for backward compatibility only
         storeUnlockSession(component, {
           sessionId: data.sessionId,
           expiresAt: data.expiresAt,
@@ -482,8 +480,8 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
           tier: tierInfo?.tier || 'free'
         });
         
-        // Update active sessions
-        const sessions = getAllUnlockSessions();
+        // Update active sessions by querying database
+        const sessions = await getAllUnlockSessions();
         setActiveSessions(sessions);
         
         // Show appropriate toast message

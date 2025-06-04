@@ -115,7 +115,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     
     const checkExistingSessions = async () => {
       try {
-        // Use new database-based checking like other components with tier awareness
+        // Use database-only checking - no more localStorage fallback
         const insiderSession = await checkComponentAccess('insiderTrading', currentTier);
         const institutionalSession = await checkComponentAccess('institutionalHoldings', currentTier);
 
@@ -143,11 +143,11 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
 
         setUnlockedComponents(newUnlockedState);
 
-        // Update active sessions for display (fallback to localStorage sessions for display)
-        const sessions = getAllUnlockSessions(currentTier);
+        // Update active sessions for display - NOW QUERIES DATABASE ONLY
+        const sessions = await getAllUnlockSessions(currentTier);
         setActiveSessions(sessions);
         
-        console.log('🔍 SEC DASHBOARD - Component access check:', {
+        console.log('🔍 SEC DASHBOARD - Component access check (DATABASE ONLY):', {
           insiderTrading: !!insiderSession,
           institutionalHoldings: hasInstitutionalAccess,
           institutionalFromSession: !!institutionalSession,
@@ -155,28 +155,17 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
           insiderSessionId: insiderSession?.sessionId,
           institutionalSessionId: institutionalSession?.sessionId,
           currentTier,
-          previousInstitutionalState: unlockedComponents.institutionalHoldings,
-          newInstitutionalState: newUnlockedState.institutionalHoldings
+          databaseSessions: sessions.length
         });
       } catch (error) {
-        console.warn('Failed to check database sessions, falling back to localStorage:', error);
-        // Fallback to localStorage checking with tier awareness
-        const insiderSession = checkUnlockSession('insiderTrading', currentTier);
-        const institutionalSession = checkUnlockSession('institutionalHoldings', currentTier);
-
-        // Also check session memory for institutional holdings
-        const hasInstitutionalAccess = !!institutionalSession || 
-          (sessionUnlockMemory.institutionalHoldings && ['pro', 'elite', 'institutional'].includes(currentTier.toLowerCase())) ||
-          // AUTO-GRANT: Pro+ users get institutional holdings as part of tier benefits (no session needed)
-          ['pro', 'elite', 'institutional'].includes(currentTier.toLowerCase());
-
+        console.warn('Database session check failed:', error);
+        // No more localStorage fallback - just set to false if database fails
         setUnlockedComponents({
-          insiderTrading: !!insiderSession,
-          institutionalHoldings: hasInstitutionalAccess
+          insiderTrading: false,
+          institutionalHoldings: ['pro', 'elite', 'institutional'].includes(currentTier.toLowerCase()) // Auto-grant for Pro+
         });
 
-        const sessions = getAllUnlockSessions(currentTier);
-        setActiveSessions(sessions);
+        setActiveSessions([]);
       }
     };
 
@@ -516,8 +505,8 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
 
   // Handlers for unlocking individual components
   const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
-    // Check if already unlocked in current session (with tier awareness)
-    const existingSession = checkUnlockSession(component, currentTier);
+    // Check if already unlocked using database-only approach
+    const existingSession = await checkComponentAccess(component, currentTier);
     if (existingSession) {
       const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
       info(`${component} already unlocked (${timeRemaining})`);
@@ -552,33 +541,8 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
           ...prev,
           [component]: true
         }));
-
-        // Record in session memory for tier upgrade edge case
-        setSessionUnlockMemory(prev => ({
-          ...prev,
-          [component]: true
-        }));
         
-        // IMPORTANT: Trigger data loading for the unlocked component
-        if (component === 'institutionalHoldings') {
-          setLoadingState(prev => ({
-            ...prev,
-            institutionalHoldings: { 
-              isLoading: false, 
-              needsRefresh: true 
-            }
-          }));
-        } else if (component === 'insiderTrading') {
-          setLoadingState(prev => ({
-            ...prev,
-            insiderTrades: { 
-              isLoading: false, 
-              needsRefresh: true 
-            }
-          }));
-        }
-        
-        // Store session in localStorage
+        // Store session in localStorage for backward compatibility only
         storeUnlockSession(component, {
           sessionId: data.sessionId,
           expiresAt: data.expiresAt,
@@ -586,8 +550,8 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
           tier: tierInfo?.tier || 'free'
         });
         
-        // Update active sessions
-        const sessions = getAllUnlockSessions(currentTier);
+        // Update active sessions by querying database
+        const sessions = await getAllUnlockSessions(currentTier);
         setActiveSessions(sessions);
         
         // Show appropriate toast message
