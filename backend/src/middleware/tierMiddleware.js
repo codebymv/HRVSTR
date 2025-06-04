@@ -295,8 +295,8 @@ const deductCredits = async (req, res, next) => {
         [
           userId,
           'credit_deduction',
-          `${cost} Credits Used - ${type.charAt(0).toUpperCase() + type.slice(1)}`,
-          `${cost} credits deducted for ${type} operation. ${details.tickerCount ? `Processed ${details.tickerCount} tickers` : 'Operation completed'}. Remaining: ${newBalance}`,
+          `Credits Used - ${type.charAt(0).toUpperCase() + type.slice(1).replace(/([A-Z])/g, ' $1')}`,
+          `${cost} credits deducted for ${type.replace(/([A-Z])/g, ' $1').toLowerCase()} operation. ${details.tickerCount ? `Processed ${details.tickerCount} tickers` : 'Operation completed'}. Remaining: ${newBalance}`,
           details.tickers ? details.tickers[0] : null // Use first ticker as symbol reference
         ]
       );

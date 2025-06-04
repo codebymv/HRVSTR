@@ -1,6 +1,7 @@
 import React, { useRef, useCallback, useEffect, useState } from 'react';
-import { Activity, AlertTriangle, Info, Loader2 } from 'lucide-react';
+import { Activity, AlertTriangle, Info, Loader2, Star, Crown, Zap, Building, Plus, Minus, BarChart2, TrendingUp, Building2, User, LogIn, LogOut, Search, DollarSign, Trash2, RefreshCw, FileText, ListChecks } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { formatActivityType, generateActivityDescription, cleanActivityTitle, cleanActivityDescription, getComponentIcon } from '../../utils/activityFormatter';
 
 interface ActivityItem {
   id: string;
@@ -132,19 +133,112 @@ const RecentActivitySection: React.FC<RecentActivitySectionProps> = ({
            date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  // Get activity type icon/color
-  const getActivityTypeIndicator = (activityType: string) => {
+  // Get activity type icon with specific component and tier awareness
+  const getActivityIcon = (activityType: string, activityTitle?: string | null, activityDescription?: string | null) => {
+    const iconClasses = "w-4 h-4";
+    
     switch (activityType.toLowerCase()) {
+      // Watchlist activities
       case 'watchlist_add':
-        return 'bg-green-500';
+        return <Plus className={`${iconClasses} text-green-500`} />;
       case 'watchlist_remove':
-        return 'bg-red-500';
+        return <Minus className={`${iconClasses} text-red-500`} />;
+      
+      // Tier changes - use tier-specific icons
       case 'tier_upgrade':
-        return 'bg-blue-500';
       case 'tier_downgrade':
-        return 'bg-orange-500';
+      case 'tier_change':
+        // Try to detect which tier from title/description
+        const tierText = ((activityTitle || '') + ' ' + (activityDescription || '')).toLowerCase();
+        if (tierText.includes('free')) {
+          return <Star className={`${iconClasses} text-gray-500`} />;
+        } else if (tierText.includes('pro')) {
+          return <Crown className={`${iconClasses} text-blue-500`} />;
+        } else if (tierText.includes('elite')) {
+          return <Zap className={`${iconClasses} text-purple-500`} />;
+        } else if (tierText.includes('institutional')) {
+          return <Building className={`${iconClasses} text-emerald-500`} />;
+        }
+        return <Crown className={`${iconClasses} text-blue-500`} />; // Default to Pro icon
+      
+      // Component unlocks - use component-specific icons with gradient backgrounds for earnings
+      case 'component_unlock':
+        // Try to extract component name from description
+        if (activityDescription) {
+          const match = activityDescription.match(/unlock (\w+)/i);
+          if (match) {
+            const componentName = match[1];
+            const iconName = getComponentIcon(componentName);
+            
+            // Return the appropriate icon based on component type
+            switch (iconName) {
+              case 'TrendingUp':
+                // Earnings components get the gradient background treatment
+                return (
+                  <div className="w-5 h-5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                    <TrendingUp className="w-3 h-3 text-white" />
+                  </div>
+                );
+              case 'BarChart2':
+                return <BarChart2 className={`${iconClasses} text-blue-500`} />;
+              case 'ListChecks':
+                // SEC filing components get the gradient background treatment to match unlock screens
+                return (
+                  <div className="w-5 h-5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                    <ListChecks className="w-3 h-3 text-white" />
+                  </div>
+                );
+              case 'Building2':
+                return <Building2 className={`${iconClasses} text-orange-500`} />;
+              case 'FileText':
+                return <FileText className={`${iconClasses} text-green-500`} />;
+              case 'DollarSign':
+                return <DollarSign className={`${iconClasses} text-yellow-500`} />;
+              case 'Info':
+                return <Info className={`${iconClasses} text-blue-500`} />;
+              default:
+                return <Zap className={`${iconClasses} text-purple-500`} />;
+            }
+          }
+        }
+        return <Zap className={`${iconClasses} text-purple-500`} />; // Default for component unlocks
+      
+      // Credit activities
+      case 'credit_deduction':
+      case 'credits_used':
+        return <DollarSign className={`${iconClasses} text-yellow-500`} />;
+      case 'credit_reset':
+      case 'credits_added':
+        return <RefreshCw className={`${iconClasses} text-green-500`} />;
+      
+      // User authentication
+      case 'login':
+        return <LogIn className={`${iconClasses} text-blue-500`} />;
+      case 'logout':
+        return <LogOut className={`${iconClasses} text-gray-500`} />;
+      
+      // User activities
+      case 'search':
+        return <Search className={`${iconClasses} text-blue-500`} />;
+      case 'profile_update':
+        return <User className={`${iconClasses} text-purple-500`} />;
+      
+      // Data & analysis activities
+      case 'price_update':
+        return <TrendingUp className={`${iconClasses} text-green-500`} />;
+      case 'earnings_announcement':
+        return <BarChart2 className={`${iconClasses} text-blue-500`} />;
+      case 'sec_filing':
+        return <FileText className={`${iconClasses} text-orange-500`} />;
+      case 'api_call':
+        return <Activity className={`${iconClasses} text-blue-500`} />;
+      
+      // System events
+      case 'error':
+        return <AlertTriangle className={`${iconClasses} text-red-500`} />;
+      
       default:
-        return 'bg-gray-500';
+        return <Activity className={`${iconClasses} text-gray-500`} />;
     }
   };
 
@@ -201,10 +295,14 @@ const RecentActivitySection: React.FC<RecentActivitySectionProps> = ({
           {activities.map((activity) => (
             <div key={activity.id} className={`${itemContainerBg} rounded-lg border ${itemContainerBorder} p-4`}>
               <div className="flex items-start space-x-3">
-                <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${getActivityTypeIndicator(activity.activity_type)}`} />
+                <div className="mt-1 flex-shrink-0">
+                  {getActivityIcon(activity.activity_type, activity.title, activity.description)}
+                </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
-                    <p className={`font-medium ${textColor} truncate`}>{activity.title || 'No title'}</p>
+                    <p className={`font-medium ${textColor} truncate`}>
+                      {cleanActivityTitle(activity.title || formatActivityType(activity.activity_type), activity.activity_type)}
+                    </p>
                     {activity.symbol && (
                       <span className={`text-xs px-2 py-1 rounded flex-shrink-0 ml-2 ${
                         isLight 
@@ -216,7 +314,12 @@ const RecentActivitySection: React.FC<RecentActivitySectionProps> = ({
                     )}
                   </div>
                   {activity.description && (
-                    <p className={`text-sm ${mutedTextColor} truncate mb-1`}>{activity.description}</p>
+                    <p className={`text-sm ${mutedTextColor} mt-1 break-words`}>
+                      {cleanActivityDescription(
+                        activity.description!,
+                        activity.activity_type
+                      )}
+                    </p>
                   )}
                   <p className={`text-xs ${mutedTextColor}`}>{formatActivityTime(activity.created_at)}</p>
                 </div>

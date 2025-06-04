@@ -10,43 +10,42 @@ export function formatEventRelativeTime(scheduledAt: string): string | null {
     const eventDate = new Date(scheduledAt);
     const now = new Date();
     
-    // Check if the event is in the past
-    if (eventDate <= now) return null;
-    
     // Calculate the difference in milliseconds
     const diffMs = eventDate.getTime() - now.getTime();
-    const diffMinutes = Math.floor(diffMs / (1000 * 60));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const diffWeeks = Math.floor(diffDays / 7);
-    const diffMonths = Math.floor(diffDays / 30);
     
-    // Determine relative time based on difference
-    if (diffMinutes < 60) {
-      return "soon";
-    } else if (diffHours < 24) {
-      if (diffHours < 2) {
-        return "soon";
-      } else {
-        // Check if it's today
-        const today = new Date();
-        const isToday = eventDate.toDateString() === today.toDateString();
-        return isToday ? "today" : "soon";
-      }
+    // Use Math.round for more accurate day calculation
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      return null; // Past events
+    } else if (diffDays === 0) {
+      return 'Today';
     } else if (diffDays === 1) {
-      return "tomorrow";
-    } else if (diffDays < 7) {
-      return `~${diffDays} day${diffDays > 1 ? 's' : ''} away`;
-    } else if (diffWeeks === 1) {
-      return "~1 week away";
-    } else if (diffWeeks < 4) {
-      return `~${diffWeeks} week${diffWeeks > 1 ? 's' : ''} away`;
-    } else if (diffMonths === 1) {
-      return "~1 month away";
-    } else if (diffMonths < 12) {
-      return `~${diffMonths} month${diffMonths > 1 ? 's' : ''} away`;
+      return 'Tomorrow';
+    } else if (diffDays <= 13) {
+      // Show days for up to 2 weeks for more precision
+      return `${diffDays} days`;
+    } else if (diffDays === 14) {
+      return '2 weeks';
+    } else if (diffDays <= 20) {
+      // Show "2+ weeks" for 15-20 days
+      return '2+ weeks';
+    } else if (diffDays === 21) {
+      return '3 weeks';
+    } else if (diffDays <= 27) {
+      return '3+ weeks';
+    } else if (diffDays <= 35) {
+      // 4-5 weeks, closer to a month
+      const weeks = Math.round(diffDays / 7);
+      return `${weeks} weeks`;
+    } else if (diffDays <= 60) {
+      // 1-2 months range
+      const months = Math.round(diffDays / 30);
+      return months === 1 ? '~1 month' : `~${months} months`;
     } else {
-      return "~1 year+ away";
+      // 2+ months
+      const months = Math.round(diffDays / 30);
+      return `~${months} months`;
     }
   } catch (error) {
     console.error('Error formatting relative time:', error);
@@ -63,9 +62,62 @@ export function getRelativeTimeBadgeStyle(relativeTime: string): {
   className: string;
   variant: 'urgent' | 'warning' | 'info' | 'default';
 } {
-  // Use the same blue styling as the refresh button (bg-blue-600)
-  return {
-    className: "bg-blue-600 text-white",
-    variant: 'default'
-  };
+  if (relativeTime === 'Today') {
+    return {
+      className: 'bg-red-500 text-white font-medium',
+      variant: 'urgent'
+    };
+  } else if (relativeTime === 'Tomorrow') {
+    return {
+      className: 'bg-orange-500 text-white font-medium',
+      variant: 'warning'
+    };
+  } else if (relativeTime.includes('days')) {
+    // Extract the number of days to determine urgency
+    const days = parseInt(relativeTime.split(' ')[0]);
+    if (days <= 3) {
+      return {
+        className: 'bg-orange-400 text-white font-medium',
+        variant: 'warning'
+      };
+    } else if (days <= 7) {
+      return {
+        className: 'bg-blue-500 text-white font-medium',
+        variant: 'info'
+      };
+    } else {
+      return {
+        className: 'bg-blue-400 text-white font-medium',
+        variant: 'info'
+      };
+    }
+  } else if (relativeTime.includes('week')) {
+    // All week-based ranges
+    if (relativeTime === '2 weeks' || relativeTime === '2+ weeks') {
+      return {
+        className: 'bg-blue-400 text-white font-medium',
+        variant: 'info'
+      };
+    } else if (relativeTime.includes('3')) {
+      return {
+        className: 'bg-indigo-500 text-white font-medium',
+        variant: 'default'
+      };
+    } else {
+      return {
+        className: 'bg-indigo-400 text-white font-medium',
+        variant: 'default'
+      };
+    }
+  } else if (relativeTime.includes('month')) {
+    return {
+      className: 'bg-gray-500 text-white font-medium',
+      variant: 'default'
+    };
+  } else {
+    return {
+      className: 'bg-gray-500 text-white font-medium',
+      variant: 'default'
+    };
+  }
 } 

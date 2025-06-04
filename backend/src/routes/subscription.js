@@ -131,8 +131,8 @@ router.post('/simulate-upgrade', authenticateToken, async (req, res) => {
       [
         userId,
         'tier_change',
-        `Upgraded to ${tier.charAt(0).toUpperCase() + tier.slice(1)}`,
-        `Successfully upgraded subscription tier to ${tier}`
+        `Switched to ${tier.charAt(0).toUpperCase() + tier.slice(1)}`,
+        `Successfully switched subscription tier to ${tier.charAt(0).toUpperCase() + tier.slice(1)}`
       ]
     );
 

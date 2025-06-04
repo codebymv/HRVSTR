@@ -296,11 +296,24 @@ const WatchlistSection: React.FC<WatchlistSectionProps> = ({
               // Show encouraging message for any non-empty watchlist under the limit
               <div className="flex flex-col items-center text-center space-y-2">
                 <div className={`text-sm ${mutedTextColor}`}>
-                  {watchlistLimit ? 
-                    `End of watchlist • ${visibleWatchlist.length}/${watchlistLimit} slots used` : 
-                    `End of watchlist • ${visibleWatchlist.length} items`
-                  }
+                  End of watchlist
                 </div>
+                
+                {/* Progress bar showing watchlist usage */}
+                {watchlistLimit && (
+                  <div className="flex flex-col items-center space-y-2 w-full max-w-48">
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                      <div 
+                        className="bg-blue-500 h-2 rounded-full transition-all duration-300" 
+                        style={{ width: `${Math.min((visibleWatchlist.length / watchlistLimit) * 100, 100)}%` }}
+                      ></div>
+                    </div>
+                    <div className={`text-xs ${mutedTextColor}`}>
+                      {visibleWatchlist.length} of {watchlistLimit} slots used
+                    </div>
+                  </div>
+                )}
+                
                 {hiddenItemsCount > 0 ? (
                   <div className="flex flex-col items-center space-y-1">
                     <div className={`text-xs px-2 py-1 bg-blue-500/20 text-blue-400 rounded-full`}>
@@ -313,7 +326,7 @@ const WatchlistSection: React.FC<WatchlistSectionProps> = ({
                 ) : (
                   <button
                     onClick={onAddTicker}
-                    className={`text-xs px-3 py-1 ${buttonBgColor} text-white rounded-full transition-colors hover:scale-105`}
+                    className={`text-xs px-3 py-1 ${buttonBgColor} text-white rounded-full transition-colors`}
                   >
                     Search tickers to add more
                   </button>

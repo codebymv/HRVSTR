@@ -388,14 +388,23 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
     }
   };
 
+  // Refresh data handler - now checks for unlocked components
   const refreshData = () => {
-    // Only refresh earnings data if user has access
-    if (hasUpcomingEarningsAccess) {
-      loadData();
+    // Check if any components are actually unlocked
+    const hasUnlockedComponents = unlockedComponents.earningsAnalysis || unlockedComponents.upcomingEarnings;
+    
+    if (!hasUnlockedComponents) {
+      info('Please unlock at least one component before refreshing');
+      return;
     }
     
-    // Only refresh analysis if user has access and a ticker is selected
-    if (selectedTicker && hasEarningsAnalysisAccess) {
+    // If user has access to upcoming earnings, reload it
+    if (hasUpcomingEarningsAccess) {
+      loadData(true);
+    }
+    
+    // If user has analysis access and has selected a ticker, reload analysis
+    if (hasEarningsAnalysisAccess && selectedTicker) {
       loadAnalysis(selectedTicker);
     }
   };
@@ -624,7 +633,17 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
             <select 
               value={timeRange}
               onChange={(e) => handleTimeRangeChange(e.target.value as TimeRange)}
-              className={`py-1 px-2 rounded text-sm ${cardBg} ${textColor} border ${cardBorder}`}
+              className={`py-1 px-2 rounded text-sm ${cardBg} ${textColor} border ${cardBorder} ${
+                !(unlockedComponents.earningsAnalysis || unlockedComponents.upcomingEarnings)
+                  ? 'opacity-50 cursor-not-allowed'
+                  : ''
+              }`}
+              disabled={loading.upcomingEarnings || loading.analysis || !(unlockedComponents.earningsAnalysis || unlockedComponents.upcomingEarnings)}
+              title={
+                (unlockedComponents.earningsAnalysis || unlockedComponents.upcomingEarnings)
+                  ? 'Select time range'
+                  : 'Unlock components to change time range'
+              }
             >
               <option value="1d">Today</option>
               <option value="1w">This Week</option>
@@ -632,15 +651,30 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
             
             {/* Refresh button */}
             <button 
+              className={`transition-colors rounded-full p-2 ${
+                // Show different styling based on unlock state
+                (unlockedComponents.earningsAnalysis || unlockedComponents.upcomingEarnings)
+                  ? `${isLight ? 'bg-blue-500' : 'bg-blue-600'} hover:${isLight ? 'bg-blue-600' : 'bg-blue-700'} text-white` // Unlocked: normal blue
+                  : 'bg-gray-400 cursor-not-allowed text-gray-200' // Locked: grayed out
+              } ${(loading.upcomingEarnings || loading.analysis) ? 'opacity-50' : ''}`}
               onClick={refreshData}
-              disabled={loading.upcomingEarnings || loading.analysis}
-              className={`p-2 rounded-full transition-colors bg-blue-600 hover:bg-blue-700 text-white ${(loading.upcomingEarnings || loading.analysis) ? 'opacity-50' : ''}`}
-              title="Refresh earnings data"
+              disabled={(loading.upcomingEarnings || loading.analysis) || !(unlockedComponents.earningsAnalysis || unlockedComponents.upcomingEarnings)}
+              title={
+                (unlockedComponents.earningsAnalysis || unlockedComponents.upcomingEarnings)
+                  ? 'Refresh earnings data'
+                  : 'Unlock components to refresh data'
+              }
             >
-              {(loading.upcomingEarnings || loading.analysis) ? (
+              {/* Only show spinner if components are unlocked AND loading */}
+              {(unlockedComponents.earningsAnalysis || unlockedComponents.upcomingEarnings) && (loading.upcomingEarnings || loading.analysis) ? (
                 <Loader2 size={18} className="text-white animate-spin" />
               ) : (
-                <RefreshCw size={18} className="text-white" />
+                <RefreshCw size={18} className={
+                  // Gray icon when locked, white when unlocked
+                  !(unlockedComponents.earningsAnalysis || unlockedComponents.upcomingEarnings)
+                    ? 'text-gray-200' 
+                    : 'text-white'
+                } />
               )}
             </button>
           </div>
@@ -727,7 +761,7 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
                   description="Unlock access to upcoming earnings calendar with comprehensive company event tracking and dates."
                   cost={COMPONENT_COSTS.upcomingEarnings}
                   componentKey="upcomingEarnings"
-                  icon={<BarChart2 className="w-8 h-8 text-white" />}
+                  icon={<TrendingUp className="w-8 h-8 text-white" />}
                 />
               )}
             </div>
@@ -1029,7 +1063,7 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
                   description="Unlock comprehensive earnings analysis with performance metrics, risk assessment, and historical earnings data."
                   cost={COMPONENT_COSTS.earningsAnalysis}
                   componentKey="earningsAnalysis"
-                  icon={<BarChart2 className="w-8 h-8 text-white" />}
+                  icon={<TrendingUp className="w-8 h-8 text-white" />}
                 />
               )}
             </div>

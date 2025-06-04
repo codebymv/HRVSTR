@@ -6,6 +6,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import PricingSection from '../../Pricing/PricingSection';
 import YearlyPricingCards from '../../Pricing/YearlyPricingCards';
 import { createCheckoutSession } from '../../../utils/pricing';
+import { formatStatus } from '../../../utils/activityFormatter';
 
 const TiersPage: React.FC = () => {
   const { theme } = useTheme();
@@ -110,7 +111,7 @@ const TiersPage: React.FC = () => {
 
     return (
       <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusClasses[status as keyof typeof statusClasses] || statusClasses.canceled}`}>
-        {status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ')}
+        {formatStatus(status)}
       </span>
     );
   };

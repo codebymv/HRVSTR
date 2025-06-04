@@ -267,6 +267,38 @@ function getSessionDuration(tier) {
   return tierSessionDurations[tier.toLowerCase()] || tierSessionDurations.free;
 }
 
+// Helper function to format component names to research areas
+const formatComponentName = (componentName) => {
+  const componentResearchNames = {
+    'earningsAnalysis': 'Earnings Analysis research',
+    'institutionalHoldings': 'Institutional Holdings research', 
+    'insiderTrading': 'Insider Trading research',
+    'sentimentAnalysis': 'Sentiment Analysis research',
+    'technicalAnalysis': 'Technical Analysis research',
+    'fundamentalAnalysis': 'Fundamental Analysis research',
+    'marketTrends': 'Market Trends research',
+    'newsAnalysis': 'News Analysis research',
+    'socialSentiment': 'Social Sentiment research',
+    'redditAnalysis': 'Reddit Analysis research',
+    'upcomingEarnings': 'Upcoming Earnings research'
+  };
+  
+  return componentResearchNames[componentName] || formatFallbackComponentName(componentName);
+};
+
+// Fallback formatter for unknown component names
+const formatFallbackComponentName = (componentName) => {
+  // Convert camelCase to space-separated words
+  const formatted = componentName
+    .replace(/([A-Z])/g, ' $1') // Add space before capital letters
+    .trim() // Remove leading/trailing spaces
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+  
+  return `${formatted} Research`;
+};
+
 /**
  * POST /api/credits/unlock-component
  * Unlock a component by deducting credits (with session persistence)
@@ -423,8 +455,8 @@ router.post('/unlock-component', authenticateToken, async (req, res) => {
         [
           userId,
           'component_unlock',
-          `Unlocked ${component}`,
-          `${cost} credits used to unlock ${component} component for ${Math.round(sessionDurationMs / (1000 * 60 * 60))} hours`
+          'Research Unlocked',
+          `${cost} Credits Used To Unlock ${formatComponentName(component)} For ${Math.round(sessionDurationMs / (1000 * 60 * 60))} Hours`
         ]
       );
 

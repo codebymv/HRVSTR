@@ -10,7 +10,7 @@ import {
   getSessionTimeRemainingFormatted 
 } from '../../utils/sessionStorage';
 import { TimeRange } from '../../types';
-import { RefreshCw, Loader2, Crown, Lock, Settings, Key, TrendingUp, Zap } from 'lucide-react';
+import { RefreshCw, Loader2, Crown, Lock, Settings, Key, TrendingUp, Zap, BarChart2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // Custom hooks
@@ -586,7 +586,7 @@ const SentimentDashboard: React.FC = () => {
                   description="Unlock real-time market sentiment timeline showing bullish, bearish, and neutral trends across multiple timeframes."
                   cost={COMPONENT_COSTS.sentimentChart}
                   componentKey="chart"
-                  icon={<TrendingUp className="w-8 h-8 text-white" />}
+                  icon={<BarChart2 className="w-8 h-8 text-white" />}
                 />
               )}
             
@@ -613,7 +613,7 @@ const SentimentDashboard: React.FC = () => {
                     description="Unlock real-time sentiment analysis for individual stocks from Reddit, FinViz, and Yahoo Finance."
                     cost={COMPONENT_COSTS.sentimentScores}
                     componentKey="scores"
-                    icon={<TrendingUp className="w-8 h-8 text-white" />}
+                    icon={<BarChart2 className="w-8 h-8 text-white" />}
                   />
                 )}
             </div>
@@ -649,7 +649,7 @@ const SentimentDashboard: React.FC = () => {
                     description="Access real-time Reddit posts and community discussions about market trends and stock sentiment."
                     cost={COMPONENT_COSTS.redditPosts}
                     componentKey="reddit"
-                    icon={<Lock className="w-8 h-8 text-white" />}
+                    icon={<BarChart2 className="w-8 h-8 text-white" />}
                   />
                 )
             )}
@@ -679,7 +679,7 @@ const SentimentDashboard: React.FC = () => {
                   description="Unlock detailed sentiment analysis for individual stocks with confidence scores and trend data."
                   cost={COMPONENT_COSTS.sentimentScores}
                   componentKey="scores"
-                  icon={<TrendingUp className="w-8 h-8 text-white" />}
+                  icon={<BarChart2 className="w-8 h-8 text-white" />}
                 />
               )}
             </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, Loader2, Lock, Crown, TrendingUp, Zap } from 'lucide-react';
+import { RefreshCw, Loader2, Lock, Crown, TrendingUp, Zap, ListChecks } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTier } from '../../contexts/TierContext';
@@ -275,57 +275,87 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     });
   };
   
-  // Refresh data for unlocked components
+  // Handle refresh - now checks for unlocked components first
   const handleRefresh = async () => {
-    if (isRefreshing) return;
+    // Check if any components are actually unlocked
+    const hasUnlockedComponents = unlockedComponents.insiderTrading || unlockedComponents.institutionalHoldings;
     
-    console.log('🔄 SEC DASHBOARD - Starting refresh for accessible components...');
+    if (!hasUnlockedComponents) {
+      info('Please unlock at least one component before refreshing');
+      return;
+    }
+
+    setIsRefreshing(true);
+    setLoadingProgress(0);
+    setLoadingStage('Clearing cache...');
     
     try {
-      setIsRefreshing(true);
-      setLoadingProgress(0);
-      setLoadingStage('Refreshing SEC data...');
-      
       if (onLoadingProgressChange) {
-        onLoadingProgressChange(0, 'Refreshing SEC data...');
+        onLoadingProgressChange(20, 'Clearing cache...');
+      }
+
+      // Clear user's specific cache
+      if (user?.id) {
+        await clearUserSecCache(user.id);
+      } else {
+        await clearSecCache();
       }
       
-      // Only trigger loading for components that are actually unlocked
-      setLoadingState({
-        insiderTrades: { 
-          isLoading: hasInsiderAccess, 
-          needsRefresh: hasInsiderAccess 
-        },
-        institutionalHoldings: { 
-          isLoading: hasInstitutionalAccess, 
-          needsRefresh: hasInstitutionalAccess 
-        }
-      });
+      if (onLoadingProgressChange) {
+        onLoadingProgressChange(50, 'Cache cleared');
+      }
+
+      // Clear component access cache since we're refreshing
+      clearComponentAccessCache();
       
-    } catch (error) {
-      console.error('❌ REFRESH: Error during refresh:', error);
-      setIsRefreshing(false);
-      
-      // Show error state
-      setLoadingProgress(0);
-      setLoadingStage('Error refreshing data');
-      
-      // Set error states for both tabs
-      const errorMessage = error instanceof Error ? error.message : 'Failed to refresh SEC data';
+      // Reset errors
       setErrors({
-        insiderTrades: errorMessage,
-        institutionalHoldings: errorMessage
+        insiderTrades: null,
+        institutionalHoldings: null
       });
       
-      // Reset loading states on error
-      setLoadingState({
-        insiderTrades: { isLoading: false, needsRefresh: false },
-        institutionalHoldings: { isLoading: false, needsRefresh: false }
+      // Clear existing data
+      setInsiderTradesData([]);
+      setInstitutionalHoldingsData([]);
+      
+      if (onLoadingProgressChange) {
+        onLoadingProgressChange(80, 'Triggering refresh...');
+      }
+      
+      // Trigger refresh for unlocked components only
+      if (unlockedComponents.insiderTrading) {
+        setLoadingState(prev => ({
+          ...prev,
+          insiderTrades: { 
+            isLoading: false, 
+            needsRefresh: true 
+          }
+        }));
+      }
+      
+      if (unlockedComponents.institutionalHoldings) {
+        setLoadingState(prev => ({
+          ...prev,
+          institutionalHoldings: { 
+            isLoading: false, 
+            needsRefresh: true 
+          }
+        }));
+      }
+      
+      console.log('🔄 SEC DASHBOARD - Manual refresh triggered for unlocked components:', {
+        insiderTrading: unlockedComponents.insiderTrading,
+        institutionalHoldings: unlockedComponents.institutionalHoldings
       });
       
       if (onLoadingProgressChange) {
-        onLoadingProgressChange(0, 'Error refreshing data');
+        onLoadingProgressChange(100, 'Refresh complete');
       }
+    } catch (error) {
+      console.error('Error during refresh:', error);
+      info('Error refreshing data. Please try again.');
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -511,7 +541,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
         });
         
         // Update active sessions
-        const sessions = getAllUnlockSessions();
+        const sessions = await getAllUnlockSessions(currentTier);
         setActiveSessions(sessions);
         
         // Show appropriate toast message
@@ -664,8 +694,17 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
             <select
               value={timeRange}
               onChange={(e) => handleTimeRangeChange(e.target.value as TimeRange)}
-              className={`py-1 px-2 rounded text-sm ${cardBg} ${textColor} border ${cardBorder}`}
-              disabled={loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading}
+              className={`py-1 px-2 rounded text-sm ${cardBg} ${textColor} border ${cardBorder} ${
+                !(unlockedComponents.insiderTrading || unlockedComponents.institutionalHoldings)
+                  ? 'opacity-50 cursor-not-allowed'
+                  : ''
+              }`}
+              disabled={loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading || !(unlockedComponents.insiderTrading || unlockedComponents.institutionalHoldings)}
+              title={
+                (unlockedComponents.insiderTrading || unlockedComponents.institutionalHoldings)
+                  ? 'Select time range'
+                  : 'Unlock components to change time range'
+              }
             >
               <option value="1w">1 Week</option>
               <option value="1m">1 Month</option>
@@ -675,17 +714,30 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
             
             {/* Refresh button */}
             <button
+              className={`transition-colors rounded-full p-2 ${
+                // Show different styling based on unlock state
+                (unlockedComponents.insiderTrading || unlockedComponents.institutionalHoldings)
+                  ? `${isLight ? 'bg-blue-500' : 'bg-blue-600'} hover:${isLight ? 'bg-blue-600' : 'bg-blue-700'} text-white` // Unlocked: normal blue
+                  : 'bg-gray-400 cursor-not-allowed text-gray-200' // Locked: grayed out
+              } ${(isRefreshing || loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading) ? 'opacity-50' : ''}`}
               onClick={handleRefresh}
-              disabled={isRefreshing || 
-                       loadingState.insiderTrades.isLoading || 
-                       loadingState.institutionalHoldings.isLoading}
-              className={`p-2 rounded-full transition-colors bg-blue-600 hover:bg-blue-700 text-white ${(isRefreshing || loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading) ? 'opacity-50' : ''}`}
-              title="Refresh SEC data"
+              disabled={(isRefreshing || loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading) || !(unlockedComponents.insiderTrading || unlockedComponents.institutionalHoldings)}
+              title={
+                (unlockedComponents.insiderTrading || unlockedComponents.institutionalHoldings)
+                  ? 'Refresh SEC data'
+                  : 'Unlock components to refresh data'
+              }
             >
-              {(isRefreshing || loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading) ? (
+              {/* Only show spinner if components are unlocked AND loading */}
+              {(unlockedComponents.insiderTrading || unlockedComponents.institutionalHoldings) && (isRefreshing || loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading) ? (
                 <Loader2 size={18} className="text-white animate-spin" />
               ) : (
-                <RefreshCw size={18} className="text-white" />
+                <RefreshCw size={18} className={
+                  // Gray icon when locked, white when unlocked
+                  !(unlockedComponents.insiderTrading || unlockedComponents.institutionalHoldings)
+                    ? 'text-gray-200' 
+                    : 'text-white'
+                } />
               )}
             </button>
           </div>
@@ -748,7 +800,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
                   description="Unlock access to real-time insider trading transactions, executive stock purchases, and regulatory filings data."
                   cost={COMPONENT_COSTS.insiderTrading}
                   componentKey="insiderTrading"
-                  icon={<TrendingUp className="w-8 h-8 text-white" />}
+                  icon={<ListChecks className="w-8 h-8 text-white" />}
                 />
               )}
             </>
@@ -793,7 +845,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
                   description="Access comprehensive 13F filing data, institutional investment tracking, and hedge fund position analysis."
                   cost={COMPONENT_COSTS.institutionalHoldings}
                   componentKey="institutionalHoldings"
-                  icon={<TrendingUp className="w-8 h-8 text-white" />}
+                  icon={<ListChecks className="w-8 h-8 text-white" />}
                 />
               )}
             </>

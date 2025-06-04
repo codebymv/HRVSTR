@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTier } from '../../contexts/TierContext';
+import { formatTierName } from '../../utils/activityFormatter';
 
 const TierManagement: React.FC = () => {
   const { theme } = useTheme();
@@ -95,6 +96,10 @@ const TierManagement: React.FC = () => {
     return 'bg-green-500';
   };
 
+  const getTierDisplayName = (tier: string) => {
+    return formatTierName(tier);
+  };
+
   if (loading) {
     return (
       <div className={`${cardBgColor} rounded-lg p-6 mb-8 border ${borderColor}`}>
@@ -169,7 +174,7 @@ const TierManagement: React.FC = () => {
             </div>
             <div>
               <h3 className={`text-lg font-semibold ${textColor} capitalize`}>
-                {tierInfo.tier} Plan
+                {getTierDisplayName(tierInfo.tier)}
               </h3>
               <p className={`text-sm ${secondaryTextColor}`}>
                 {tierInfo.credits.daysUntilReset} days until reset ({resetDate})
