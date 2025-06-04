@@ -27,7 +27,7 @@ import {
   Search
 } from 'lucide-react';
 // import { Bell, Sun, Moon } from 'lucide-react'; // Commented out for now
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { AuthButton } from './AuthButton';
 import { useAuth } from '../contexts/AuthContext';
@@ -131,6 +131,12 @@ const Navbar: React.FC = () => {
     setIsSettingsExpanded(false);
   };
 
+  // Handle navigation to different routes
+  const handleNavigate = (path: string) => {
+    navigate(path);
+    handleMenuItemClick();
+  };
+
   // Settings sub-items - organized to match SettingsLayout sidebar structure
   const settingsItems = [
     // ACCOUNT section
@@ -186,6 +192,16 @@ const Navbar: React.FC = () => {
     return tierData[currentTier as keyof typeof tierData] || tierData.free;
   };
 
+  // Handle home navigation
+  const handleHomeClick = () => {
+    if (isAuthenticated) {
+      navigate('/user-home');
+    } else {
+      navigate('/');
+    }
+    setIsMenuOpen(false);
+  };
+
   return (
     <header className={`${bgColor} border-b ${borderColor} sticky top-0 z-50 relative`}>
       <div className="container mx-auto px-4">
@@ -206,14 +222,14 @@ const Navbar: React.FC = () => {
             
             {/* Centered HRVSTR Logo with improved sizing */}
             <div className="h-10 flex items-center justify-center">
-              <a href="/">
+              <button onClick={handleHomeClick} className="cursor-pointer">
                 <img 
                   src="/hrvstr_logo.png" 
                   alt="HRVSTR" 
                   className="h-full w-auto max-h-10" 
                   style={{ filter: logoFilter }}
                 />
-              </a>
+              </button>
             </div>
           </div>
           
@@ -286,14 +302,13 @@ const Navbar: React.FC = () => {
           <nav className="grid gap-2">
             {/* Home with close button */}
             <div className="flex items-center justify-between">
-              <a 
-                href="/"
-                className={`flex items-center space-x-3 py-2 px-3 flex-1 ${location.pathname === '/' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
-                onClick={handleMenuItemClick}
+              <button 
+                onClick={handleHomeClick}
+                className={`flex items-center space-x-3 py-2 px-3 flex-1 ${location.pathname === '/' || location.pathname === '/user-home' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
               >
                 <Home size={20} />
                 <span>Home</span>
-              </a>
+              </button>
               <button 
                 onClick={() => setIsMenuOpen(false)}
                 className={`p-2 ml-2 rounded-full ${hoverBgColor} transition-colors`}
@@ -303,32 +318,29 @@ const Navbar: React.FC = () => {
               </button>
             </div>
             
-            <a 
-              href="/sentiment"
+            <button 
+              onClick={() => handleNavigate('/sentiment')}
               className={`flex items-center space-x-3 py-2 px-3 ${location.pathname === '/sentiment' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
-              onClick={handleMenuItemClick}
             >
               <BarChart2 size={20} />
               <span>Sentiment</span>
-            </a>
+            </button>
             
-            <a 
-              href="/sec-filings"
-              className={`flex items-center space-x-3 py-2 px-3 ${location.pathname === '/sec-filings' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
-              onClick={handleMenuItemClick}
+            <button 
+              onClick={() => handleNavigate('/sec-filings')}
+              className={`flex items-center space-x-3 py-2 px-3 w-full text-left ${location.pathname === '/sec-filings' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
             >
               <ListChecks size={20} />
               <span>SEC Filings</span>
-            </a>
+            </button>
             
-            <a 
-              href="/earnings"
-              className={`flex items-center space-x-3 py-2 px-3 ${location.pathname === '/earnings' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
-              onClick={handleMenuItemClick}
+            <button 
+              onClick={() => handleNavigate('/earnings')}
+              className={`flex items-center space-x-3 py-2 px-3 w-full text-left ${location.pathname === '/earnings' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
             >
               <TrendingUp size={20} />
               <span>Earnings</span>
-            </a>
+            </button>
             
             {/* Settings with expandable dropdown */}
             <div>
@@ -362,19 +374,18 @@ const Navbar: React.FC = () => {
                         const isActive = location.pathname === item.path;
                         
                         return (
-                          <a
+                          <button
                             key={item.path}
-                            href={item.path}
-                            className={`flex items-center space-x-3 py-2 px-3 text-sm ${
+                            onClick={() => handleNavigate(item.path)}
+                            className={`flex items-center space-x-3 py-2 px-3 text-sm w-full text-left ${
                               isActive 
                                 ? `${activeBgColor} ${activeTextColor}` 
                                 : `${secondaryTextColor} ${hoverBgColor}`
                             } rounded-lg transition-colors`}
-                            onClick={handleMenuItemClick}
                           >
                             <Icon size={16} />
                             <span>{item.label}</span>
-                          </a>
+                          </button>
                         );
                       })}
                   </div>
@@ -391,19 +402,18 @@ const Navbar: React.FC = () => {
                         const isActive = location.pathname === item.path;
                         
                         return (
-                          <a
+                          <button
                             key={item.path}
-                            href={item.path}
-                            className={`flex items-center space-x-3 py-2 px-3 text-sm ${
+                            onClick={() => handleNavigate(item.path)}
+                            className={`flex items-center space-x-3 py-2 px-3 text-sm w-full text-left ${
                               isActive 
                                 ? `${activeBgColor} ${activeTextColor}` 
                                 : `${secondaryTextColor} ${hoverBgColor}`
                             } rounded-lg transition-colors`}
-                            onClick={handleMenuItemClick}
                           >
                             <Icon size={16} />
                             <span>{item.label}</span>
-                          </a>
+                          </button>
                         );
                       })}
                   </div>
@@ -420,19 +430,18 @@ const Navbar: React.FC = () => {
                         const isActive = location.pathname === item.path;
                         
                         return (
-                          <a
+                          <button
                             key={item.path}
-                            href={item.path}
-                            className={`flex items-center space-x-3 py-2 px-3 text-sm ${
+                            onClick={() => handleNavigate(item.path)}
+                            className={`flex items-center space-x-3 py-2 px-3 text-sm w-full text-left ${
                               isActive 
                                 ? `${activeBgColor} ${activeTextColor}` 
                                 : `${secondaryTextColor} ${hoverBgColor}`
                             } rounded-lg transition-colors`}
-                            onClick={handleMenuItemClick}
                           >
                             <Icon size={16} />
                             <span>{item.label}</span>
-                          </a>
+                          </button>
                         );
                       })}
                   </div>
@@ -440,14 +449,13 @@ const Navbar: React.FC = () => {
               )}
             </div>
             
-            <a 
-              href="/help"
-              className={`flex items-center space-x-3 py-2 px-3 ${location.pathname === '/help' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
-              onClick={handleMenuItemClick}
+            <button 
+              onClick={() => handleNavigate('/help')}
+              className={`flex items-center space-x-3 py-2 px-3 w-full text-left ${location.pathname === '/help' ? `${activeBgColor} ${activeTextColor}` : `${textColor} ${hoverBgColor}`} rounded-lg transition-colors`}
             >
               <HelpCircle size={20} />
               <span>Help</span>
-            </a>
+            </button>
           </nav>
         </div>
       )}
