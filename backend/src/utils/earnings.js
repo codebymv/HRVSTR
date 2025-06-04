@@ -212,14 +212,33 @@ async function analyzeEarnings(ticker) {
   try {
     console.log(`📊 Analyzing earnings for ${ticker} using scraped historical data and real APIs`);
     
+    // Create a timeout promise that rejects after 60 seconds
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Earnings analysis for ${ticker} timed out after 60 seconds`));
+      }, 60000);
+    });
+    
     // Get company profile and basic financials from FMP (free tier) and historical earnings via scraping
-    const [profile, financials, historicalEarnings] = await Promise.all([
-      fetchCompanyProfile(ticker).catch(() => null),
-      fetchBasicFinancials(ticker).catch(() => null),
+    const dataPromise = Promise.all([
+      fetchCompanyProfile(ticker).catch((error) => {
+        console.warn(`⚠️ Failed to fetch company profile for ${ticker}: ${error.message}`);
+        return null;
+      }),
+      fetchBasicFinancials(ticker).catch((error) => {
+        console.warn(`⚠️ Failed to fetch basic financials for ${ticker}: ${error.message}`);
+        return null;
+      }),
       scrapeHistoricalEarnings(ticker).catch((error) => {
         console.warn(`⚠️ Failed to scrape historical earnings for ${ticker}: ${error.message}`);
         return [];
       })
+    ]);
+    
+    // Race between data fetching and timeout
+    const [profile, financials, historicalEarnings] = await Promise.race([
+      dataPromise,
+      timeoutPromise
     ]);
     
     if (!profile && !financials && historicalEarnings.length === 0) {
@@ -291,6 +310,12 @@ async function analyzeEarnings(ticker) {
     
   } catch (error) {
     console.error(`❌ Error analyzing earnings for ${ticker}: ${error.message}`);
+    
+    // If it's a timeout error, provide a more specific error message
+    if (error.message.includes('timed out')) {
+      throw new Error(`Earnings analysis for ${ticker} is taking too long. This may be due to heavy server load or data provider issues. Please try again later.`);
+    }
+    
     throw error;
   }
 }

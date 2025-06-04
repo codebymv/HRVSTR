@@ -327,21 +327,72 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
       // Step 1: Initialize analysis
       updateProgress(1, `Fetching historical data for ${ticker}...`);
       
-      // Step 2: Perform analysis
+      // Step 2: Perform analysis with timeout
       updateProgress(2, `Analyzing earnings surprises for ${ticker}...`);
-      const analysis = await fetchEarningsAnalysisWithUserCache(ticker);
       
-      // Step 3: Complete analysis
-      updateProgress(3, `Finalizing ${ticker} earnings analysis...`);
-      setEarningsAnalysis(analysis);
-      setLoading(prev => ({ ...prev, analysis: false }));
+      // Create abort controller for timeout
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => {
+        abortController.abort();
+      }, 30000); // 30 second timeout
+      
+      try {
+        const analysis = await fetchEarningsAnalysisWithUserCache(
+          ticker, 
+          '1m', 
+          false, 
+          abortController.signal
+        );
+        
+        clearTimeout(timeoutId);
+        
+        // Step 3: Complete analysis
+        updateProgress(3, `Finalizing ${ticker} earnings analysis...`);
+        setEarningsAnalysis(analysis);
+        
+        // Success - clear loading state
+        setLoading(prev => ({ ...prev, analysis: false }));
+        
+        // Final progress update
+        setLoadingProgress?.(100);
+        setLoadingStage?.('Analysis complete');
+        if (onLoadingProgressChange) {
+          onLoadingProgressChange(100, 'Analysis complete');
+        }
+        
+      } catch (apiError) {
+        clearTimeout(timeoutId);
+        
+        // Handle specific error types
+        if (abortController.signal.aborted) {
+          throw new Error('Analysis request timed out. Please try again.');
+        } else if (apiError instanceof Error && apiError.message.includes('404')) {
+          throw new Error(`No earnings data available for ${ticker}`);
+        } else if (apiError instanceof Error && apiError.message.includes('402')) {
+          throw new Error('Insufficient credits for earnings analysis');
+        } else {
+          throw apiError;
+        }
+      }
+      
     } catch (error) {
       console.error('Earnings analysis error:', error);
+      
+      const errorMessage = error instanceof Error ? error.message : 'Failed to analyze earnings data';
       setErrors(prev => ({ 
         ...prev, 
-        analysis: error instanceof Error ? error.message : 'Failed to analyze earnings data' 
+        analysis: errorMessage
       }));
+      
+      // Always clear loading state on error
       setLoading(prev => ({ ...prev, analysis: false }));
+      
+      // Reset progress on error
+      setLoadingProgress?.(0);
+      setLoadingStage?.('Analysis failed');
+      if (onLoadingProgressChange) {
+        onLoadingProgressChange(0, `Analysis failed: ${errorMessage}`);
+      }
     }
   };
 
@@ -494,7 +545,7 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
         });
         
         // Update active sessions
-        const sessions = getAllUnlockSessions();
+        const sessions = await getAllUnlockSessions();
         setActiveSessions(sessions);
         
         // Show appropriate toast message
