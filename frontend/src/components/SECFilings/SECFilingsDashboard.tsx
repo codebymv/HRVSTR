@@ -4,17 +4,11 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTier } from '../../contexts/TierContext';
 import { useToast } from '../../contexts/ToastContext';
-import { 
-  checkUnlockSession, 
-  storeUnlockSession, 
-  getAllUnlockSessions,
-  getSessionTimeRemainingFormatted,
-  checkComponentAccess,
-  clearComponentAccessCache
-} from '../../utils/sessionStorage';
+import { useSECUnlock } from '../../hooks/useSECUnlock';
+import { useSECLoading } from '../../hooks/useSECLoading';
+import { useSECTimeRange } from '../../hooks/useSECTimeRange';
 import InsiderTradesTab from './InsiderTradesTab';
 import InstitutionalHoldingsTab from './InstitutionalHoldingsTab';
-import { clearSecCache, clearUserSecCache } from '../../services/api';
 import TierLimitDialog from '../UI/TierLimitDialog';
 import ProgressBar from '../ProgressBar';
 import HarvestLoadingCard from '../UI/HarvestLoadingCard';
@@ -30,7 +24,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
 }) => {
   const { theme } = useTheme();
   const { user } = useAuth();
-  const { tierInfo, refreshTierInfo } = useTier();
+  const { tierInfo } = useTier();
   const { info } = useToast();
   const isLight = theme === 'light';
   
@@ -46,24 +40,49 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
   const tabInactiveBg = isLight ? 'bg-gray-100' : 'bg-gray-800';
   const tabInactiveText = isLight ? 'text-gray-700' : 'text-gray-300';
 
-  // Component unlock state - managed by sessions
-  const [unlockedComponents, setUnlockedComponents] = useState<{
-    insiderTrading: boolean;
-    institutionalHoldings: boolean;
-  }>({
-    insiderTrading: false,
-    institutionalHoldings: false
+  // Use the new SEC unlock hook
+  const {
+    unlockedComponents,
+    activeSessions,
+    isFreshUnlock,
+    currentTier,
+    hasInsiderAccess,
+    hasInstitutionalAccess,
+    handleUnlockComponent: hookHandleUnlockComponent,
+    setFreshUnlockState,
+    COMPONENT_COSTS
+  } = useSECUnlock();
+
+  // Use the SEC loading hook with fresh unlock state
+  const {
+    isRefreshing,
+    loadingProgress,
+    loadingStage,
+    loadingState,
+    errors,
+    insiderTradesData,
+    institutionalHoldingsData,
+    isFreshUnlock: loadingIsFreshUnlock,
+    handleInsiderTradesLoading,
+    handleInstitutionalHoldingsLoading,
+    handleRefresh,
+    setLoadingState
+  } = useSECLoading({
+    onLoadingProgressChange,
+    hasInsiderAccess,
+    hasInstitutionalAccess,
+    isFreshUnlock,
+    setFreshUnlockState
   });
 
-  // Session state for time tracking
-  const [activeSessions, setActiveSessions] = useState<any[]>([]);
+  const { timeRange, handleTimeRangeChange } = useSECTimeRange({ 
+    hasInsiderAccess, 
+    hasInstitutionalAccess, 
+    setLoadingState 
+  });
 
   // State management - simplified without localStorage
   const [activeTab, setActiveTab] = useState<'insider' | 'institutional'>('insider');
-  const [timeRange, setTimeRange] = useState<TimeRange>('1m');
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [loadingProgress, setLoadingProgress] = useState(0);
-  const [loadingStage, setLoadingStage] = useState('');
   
   // Tier limit dialog state
   const [showTierDialog, setShowTierDialog] = useState(false);
@@ -73,356 +92,6 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     benefits: '',
     requiredTier: ''
   });
-  
-  // Data states - no longer stored in localStorage
-  const [insiderTradesData, setInsiderTradesData] = useState<any[]>([]);
-  const [institutionalHoldingsData, setInstitutionalHoldingsData] = useState<any[]>([]);
-  
-  // Loading states for components
-  const [loadingState, setLoadingState] = useState({
-    insiderTrades: { isLoading: false, needsRefresh: false },
-    institutionalHoldings: { isLoading: false, needsRefresh: false }
-  });
-
-  // Track fresh unlocks vs cache loads for appropriate loading UI
-  const [isFreshUnlock, setIsFreshUnlock] = useState({
-    insiderTrading: false,
-    institutionalHoldings: false
-  });
-
-  // Error states
-  const [errors, setErrors] = useState<{
-    insiderTrades: string | null;
-    institutionalHoldings: string | null;
-  }>({
-    insiderTrades: null,
-    institutionalHoldings: null
-  });
-
-  // Get tier info
-  const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
-  
-  // Credit costs for each component
-  const COMPONENT_COSTS = {
-    insiderTrading: 10,        // Insider trading data
-    institutionalHoldings: 15, // Institutional holdings data
-  };
-
-  // Check existing sessions for all users
-  useEffect(() => {
-    if (!tierInfo) return;
-    
-    const checkExistingSessions = async () => {
-      try {
-        // Use database-only checking - no more localStorage fallback
-        const insiderSession = await checkComponentAccess('insiderTrading', currentTier);
-        const institutionalSession = await checkComponentAccess('institutionalHoldings', currentTier);
-
-        const newUnlockedState = {
-          insiderTrading: !!insiderSession,
-          institutionalHoldings: !!institutionalSession
-        };
-
-        // Log session restoration scenarios
-        if (!unlockedComponents.institutionalHoldings && newUnlockedState.institutionalHoldings) {
-          if (institutionalSession) {
-            console.log('🎉 SEC DASHBOARD - Institutional holdings session restored from database!');
-          }
-        }
-
-        setUnlockedComponents(newUnlockedState);
-
-        // Update active sessions for display - NOW QUERIES DATABASE ONLY
-        const sessions = await getAllUnlockSessions(currentTier);
-        setActiveSessions(sessions);
-        
-        console.log('🔍 SEC DASHBOARD - Component access check (DATABASE ONLY):', {
-          insiderTrading: !!insiderSession,
-          institutionalHoldings: !!institutionalSession,
-          insiderSessionId: insiderSession?.sessionId,
-          institutionalSessionId: institutionalSession?.sessionId,
-          currentTier,
-          databaseSessions: sessions.length
-        });
-      } catch (error) {
-        console.warn('Database session check failed:', error);
-        // No more localStorage fallback - just set to false if database fails
-        setUnlockedComponents({
-          insiderTrading: false,
-          institutionalHoldings: false
-        });
-
-        setActiveSessions([]);
-      }
-    };
-
-    // Check sessions immediately
-    checkExistingSessions();
-    
-    // Check for expired sessions every minute
-    const interval = setInterval(checkExistingSessions, 60000);
-    return () => clearInterval(interval);
-  }, [tierInfo, currentTier]);
-
-  // Calculate component access state based on sessions (not tier)
-  const hasInsiderAccess = unlockedComponents.insiderTrading;
-  const hasInstitutionalAccess = unlockedComponents.institutionalHoldings;
-  
-  console.log('🔐 SEC DASHBOARD - Access state:', {
-    currentTier,
-    hasInsiderAccess,
-    hasInstitutionalAccess,
-    unlockedComponents
-  });
-
-  // Handle loading updates from insider trades tab
-  const handleInsiderTradesLoading = (isLoading: boolean, progress: number, stage: string, data?: any[], error?: string | null) => {
-    setLoadingState(prev => ({
-      ...prev,
-      insiderTrades: { 
-        isLoading, 
-        needsRefresh: false
-      }
-    }));
-    
-    // When loading completes successfully, update data
-    if (!isLoading && data) {
-      setInsiderTradesData(data);
-    }
-    
-    // Update error state if provided
-    if (error !== undefined) {
-      setErrors(prev => ({ ...prev, insiderTrades: error }));
-    }
-    
-    // Only update overall progress if this is the active tab
-    if (activeTab === 'insider' || !isLoading) {
-      setLoadingProgress(progress);
-      setLoadingStage(stage);
-      
-      // Propagate to parent component
-      if (onLoadingProgressChange) {
-        onLoadingProgressChange(progress, stage);
-      }
-    }
-
-    // Clear refresh state when insider loading completes
-    if (!isLoading && isRefreshing) {
-      const institutionalComplete = !hasInstitutionalAccess || !loadingState.institutionalHoldings.isLoading;
-      if (institutionalComplete) {
-        setIsRefreshing(false);
-      }
-    }
-  };
-  
-  // Handle loading updates from institutional holdings tab
-  const handleInstitutionalHoldingsLoading = (isLoading: boolean, progress: number, stage: string, data?: any[], error?: string | null) => {
-    setLoadingState(prev => ({
-      ...prev,
-      institutionalHoldings: { 
-        isLoading, 
-        needsRefresh: false
-      }
-    }));
-    
-    // When loading completes successfully, update data
-    if (!isLoading && data) {
-      setInstitutionalHoldingsData(data);
-    }
-    
-    // Update error state if provided
-    if (error !== undefined) {
-      setErrors(prev => ({ ...prev, institutionalHoldings: error }));
-    }
-    
-    // Only update overall progress if this is the active tab
-    if (activeTab === 'institutional' || !isLoading) {
-      setLoadingProgress(progress);
-      setLoadingStage(stage);
-      
-      // Propagate to parent component
-      if (onLoadingProgressChange) {
-        onLoadingProgressChange(progress, stage);
-      }
-    }
-
-    // Clear refresh state when institutional loading completes
-    if (!isLoading && isRefreshing) {
-      const insiderComplete = !loadingState.insiderTrades.isLoading;
-      if (insiderComplete) {
-        setIsRefreshing(false);
-      }
-    }
-  };
-  
-  // Handle time range changes - no localStorage, just trigger fresh fetch
-  const handleTimeRangeChange = (range: TimeRange) => {
-    setTimeRange(range);
-    
-    // Clear current data and trigger fresh fetch
-    setInsiderTradesData([]);
-    setInstitutionalHoldingsData([]);
-    
-    // Clear any existing errors
-    setErrors({
-      insiderTrades: null,
-      institutionalHoldings: null
-    });
-    
-    // Set loading states to trigger data refresh based on tier
-    setLoadingState({
-      insiderTrades: { 
-        isLoading: true, 
-        needsRefresh: true 
-      },
-      institutionalHoldings: { 
-        isLoading: hasInstitutionalAccess, 
-        needsRefresh: hasInstitutionalAccess 
-      }
-    });
-  };
-  
-  // Handle refresh - now checks for unlocked components first
-  const handleRefresh = async () => {
-    // Check if any components are actually unlocked
-    const hasUnlockedComponents = unlockedComponents.insiderTrading || unlockedComponents.institutionalHoldings;
-    
-    if (!hasUnlockedComponents) {
-      info('Please unlock at least one component before refreshing');
-      return;
-    }
-
-    setIsRefreshing(true);
-    setLoadingProgress(0);
-    setLoadingStage('Clearing cache...');
-    
-    try {
-      if (onLoadingProgressChange) {
-        onLoadingProgressChange(20, 'Clearing cache...');
-      }
-
-      // Clear user's specific cache
-      if (user?.id) {
-        await clearUserSecCache(user.id);
-      } else {
-        await clearSecCache();
-      }
-      
-      if (onLoadingProgressChange) {
-        onLoadingProgressChange(50, 'Cache cleared');
-      }
-
-      // Clear component access cache since we're refreshing
-      clearComponentAccessCache();
-      
-      // Reset errors
-      setErrors({
-        insiderTrades: null,
-        institutionalHoldings: null
-      });
-      
-      // Clear existing data
-      setInsiderTradesData([]);
-      setInstitutionalHoldingsData([]);
-      
-      if (onLoadingProgressChange) {
-        onLoadingProgressChange(80, 'Triggering refresh...');
-      }
-      
-      // Trigger refresh for unlocked components only
-      if (unlockedComponents.insiderTrading) {
-        setLoadingState(prev => ({
-          ...prev,
-          insiderTrades: { 
-            isLoading: false, 
-            needsRefresh: true 
-          }
-        }));
-      }
-      
-      if (unlockedComponents.institutionalHoldings) {
-        setLoadingState(prev => ({
-          ...prev,
-          institutionalHoldings: { 
-            isLoading: false, 
-            needsRefresh: true 
-          }
-        }));
-      }
-      
-      console.log('🔄 SEC DASHBOARD - Manual refresh triggered for unlocked components:', {
-        insiderTrading: unlockedComponents.insiderTrading,
-        institutionalHoldings: unlockedComponents.institutionalHoldings
-      });
-      
-      if (onLoadingProgressChange) {
-        onLoadingProgressChange(100, 'Refresh complete');
-      }
-    } catch (error) {
-      console.error('Error during refresh:', error);
-      info('Error refreshing data. Please try again.');
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
-  // Monitor tier changes and trigger institutional loading when access is granted
-  useEffect(() => {
-    // Only trigger when tier access changes from false to true
-    if (hasInstitutionalAccess && currentTier !== 'free' && tierInfo) {
-      console.log(`🔍 SEC DASHBOARD - Tier access granted, triggering institutional holdings load:`, {
-        currentTier,
-        hasInstitutionalAccess,
-        currentInstitutionalLoading: loadingState.institutionalHoldings.isLoading
-      });
-      
-      // If institutional tab is not currently loading and we have no data, trigger loading
-      if (!loadingState.institutionalHoldings.isLoading && institutionalHoldingsData.length === 0) {
-        setLoadingState(prev => ({
-          ...prev,
-          institutionalHoldings: { 
-            isLoading: true, 
-            needsRefresh: true 
-          }
-        }));
-      }
-    }
-  }, [hasInstitutionalAccess, currentTier, tierInfo?.tier, loadingState.institutionalHoldings.isLoading, institutionalHoldingsData.length]);
-
-  // Monitor loading states and clear refresh state when all loading is complete
-  useEffect(() => {
-    if (isRefreshing) {
-      const insiderDone = !hasInsiderAccess || !loadingState.insiderTrades.isLoading;
-      const institutionalDone = !hasInstitutionalAccess || !loadingState.institutionalHoldings.isLoading;
-      
-      // If no components are accessible, end refresh immediately
-      if (!hasInsiderAccess && !hasInstitutionalAccess) {
-        console.log('🔄 SEC DASHBOARD - No components accessible, ending refresh');
-        setIsRefreshing(false);
-        return;
-      }
-      
-      if (insiderDone && institutionalDone) {
-        console.log('🔄 SEC DASHBOARD - All accessible components loaded, ending refresh');
-        setIsRefreshing(false);
-      }
-    }
-  }, [isRefreshing, loadingState.insiderTrades.isLoading, loadingState.institutionalHoldings.isLoading, hasInstitutionalAccess, hasInsiderAccess]);
-  
-  // Safety mechanism - clear refresh state after 5 seconds maximum
-  useEffect(() => {
-    if (isRefreshing) {
-      const timeout = setTimeout(() => {
-        setIsRefreshing(false);
-        setLoadingState({
-          insiderTrades: { isLoading: false, needsRefresh: false },
-          institutionalHoldings: { isLoading: false, needsRefresh: false }
-        });
-      }, 5000);
-      
-      return () => clearTimeout(timeout);
-    }
-  }, [isRefreshing]);
 
   // Show tier limit dialog for institutional features
   const showTierLimitDialog = (feature: string, description: string, benefits: string, requiredTier: string) => {
@@ -431,7 +100,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     setShowTierDialog(true);
   };
   
-  // Handle tab switching - no tier restrictions with session-based unlocking
+  // Handle tab switching
   const handleTabChange = (tab: 'insider' | 'institutional') => {
     // SAFETY FIX: Reset stuck loading state when switching to institutional tab
     if (tab === 'institutional' && loadingState.institutionalHoldings.isLoading) {
@@ -497,88 +166,6 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     );
   };
 
-  // Handlers for unlocking individual components
-  const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
-    try {
-      // Check if already unlocked using database-only approach
-      const existingSession = await checkComponentAccess(component, currentTier);
-      if (existingSession) {
-        const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
-        info(`${component} already unlocked (${timeRemaining})`);
-        return;
-      }
-      
-      const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
-      const token = localStorage.getItem('auth_token');
-      
-      const response = await fetch(`${proxyUrl}/api/credits/unlock-component`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          component,
-          cost
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to unlock component');
-      }
-      
-      if (data.success) {
-        // RATE LIMITING FIX: Clear cache for this component to get fresh data
-        clearComponentAccessCache(component);
-        
-        // Update component state
-        setUnlockedComponents(prev => ({
-          ...prev,
-          [component]: true
-        }));
-        
-        // Store session in localStorage for backward compatibility only
-        storeUnlockSession(component, {
-          sessionId: data.sessionId,
-          expiresAt: data.expiresAt,
-          creditsUsed: data.creditsUsed,
-          tier: tierInfo?.tier || 'free'
-        });
-        
-        // Update active sessions
-        const sessions = await getAllUnlockSessions(currentTier);
-        setActiveSessions(sessions);
-        
-        // Show appropriate toast message and track unlock type
-        if (data.existingSession) {
-          info(`${component} already unlocked (${data.timeRemaining}h remaining)`);
-          // This is a cache load, not a fresh unlock
-          setIsFreshUnlock(prev => ({
-            ...prev,
-            [component]: false
-          }));
-        } else {
-          info(`${data.creditsUsed} credits used`);
-          // This is a fresh unlock with credits spent - show harvest loading
-          setIsFreshUnlock(prev => ({
-            ...prev,
-            [component]: true
-          }));
-        }
-        
-        // Refresh tier info to update usage meter
-        if (refreshTierInfo) {
-          await refreshTierInfo();
-        }
-      }
-      
-    } catch (error) {
-      info(`Failed to unlock ${component}. Please try again.`);
-    }
-  };
-
   // Component for locked overlays
   const LockedOverlay: React.FC<{
     title: string;
@@ -615,89 +202,28 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
         </div>
         
         <button
-          onClick={() => handleUnlockComponent(componentKey, cost)}
-          className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-medium transition-all flex items-center justify-center mx-auto gap-2"
+          onClick={() => hookHandleUnlockComponent(componentKey, cost)}
+          className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-6 py-3 rounded-lg font-medium transition-all flex items-center justify-center mx-auto gap-2"
         >
-          {unlockedComponents[componentKey] ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Unlocking...
-            </>
-          ) : (
-            <>
-              <Crown className="w-4 h-4" />
-              Unlock for {cost} Credits
-            </>
-          )}
+          <Crown className="w-4 h-4" />
+          Unlock for {cost} Credits
         </button>
       </div>
     </div>
   );
 
-  // Auto-trigger data loading when components become unlocked (cross-device sync)
-  useEffect(() => {
-    // Only auto-trigger if the current tier supports the component
-    const tierSupportsInsider = true; // All tiers can unlock insider trading with credits
-    const tierSupportsInstitutional = ['pro', 'elite', 'institutional'].includes(currentTier.toLowerCase());
-    
-    // Trigger data loading for insider trading when it becomes unlocked
-    if (unlockedComponents.insiderTrading && 
-        tierSupportsInsider &&
-        !loadingState.insiderTrades.isLoading && 
-        !loadingState.insiderTrades.needsRefresh &&
-        insiderTradesData.length === 0) {
-      console.log('🔄 SEC DASHBOARD - Auto-triggering insider trades data load');
-      setLoadingState(prev => ({
-        ...prev,
-        insiderTrades: { 
-          isLoading: true, // Fix: Set to true immediately to prevent empty state flicker
-          needsRefresh: true 
-        }
-      }));
-    }
-    
-    // Trigger data loading for institutional holdings when it becomes unlocked (Pro+ only)
-    if (unlockedComponents.institutionalHoldings && 
-        tierSupportsInstitutional &&
-        !loadingState.institutionalHoldings.isLoading && 
-        !loadingState.institutionalHoldings.needsRefresh &&
-        institutionalHoldingsData.length === 0) {
-      console.log('🔄 SEC DASHBOARD - Auto-triggering institutional holdings data load');
-      setLoadingState(prev => ({
-        ...prev,
-        institutionalHoldings: { 
-          isLoading: true, // Fix: Set to true immediately to prevent empty state flicker
-          needsRefresh: true 
-        }
-      }));
-    }
-  }, [
-    unlockedComponents.insiderTrading, 
-    unlockedComponents.institutionalHoldings,
-    loadingState.insiderTrades.isLoading,
-    loadingState.institutionalHoldings.isLoading,
-    loadingState.insiderTrades.needsRefresh,
-    loadingState.institutionalHoldings.needsRefresh,
-    insiderTradesData.length,
-    institutionalHoldingsData.length,
-    currentTier // Add currentTier as dependency to react to tier changes
-  ]);
-
   return (
     <>
-      {/* Tier Limit Dialog */}
-      {showTierDialog && (
-        <TierLimitDialog
-          isOpen={showTierDialog}
-          onClose={() => setShowTierDialog(false)}
-          title={tierDialogContent.feature}
-          message={tierDialogContent.description}
-          featureName={tierDialogContent.feature}
-          currentTier={currentTier}
-          upgradeMessage={tierDialogContent.benefits}
-          context="institutional"
-        />
-      )}
+      <TierLimitDialog
+        isOpen={showTierDialog}
+        onClose={() => setShowTierDialog(false)}
+        title={tierDialogContent.feature}
+        message={tierDialogContent.description}
+        featureName={tierDialogContent.feature}
+        currentTier={currentTier}
+        upgradeMessage={tierDialogContent.benefits}
+        context="institutional"
+      />
 
       <div className="flex flex-col h-full">
         <div className={`flex flex-row justify-between items-center gap-4 mb-4 ${cardBg} rounded-lg p-4 border ${cardBorder}`}>
@@ -791,7 +317,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
                       <div className={`${headerBg} p-4`}>
                         <h2 className={`text-lg font-semibold ${textColor}`}>Recent Insider Transactions</h2>
                       </div>
-                      {isFreshUnlock.insiderTrading ? (
+                      {loadingIsFreshUnlock.insiderTrading ? (
                         <HarvestLoadingCard
                           progress={loadingProgress}
                           stage={loadingStage}
@@ -850,7 +376,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
                       <div className={`${headerBg} p-4`}>
                         <h2 className={`text-lg font-semibold ${textColor}`}>Institutional Holdings</h2>
                       </div>
-                      {isFreshUnlock.institutionalHoldings ? (
+                      {loadingIsFreshUnlock.institutionalHoldings ? (
                         <HarvestLoadingCard
                           progress={loadingProgress}
                           stage={loadingStage}

@@ -42,6 +42,7 @@ async function applyResearchExpirationActivity() {
               -- Format component name for display
               component_name := CASE 
                   WHEN expired_session.component = 'earningsAnalysis' THEN 'Earnings Analysis Research'
+                  WHEN expired_session.component = 'upcomingEarnings' THEN 'Upcoming Earnings Research'
                   WHEN expired_session.component = 'institutionalHoldings' THEN 'Institutional Holdings Research'
                   WHEN expired_session.component = 'insiderTrading' THEN 'Insider Trading Research'
                   WHEN expired_session.component = 'sentimentAnalysis' THEN 'Sentiment Analysis Research'

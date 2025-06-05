@@ -232,13 +232,13 @@ export const TierProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [tierInfo]); // This runs whenever tierInfo changes
 
-  // Auto-refresh tier info periodically (every 30 seconds)
+  // Auto-refresh tier info periodically (every 2 minutes)
   useEffect(() => {
     if (!isAuthenticated || !token) return;
 
     const interval = setInterval(() => {
       refreshTierInfo();
-    }, 30000); // 30 seconds
+    }, 120000); // 2 minutes (120,000ms) - balanced for session detection
 
     return () => clearInterval(interval);
   }, [isAuthenticated, token]);
