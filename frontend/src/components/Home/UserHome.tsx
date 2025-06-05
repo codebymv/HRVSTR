@@ -27,8 +27,11 @@ import {
 import AddTickerModal from '../Watchlist/AddTickerModal';
 import WatchlistSection from '../Watchlist/WatchlistSection';
 import RecentActivitySection from './RecentActivitySection';
+import WelcomeSection from './WelcomeSection';
+import AlphaVantageSetupCard from './AlphaVantageSetupCard';
 import ConfirmationDialog from '../UI/ConfirmationDialog';
 import TierLimitDialog from '../UI/TierLimitDialog';
+import RateLimitNotification from '../UI/RateLimitNotification';
 import { formatEventRelativeTime, getRelativeTimeBadgeStyle } from '../../utils/timeUtils';
 import { useTier } from '../../contexts/TierContext';
 import { useTierLimits } from '../../hooks/useTierLimits';
@@ -232,44 +235,7 @@ const UserHome: React.FC = () => {
   // Add icon filter for theme switching
   const iconFilter = isLight ? 'invert(1) brightness(0)' : 'none';
 
-  // Helper function to get user tier information with icon and color
-  const getUserTierInfo = () => {
-    // Use TierContext tierInfo instead of hardcoded user data
-    const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
-    
-    const tierData = {
-      free: {
-        name: 'HRVSTR Free',
-        icon: <Star className="w-5 h-5" />,
-        iconColor: isLight ? 'text-gray-600' : 'text-gray-300',
-        textColor: isLight ? 'text-gray-600' : 'text-gray-300',
-        bgColor: isLight ? 'bg-gray-200' : 'bg-gray-800'
-      },
-      pro: {
-        name: 'HRVSTR Pro',
-        icon: <Crown className="w-5 h-5" />,
-        iconColor: isLight ? 'text-blue-600' : 'text-blue-400',
-        textColor: isLight ? 'text-blue-600' : 'text-blue-400',
-        bgColor: isLight ? 'bg-blue-200' : 'bg-blue-900'
-      },
-      elite: {
-        name: 'HRVSTR Elite',
-        icon: <Zap className="w-5 h-5" />,
-        iconColor: isLight ? 'text-purple-600' : 'text-purple-400',
-        textColor: isLight ? 'text-purple-600' : 'text-purple-400',
-        bgColor: isLight ? 'bg-purple-200' : 'bg-purple-900'
-      },
-      institutional: {
-        name: 'HRVSTR Institutional',
-        icon: <Building className="w-5 h-5" />,
-        iconColor: isLight ? 'text-emerald-600' : 'text-emerald-400',
-        textColor: isLight ? 'text-emerald-600' : 'text-emerald-400',
-        bgColor: isLight ? 'bg-emerald-200' : 'bg-emerald-900'
-      }
-    };
 
-    return tierData[currentTier as keyof typeof tierData] || tierData.free;
-  };
 
   // Check Alpha Vantage API key status
   const checkAlphaVantageApiKeyStatus = useCallback(async () => {
@@ -620,113 +586,23 @@ const UserHome: React.FC = () => {
     }
   };
 
-  // Alpha Vantage Setup Card Component
-  const AlphaVantageSetupCard: React.FC = () => {
-    const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-800';
-    const borderColor = isLight ? 'border-stone-400' : 'border-gray-700';
-    const gradientFrom = isLight ? 'from-green-500' : 'from-green-600';
-    const gradientTo = isLight ? 'to-blue-600' : 'to-blue-700';
-    const buttonBg = isLight ? 'bg-green-500 hover:bg-green-600' : 'bg-green-600 hover:bg-green-700';
-    const secondaryButtonBg = isLight ? 'bg-gray-500 hover:bg-gray-600' : 'bg-gray-600 hover:bg-gray-700';
-    
-    return (
-      <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} text-center`}>
-        <div className={`w-16 h-16 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-full flex items-center justify-center mx-auto mb-4`}>
-          <BarChart className="w-8 h-8 text-white" />
-        </div>
-        
-        <h3 className={`text-xl font-bold ${textColor} mb-2`}>
-          Setup Alpha Vantage API Keys
-        </h3>
-        
-        <p className={`${secondaryTextColor} mb-4 max-w-md mx-auto`}>
-          Configure your Alpha Vantage API credentials to unlock real-time financial data, earnings calendar, and advanced market analytics for your watchlist.
-        </p>
-        
-        <div className={`${isLight ? 'bg-green-50' : 'bg-green-900/20'} rounded-lg p-4 mb-6 border ${isLight ? 'border-green-200' : 'border-green-800'}`}>
-          <h4 className={`font-semibold ${textColor} mb-2`}>Features You'll Unlock:</h4>
-          <ul className={`text-sm ${secondaryTextColor} space-y-1 text-left max-w-xs mx-auto`}>
-            <li>• Real-time stock prices</li>
-            <li>• Earnings calendar events</li>
-            <li>• Company financial overviews</li>
-            <li>• Advanced market analytics</li>
-            <li>• Historical price data</li>
-          </ul>
-        </div>
-        
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <button
-            onClick={() => navigate('/settings/api-keys')}
-            className={`${buttonBg} text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center`}
-          >
-            <Settings className="w-4 h-4 mr-2" />
-            Configure API Keys
-          </button>
-          <a
-            href="https://www.alphavantage.co/support/#api-key"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`${secondaryButtonBg} text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center`}
-          >
-            <Key className="w-4 h-4 mr-2" />
-            Get Alpha Vantage Key
-          </a>
-        </div>
-      </div>
-    );
-  };
+
 
   return (
     <div className={`min-h-screen ${bgColor} p-6`}>
       <div className="max-w-7xl mx-auto">
         {/* Rate Limit Notification */}
-        {rateLimitActive && (
-          <div className="mb-4 p-3 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded-lg flex items-center">
-            <AlertCircle className="w-5 h-5 mr-2" />
-            <span>API rate limit reached. Data will refresh automatically in a moment...</span>
-          </div>
-        )}
+        <RateLimitNotification isActive={rateLimitActive} />
         {/* Welcome Section */}
-        <div className={`${cardBgColor} rounded-lg p-6 mb-6 border ${borderColor} relative`}>
-          {/* HRVSTR Icon with Tier Badge - Responsive sizing and positioning */}
-          <div className="absolute top-3 right-3 sm:top-4 sm:right-4">
-            <div className="relative">
-              {/* HRVSTR Icon - Larger on mobile for better visibility */}
-              <img 
-                src="/hrvstr_icon.png" 
-                alt="HRVSTR" 
-                className="w-16 h-16 sm:w-12 sm:h-12 object-contain"
-                style={{ filter: iconFilter }}
-              />
-              {/* Tier Badge - Scaled proportionally */}
-              {/* <div className="absolute -top-1 -right-1 sm:-top-1 sm:-right-1">
-                <div className={`w-6 h-6 sm:w-5 sm:h-5 flex items-center justify-center ${getUserTierInfo().iconColor}`}>
-                  {getUserTierInfo().icon}
-                </div>
-              </div> */}
-            </div>
-          </div>
-          
-          <h1 className={`text-2xl font-bold ${welcomeTextColor} pr-20 sm:pr-16`}>
-            Welcome back, <br className="block sm:hidden" />
-            <span className="block sm:inline bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent ml-4">
-              {user?.name}!
-            </span>
-          </h1>
-          <div className="mt-3 flex items-center">
-            {/* Tier Badge */}
-            {tierInfo?.tier && (
-              <div className={`flex items-center space-x-2 px-3 py-1 rounded-full ${getUserTierInfo().bgColor}`}>
-                <span className={getUserTierInfo().iconColor}>
-                  {getUserTierInfo().icon}
-                </span>
-                <span className={`text-sm font-medium ${getUserTierInfo().iconColor}`}>
-                  {getUserTierInfo().name}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
+        <WelcomeSection
+          userName={user?.name}
+          userTier={tierInfo?.tier}
+          theme={theme}
+          cardBgColor={cardBgColor}
+          borderColor={borderColor}
+          welcomeTextColor={welcomeTextColor}
+          iconFilter={iconFilter}
+        />
 
         {/* Navigation */}
         {/* <div className={`${cardBgColor} rounded-lg p-6 mb-6 border ${borderColor}`}>
@@ -806,7 +682,7 @@ const UserHome: React.FC = () => {
           ) : !alphaVantageConfigured ? (
             // Alpha Vantage setup card when not configured
             <div className="lg:col-span-2">
-              <AlphaVantageSetupCard />
+              <AlphaVantageSetupCard theme={theme} />
             </div>
           ) : (
             // Normal upcoming events when Alpha Vantage is configured

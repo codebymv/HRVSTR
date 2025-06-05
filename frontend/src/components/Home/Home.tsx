@@ -88,8 +88,8 @@ const Home: React.FC = () => {
     <div className={`min-h-screen ${bgColor} relative overflow-hidden`}>
       {/* Premium Background Animation */}
       <BackgroundLeaves 
-        opacity={isLight ? 0.15 : 0.07} 
-        leafCount={12}
+        opacity={isLight ? 0.25 : 0.18} 
+        leafCount={15}
         isLight={isLight}
       />
       {/* Hero Section */}

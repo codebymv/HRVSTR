@@ -13,7 +13,7 @@ export interface LimitInfo {
  * These show consistent messaging and link to /settings/usage
  */
 export const useLimitToasts = () => {
-  const { error, warning, info } = useToast();
+  const { error, warning, info, success } = useToast();
 
   /**
    * Show a generic limit reached toast
@@ -24,6 +24,23 @@ export const useLimitToasts = () => {
       clickable: true, 
       linkTo: '/settings/usage' 
     });
+  };
+
+  /**
+   * Show credit purchase success toast
+   */
+  const showCreditsPurchased = (amount: number = 250) => {
+    success(`🎉 ${amount} credits added to your account!`, 6000, {
+      clickable: true,
+      linkTo: '/settings/usage'
+    });
+  };
+
+  /**
+   * Show credit purchase cancelled toast
+   */
+  const showCreditPurchaseCancelled = () => {
+    warning('Credit purchase was cancelled. You can try again anytime!', 5000);
   };
 
   /**
@@ -186,6 +203,8 @@ export const useLimitToasts = () => {
 
   return {
     showLimitReached,
+    showCreditsPurchased,
+    showCreditPurchaseCancelled,
     showCreditLimitExceeded,
     showWatchlistLimitReached,
     showSearchLimitReached,

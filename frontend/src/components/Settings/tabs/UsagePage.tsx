@@ -1,15 +1,38 @@
 import React, { useEffect } from 'react';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { useToast } from '../../../contexts/ToastContext';
+import { useTier } from '../../../contexts/TierContext';
 import TierManagement from '../TierManagement';
 
 const UsagePage: React.FC = () => {
   const { theme } = useTheme();
+  const { success, warning } = useToast();
+  const { refreshTierInfo } = useTier();
   const isLight = theme === 'light';
   
   // Check for success/error messages from URL params
   const urlParams = new URLSearchParams(window.location.search);
   const creditsPurchased = urlParams.get('credits_purchased');
   const purchaseCancelled = urlParams.get('purchase_cancelled');
+  
+  // Handle toast notifications and refresh tier info
+  useEffect(() => {
+    if (creditsPurchased) {
+      // Show success toast with credits amount
+      success('🎉 250 credits added to your account!', 6000, {
+        clickable: true,
+        linkTo: '/settings/usage'
+      });
+      
+      // Refresh tier info to show updated credit balance
+      refreshTierInfo();
+    }
+    
+    if (purchaseCancelled) {
+      // Show warning toast for cancelled purchase
+      warning('Credit purchase was cancelled. You can try again anytime!', 5000);
+    }
+  }, [creditsPurchased, purchaseCancelled, success, warning, refreshTierInfo]);
   
   // Clean up URL parameters after showing the message
   useEffect(() => {
@@ -36,7 +59,7 @@ const UsagePage: React.FC = () => {
           <p className={secondaryTextColor}>Monitor your credit usage and subscription details</p>
         </div>
 
-        {/* Success/Error Messages */}
+        {/* Success/Error Messages - Keep as fallback for users who might miss the toast */}
         {creditsPurchased && (
           <div className="mb-6 p-4 bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700 rounded-lg">
             <div className="flex items-center">
@@ -47,7 +70,7 @@ const UsagePage: React.FC = () => {
               </div>
               <div>
                 <h3 className="font-semibold text-green-800 dark:text-green-200">Credits Purchased Successfully!</h3>
-                <p className="text-green-700 dark:text-green-300 text-sm">Your credits have been added to your account and are ready to use.</p>
+                <p className="text-green-700 dark:text-green-300 text-sm">Your 250 credits have been added to your account and are ready to use.</p>
               </div>
             </div>
           </div>
