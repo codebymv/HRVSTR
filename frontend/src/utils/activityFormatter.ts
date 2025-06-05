@@ -202,17 +202,51 @@ export const cleanActivityTitle = (title: string, activityType: string): string 
  */
 export const cleanActivityDescription = (description: string, activityType: string): string => {
   if (activityType === 'component_unlock' && description) {
+    // Handle standard research unlock format: "X Credits Used To unlock [Research Type] For Y Hours"
+    const standardPattern = /(\d+) credits used to unlock (.+?) for (\d+) hours?/i;
+    const standardMatch = description.match(standardPattern);
+    
+    if (standardMatch) {
+      const [, credits, researchType, hours] = standardMatch;
+      
+      // Clean up the research type name - remove redundant "research" if it appears twice
+      let cleanResearchType = researchType.trim();
+      
+      // Fix cases like "Upcoming Research Earnings research" or "Insider Research Trading research"
+      if (cleanResearchType.toLowerCase().includes('research') && cleanResearchType.toLowerCase().endsWith(' research')) {
+        // Remove the trailing " research" to avoid duplication
+        cleanResearchType = cleanResearchType.replace(/ research$/i, '');
+        
+        // If it still has "Research" in the middle, clean it up
+        cleanResearchType = cleanResearchType
+          .replace(/research /gi, '') // Remove "research " from middle
+          .replace(/Research /g, '') // Remove "Research " from middle
+          .trim();
+        
+        // Add "Research" back at the end
+        cleanResearchType = `${cleanResearchType} Research`;
+      }
+      
+      // Capitalize properly
+      cleanResearchType = cleanResearchType
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+      
+      return `${credits} Credits Used To Unlock ${cleanResearchType} For ${hours} Hours`;
+    }
+    
     // Handle old format like "8 credits used to unlock earningsAnalysis component for 2 hours"
     const componentPattern = /(\d+) credits used to unlock (\w+) component for (\d+) hours?/i;
-    const match = description.match(componentPattern);
+    const componentMatch = description.match(componentPattern);
     
-    if (match) {
-      const [, credits, componentName, hours] = match;
+    if (componentMatch) {
+      const [, credits, componentName, hours] = componentMatch;
       const formattedComponent = formatComponentName(componentName);
       return `${credits} Credits Used To Unlock ${formattedComponent} For ${hours} Hours`;
     }
     
-    // Handle other variations
+    // Handle other variations with basic cleanup
     const unlockPattern = /unlock (\w+)/i;
     const unlockMatch = description.match(unlockPattern);
     if (unlockMatch) {

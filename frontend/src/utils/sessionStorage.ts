@@ -163,9 +163,9 @@ const checkTierSupportsComponent = (component: string, currentTier?: string): bo
     'free': ['insiderTrading'],
     
     // Pro tier and above: Can unlock all features with credits (including premium ones)
-    'pro': ['insiderTrading', 'institutionalHoldings', 'earningsAnalysis'],
-    'elite': ['insiderTrading', 'institutionalHoldings', 'earningsAnalysis'],
-    'institutional': ['insiderTrading', 'institutionalHoldings', 'earningsAnalysis'],
+    'pro': ['insiderTrading', 'institutionalHoldings', 'earningsAnalysis', 'chart', 'scores', 'reddit'],
+    'elite': ['insiderTrading', 'institutionalHoldings', 'earningsAnalysis', 'chart', 'scores', 'reddit'],
+    'institutional': ['insiderTrading', 'institutionalHoldings', 'earningsAnalysis', 'chart', 'scores', 'reddit'],
   };
   
   const allowedComponents = tierAccess[tier] || [];
@@ -233,7 +233,7 @@ export const checkUnlockSession = (component: string, currentTier?: string): Unl
  */
 export const getAllUnlockSessions = async (currentTier?: string): Promise<UnlockSession[]> => {
   const sessions: UnlockSession[] = [];
-  const components = ['earningsAnalysis', 'insiderTrading', 'institutionalHoldings'];
+  const components = ['earningsAnalysis', 'insiderTrading', 'institutionalHoldings', 'chart', 'scores', 'reddit'];
   
   try {
     // Query database for all components

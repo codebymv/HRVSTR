@@ -395,10 +395,7 @@ router.post('/unlock-component', authenticateToken, async (req, res) => {
       const sessionDurationMs = sessionDuration || getSessionDuration(user.tier);
       const expiresAtUtc = new Date(nowUtc.getTime() + sessionDurationMs);
       
-      console.log(`[TIMEZONE DEBUG] Creating new session:
-        NOW UTC: ${nowUtc.toISOString()}
-        DURATION: ${sessionDurationMs}ms
-        EXPIRES UTC: ${expiresAtUtc.toISOString()}`);
+      console.log(`[SESSION] Creating ${component} session: ${Math.round(sessionDurationMs / (1000 * 60 * 60) * 10) / 10}h duration for ${user.tier} tier`);
 
       // Generate unique session ID
       const sessionId = `session_${userId}_${component}_${Date.now()}`;
@@ -735,6 +732,149 @@ router.get('/session-debug/:userId?', authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to debug sessions'
+    });
+  }
+});
+
+/**
+ * POST /api/credits/fix-old-sessions
+ * Temporary admin endpoint to fix old sessions with incorrect durations
+ */
+router.post('/fix-old-sessions', authenticateToken, async (req, res) => {
+  try {
+    console.log('🔧 Fixing old sessions with incorrect 8-hour durations...');
+    
+    // Find sessions that were created with 8+ hour durations (likely the bug)
+    const oldSessions = await pool.query(`
+      SELECT 
+        session_id,
+        component,
+        user_id,
+        unlocked_at,
+        expires_at,
+        EXTRACT(EPOCH FROM (expires_at - unlocked_at))/3600 as duration_hours,
+        status
+      FROM research_sessions 
+      WHERE status = 'active'
+        AND EXTRACT(EPOCH FROM (expires_at - unlocked_at))/3600 > 6
+      ORDER BY unlocked_at DESC
+    `);
+    
+    console.log(`Found ${oldSessions.rows.length} sessions with 6+ hour durations:`);
+    
+    const sessionDetails = oldSessions.rows.map((session, index) => {
+      const detail = `${session.component} (${session.duration_hours.toFixed(1)}h) - expires ${new Date(session.expires_at).toLocaleString()}`;
+      console.log(`  ${index + 1}. ${detail}`);
+      return detail;
+    });
+    
+    if (oldSessions.rows.length === 0) {
+      console.log('✅ No old sessions to fix!');
+      return res.json({
+        success: true,
+        message: 'No old sessions found to fix',
+        sessionsFixed: 0
+      });
+    }
+    
+    // Expire these old sessions
+    const result = await pool.query(`
+      UPDATE research_sessions 
+      SET status = 'expired', 
+          updated_at = NOW()
+      WHERE status = 'active'
+        AND EXTRACT(EPOCH FROM (expires_at - unlocked_at))/3600 > 6
+    `);
+    
+    console.log(`✅ Expired ${result.rowCount} old sessions with incorrect durations`);
+    console.log('🎉 All future sessions will use correct 2-hour duration for Pro tier');
+    
+    res.json({
+      success: true,
+      message: `Successfully expired ${result.rowCount} old sessions with incorrect durations`,
+      sessionsFixed: result.rowCount,
+      sessionDetails
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fixing old sessions:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fix old sessions',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/credits/debug-sessions
+ * Debug endpoint to show all current active sessions with details
+ */
+router.get('/debug-sessions', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Get all active sessions for the user with detailed info
+    const sessions = await pool.query(`
+      SELECT 
+        session_id,
+        component,
+        user_id,
+        unlocked_at,
+        expires_at,
+        status,
+        credits_used,
+        metadata,
+        EXTRACT(EPOCH FROM (expires_at - unlocked_at))/3600 as original_duration_hours,
+        EXTRACT(EPOCH FROM (expires_at - (NOW() AT TIME ZONE 'UTC')))/3600 as remaining_hours,
+        EXTRACT(EPOCH FROM ((NOW() AT TIME ZONE 'UTC') - unlocked_at))/3600 as elapsed_hours
+      FROM research_sessions 
+      WHERE user_id = $1 
+        AND status = 'active'
+        AND expires_at > (NOW() AT TIME ZONE 'UTC')
+      ORDER BY unlocked_at DESC
+    `, [userId]);
+    
+    console.log(`📊 Debug: Found ${sessions.rows.length} active sessions for user ${userId}`);
+    
+    const sessionDetails = sessions.rows.map((session, index) => {
+      const detail = {
+        index: index + 1,
+        component: session.component,
+        sessionId: session.session_id,
+        unlockedAt: session.unlocked_at,
+        expiresAt: session.expires_at,
+        status: session.status,
+        creditsUsed: session.credits_used,
+        originalDurationHours: session.original_duration_hours ? Number(session.original_duration_hours).toFixed(2) : null,
+        remainingHours: session.remaining_hours ? Number(session.remaining_hours).toFixed(2) : null,
+        elapsedHours: session.elapsed_hours ? Number(session.elapsed_hours).toFixed(2) : null,
+        metadata: session.metadata
+      };
+      
+      console.log(`  ${index + 1}. ${session.component}:`);
+      console.log(`     Original Duration: ${detail.originalDurationHours}h`);
+      console.log(`     Remaining: ${detail.remainingHours}h`);
+      console.log(`     Elapsed: ${detail.elapsedHours}h`);
+      console.log(`     Unlocked: ${new Date(session.unlocked_at).toLocaleString()}`);
+      console.log(`     Expires: ${new Date(session.expires_at).toLocaleString()}`);
+      
+      return detail;
+    });
+    
+    res.json({
+      success: true,
+      userId,
+      activeSessionsCount: sessions.rows.length,
+      sessions: sessionDetails
+    });
+    
+  } catch (error) {
+    console.error('❌ Error debugging sessions:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to debug sessions',
+      details: error.message
     });
   }
 });

@@ -161,47 +161,50 @@ const RecentActivitySection: React.FC<RecentActivitySectionProps> = ({
         }
         return <Crown className={`${iconClasses} text-blue-500`} />; // Default to Pro icon
       
-      // Component unlocks - use component-specific icons with gradient backgrounds for earnings
+      // Component unlocks - use component-specific icons with gradient backgrounds
       case 'component_unlock':
-        // Try to extract component name from description
+        // Try to extract research type from description
         if (activityDescription) {
-          const match = activityDescription.match(/unlock (\w+)/i);
-          if (match) {
-            const componentName = match[1];
-            const iconName = getComponentIcon(componentName);
-            
-            // Return the appropriate icon based on component type
-            switch (iconName) {
-              case 'TrendingUp':
-                // Earnings components get the gradient background treatment
-                return (
-                  <div className="w-5 h-5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
-                    <TrendingUp className="w-3 h-3 text-white" />
-                  </div>
-                );
-              case 'BarChart2':
-                return <BarChart2 className={`${iconClasses} text-blue-500`} />;
-              case 'ListChecks':
-                // SEC filing components get the gradient background treatment to match unlock screens
-                return (
-                  <div className="w-5 h-5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
-                    <ListChecks className="w-3 h-3 text-white" />
-                  </div>
-                );
-              case 'Building2':
-                return <Building2 className={`${iconClasses} text-orange-500`} />;
-              case 'FileText':
-                return <FileText className={`${iconClasses} text-green-500`} />;
-              case 'DollarSign':
-                return <DollarSign className={`${iconClasses} text-yellow-500`} />;
-              case 'Info':
-                return <Info className={`${iconClasses} text-blue-500`} />;
-              default:
-                return <Zap className={`${iconClasses} text-purple-500`} />;
-            }
+          // Look for research type patterns in the description
+          const description = activityDescription.toLowerCase();
+          
+          // Map research types to appropriate icons
+          if (description.includes('earnings') || description.includes('upcoming earnings')) {
+            // Earnings components get the gradient background with TrendingUp icon
+            return (
+              <div className="w-5 h-5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                <TrendingUp className="w-3 h-3 text-white" />
+              </div>
+            );
+          } else if (description.includes('institutional holdings') || description.includes('insider trading')) {
+            // SEC filing components get the gradient background with ListChecks icon
+            return (
+              <div className="w-5 h-5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                <ListChecks className="w-3 h-3 text-white" />
+              </div>
+            );
+          } else if (description.includes('sentiment') || description.includes('reddit') || description.includes('social sentiment')) {
+            // Sentiment components (including reddit posts, sentiment charts, sentiment scores) get the gradient background with BarChart2 icon
+            return (
+              <div className="w-5 h-5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                <BarChart2 className="w-3 h-3 text-white" />
+              </div>
+            );
+          } else {
+            // Default gradient icon for any other research unlocks
+            return (
+              <div className="w-5 h-5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                <Activity className="w-3 h-3 text-white" />
+              </div>
+            );
           }
         }
-        return <Zap className={`${iconClasses} text-purple-500`} />; // Default for component unlocks
+        // Default for component unlocks with gradient background
+        return (
+          <div className="w-5 h-5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+            <Activity className="w-3 h-3 text-white" />
+          </div>
+        );
       
       // Credit activities
       case 'credit_deduction':

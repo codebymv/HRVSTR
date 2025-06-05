@@ -18,6 +18,7 @@
     "@stripe/react-stripe-js": "^3.7.0",
     "@stripe/stripe-js": "^7.3.1",
     "@types/node": "^22.15.23",
+    "@types/three": "^0.177.0",
     "axios": "^1.9.0",
     "chart.js": "^4.4.1",
     "lucide-react": "^0.344.0",
@@ -31,7 +32,8 @@
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
     "sentiment": "^5.0.2",
-    "serve": "^14.2.1"
+    "serve": "^14.2.1",
+    "three": "^0.177.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",

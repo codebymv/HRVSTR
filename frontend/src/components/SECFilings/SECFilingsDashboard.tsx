@@ -17,6 +17,7 @@ import InstitutionalHoldingsTab from './InstitutionalHoldingsTab';
 import { clearSecCache, clearUserSecCache } from '../../services/api';
 import TierLimitDialog from '../UI/TierLimitDialog';
 import ProgressBar from '../ProgressBar';
+import HarvestLoadingCard from '../UI/HarvestLoadingCard';
 
 type TimeRange = '1w' | '1m' | '3m' | '6m';
 
@@ -81,6 +82,12 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
   const [loadingState, setLoadingState] = useState({
     insiderTrades: { isLoading: false, needsRefresh: false },
     institutionalHoldings: { isLoading: false, needsRefresh: false }
+  });
+
+  // Track fresh unlocks vs cache loads for appropriate loading UI
+  const [isFreshUnlock, setIsFreshUnlock] = useState({
+    insiderTrading: false,
+    institutionalHoldings: false
   });
 
   // Error states
@@ -544,11 +551,21 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
         const sessions = await getAllUnlockSessions(currentTier);
         setActiveSessions(sessions);
         
-        // Show appropriate toast message
+        // Show appropriate toast message and track unlock type
         if (data.existingSession) {
           info(`${component} already unlocked (${data.timeRemaining}h remaining)`);
+          // This is a cache load, not a fresh unlock
+          setIsFreshUnlock(prev => ({
+            ...prev,
+            [component]: false
+          }));
         } else {
           info(`${data.creditsUsed} credits used`);
+          // This is a fresh unlock with credits spent - show harvest loading
+          setIsFreshUnlock(prev => ({
+            ...prev,
+            [component]: true
+          }));
         }
         
         // Refresh tier info to update usage meter
@@ -633,7 +650,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
       setLoadingState(prev => ({
         ...prev,
         insiderTrades: { 
-          isLoading: false, 
+          isLoading: true, // Fix: Set to true immediately to prevent empty state flicker
           needsRefresh: true 
         }
       }));
@@ -649,7 +666,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
       setLoadingState(prev => ({
         ...prev,
         institutionalHoldings: { 
-          isLoading: false, 
+          isLoading: true, // Fix: Set to true immediately to prevent empty state flicker
           needsRefresh: true 
         }
       }));
@@ -774,14 +791,29 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
                       <div className={`${headerBg} p-4`}>
                         <h2 className={`text-lg font-semibold ${textColor}`}>Recent Insider Transactions</h2>
                       </div>
-                      <div className="flex flex-col items-center justify-center py-20 text-center">
-                        <Loader2 className="mb-3 text-blue-500 animate-spin" size={32} />
-                        <p className={`text-lg font-semibold ${textColor} mb-2`}>{loadingStage}</p>
-                        <div className="w-full max-w-sm mt-4 mb-2">
-                          <ProgressBar progress={loadingProgress} />
+                      {isFreshUnlock.insiderTrading ? (
+                        <HarvestLoadingCard
+                          progress={loadingProgress}
+                          stage={loadingStage}
+                          operation="insider-trading"
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center p-12 text-center">
+                          <Loader2 className="text-blue-500 animate-spin mb-4" size={32} />
+                          <h3 className={`text-lg font-semibold ${textColor} mb-2`}>
+                            Loading Insider Trading Data
+                          </h3>
+                          <p className={`text-sm ${subTextColor} mb-4`}>
+                            Loading from cache...
+                          </p>
+                          <div className="w-full max-w-md">
+                            <ProgressBar progress={loadingProgress} />
+                            <div className={`text-xs ${subTextColor} mt-2 text-center`}>
+                              {loadingStage} - {loadingProgress}%
+                            </div>
+                          </div>
                         </div>
-                        <div className={`text-xs ${isLight ? 'text-blue-600' : 'text-blue-400'}`}>{loadingProgress}% complete</div>
-                      </div>
+                      )}
                     </div>
                   ) : (
                     <InsiderTradesTab
@@ -818,14 +850,29 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
                       <div className={`${headerBg} p-4`}>
                         <h2 className={`text-lg font-semibold ${textColor}`}>Institutional Holdings</h2>
                       </div>
-                      <div className="flex flex-col items-center justify-center py-20 text-center">
-                        <Loader2 className="mb-3 text-blue-500 animate-spin" size={32} />
-                        <p className={`text-lg font-semibold ${textColor} mb-2`}>{loadingStage}</p>
-                        <div className="w-full max-w-sm mt-4 mb-2">
-                          <ProgressBar progress={loadingProgress} />
+                      {isFreshUnlock.institutionalHoldings ? (
+                        <HarvestLoadingCard
+                          progress={loadingProgress}
+                          stage={loadingStage}
+                          operation="institutional-holdings"
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center p-12 text-center">
+                          <Loader2 className="text-blue-500 animate-spin mb-4" size={32} />
+                          <h3 className={`text-lg font-semibold ${textColor} mb-2`}>
+                            Loading Institutional Holdings Data
+                          </h3>
+                          <p className={`text-sm ${subTextColor} mb-4`}>
+                            Loading from cache...
+                          </p>
+                          <div className="w-full max-w-md">
+                            <ProgressBar progress={loadingProgress} />
+                            <div className={`text-xs ${subTextColor} mt-2 text-center`}>
+                              {loadingStage} - {loadingProgress}%
+                            </div>
+                          </div>
                         </div>
-                        <div className={`text-xs ${isLight ? 'text-blue-600' : 'text-blue-400'}`}>{loadingProgress}% complete</div>
-                      </div>
+                      )}
                     </div>
                   ) : (
                     <InstitutionalHoldingsTab

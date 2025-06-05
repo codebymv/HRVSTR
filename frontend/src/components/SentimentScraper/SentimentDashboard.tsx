@@ -4,7 +4,7 @@ import { useTier } from '../../contexts/TierContext';
 import { useTierLimits } from '../../hooks/useTierLimits';
 import { useToast } from '../../contexts/ToastContext';
 import { 
-  checkUnlockSession, 
+  checkComponentAccess, 
   storeUnlockSession, 
   getAllUnlockSessions,
   getSessionTimeRemainingFormatted 
@@ -240,23 +240,45 @@ const SentimentDashboard: React.FC = () => {
   useEffect(() => {
     if (!tierInfo) return;
     
-    const checkExistingSessions = () => {
-      const chartSession = checkUnlockSession('chart', currentTier);
-      const scoresSession = checkUnlockSession('scores', currentTier);
-      const redditSession = checkUnlockSession('reddit', currentTier);
+    const checkExistingSessions = async () => {
+      try {
+        const chartSession = await checkComponentAccess('chart', currentTier);
+        const scoresSession = await checkComponentAccess('scores', currentTier);
+        const redditSession = await checkComponentAccess('reddit', currentTier);
 
-      setUnlockedComponents({
-        chart: !!chartSession,
-        scores: !!scoresSession,
-        reddit: !!redditSession
-      });
+        setUnlockedComponents({
+          chart: !!chartSession,
+          scores: !!scoresSession,
+          reddit: !!redditSession
+        });
 
-      // Update active sessions for display
-      const sessions = getAllUnlockSessions();
-      setActiveSessions(sessions);
+        // Update active sessions for display
+        const sessions = await getAllUnlockSessions(currentTier);
+        setActiveSessions(sessions);
+        
+        console.log('🔍 SENTIMENT - Active sessions:', {
+          chart: chartSession?.sessionId,
+          scores: scoresSession?.sessionId,
+          reddit: redditSession?.sessionId
+        });
+
+        console.log('🔍 SENTIMENT - Updated unlockedComponents state:', {
+          chart: !!chartSession,
+          scores: !!scoresSession,
+          reddit: !!redditSession
+        });
+      } catch (error) {
+        console.error('Error checking existing sessions:', error);
+        // Fallback to empty state on error
+        setUnlockedComponents({
+          chart: false,
+          scores: false,
+          reddit: false
+        });
+      }
     };
 
-    // Check sessions for all users (including Pro)
+    // Check sessions immediately
     checkExistingSessions();
     
     // Check for expired sessions every minute for all users
@@ -295,7 +317,7 @@ const SentimentDashboard: React.FC = () => {
   // Handlers for unlocking individual components
   const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
     // Check if already unlocked in current session (with tier awareness)
-    const existingSession = checkUnlockSession(component, currentTier);
+    const existingSession = await checkComponentAccess(component, currentTier);
     if (existingSession) {
       const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
       info(`${component} already unlocked (${timeRemaining})`);
@@ -340,7 +362,7 @@ const SentimentDashboard: React.FC = () => {
         });
         
         // Update active sessions
-        const sessions = getAllUnlockSessions();
+        const sessions = await getAllUnlockSessions(currentTier);
         setActiveSessions(sessions);
         
         // Show appropriate toast message
@@ -619,6 +641,19 @@ const SentimentDashboard: React.FC = () => {
             </div>
             
             {/* Reddit Posts Section - Now appears last on mobile */}
+            {(() => {
+              console.log('🔍 REDDIT RENDER DEBUG:', {
+                checkingApiKeys,
+                hasRedditTierAccess,
+                redditApiKeysConfigured,
+                'unlockedComponents.reddit': unlockedComponents.reddit,
+                renderPath: checkingApiKeys ? 'loading' : 
+                           !hasRedditTierAccess ? 'upgrade' :
+                           !redditApiKeysConfigured ? 'setup' :
+                           unlockedComponents.reddit ? 'posts' : 'locked'
+              });
+              return null;
+            })()}
             {checkingApiKeys ? (
               // Loading state while checking API keys
               <div className={`${isLight ? 'bg-stone-300' : 'bg-gray-800'} rounded-lg p-6 border ${isLight ? 'border-stone-400' : 'border-gray-700'} text-center`}>
