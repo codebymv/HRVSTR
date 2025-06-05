@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Search, Loader2, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
@@ -43,6 +43,7 @@ const AddTickerModal: React.FC<AddTickerModalProps> = ({ isOpen, onClose, onAdd,
   const [hasSearched, setHasSearched] = useState(false);
   const [searchUsage, setSearchUsage] = useState<SearchUsage | null>(null);
   const [loadingUsage, setLoadingUsage] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   // Fetch search usage when modal opens
   const fetchSearchUsage = async () => {
@@ -73,6 +74,22 @@ const AddTickerModal: React.FC<AddTickerModalProps> = ({ isOpen, onClose, onAdd,
       fetchSearchUsage();
     }
   }, [isOpen, user?.token]);
+
+  // Handle click outside modal to close
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
+        handleClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [isOpen]);
 
   const handleSearch = async () => {
     if (!searchTerm.trim()) return;
@@ -164,7 +181,7 @@ const AddTickerModal: React.FC<AddTickerModalProps> = ({ isOpen, onClose, onAdd,
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+      <div ref={modalRef} className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Add to Watchlist</h2>
           <button
@@ -316,4 +333,4 @@ const AddTickerModal: React.FC<AddTickerModalProps> = ({ isOpen, onClose, onAdd,
   );
 };
 
-export default AddTickerModal; 
+export default AddTickerModal;

@@ -51,6 +51,9 @@ const SentimentDashboard: React.FC = () => {
   // Session state for time tracking
   const [activeSessions, setActiveSessions] = useState<any[]>([]);
   
+  // Add state to track when we're checking sessions (prevents locked overlay flash)
+  const [isCheckingSessions, setIsCheckingSessions] = useState(true);
+  
   // Time range state
   const [timeRange, setTimeRange] = useState<TimeRange>('1w');
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -241,6 +244,7 @@ const SentimentDashboard: React.FC = () => {
     if (!tierInfo) return;
     
     const checkExistingSessions = async () => {
+      setIsCheckingSessions(true);
       try {
         const chartSession = await checkComponentAccess('chart', currentTier);
         const scoresSession = await checkComponentAccess('scores', currentTier);
@@ -275,6 +279,8 @@ const SentimentDashboard: React.FC = () => {
           scores: false,
           reddit: false
         });
+      } finally {
+        setIsCheckingSessions(false);
       }
     };
 
@@ -585,7 +591,31 @@ const SentimentDashboard: React.FC = () => {
           {/* Main Content Area */}
           <div className="flex-1 space-y-6">
             {/* Sentiment Overview Chart */}
-              {unlockedComponents.chart ? (
+            {isCheckingSessions ? (
+              // Show loading while checking sessions to prevent locked overlay flash
+              <div className={`${isLight ? 'bg-stone-300' : 'bg-gray-800'} rounded-lg border ${isLight ? 'border-stone-400' : 'border-gray-700'} overflow-hidden h-96`}>
+                <div className={`${isLight ? 'bg-stone-400' : 'bg-gray-900'} p-4`}>
+                  <h2 className={`text-lg font-semibold ${textColor}`}>Market Sentiment Chart</h2>
+                </div>
+                <div className="flex flex-col items-center justify-center p-12 text-center">
+                  <Loader2 className="text-blue-500 animate-spin mb-4" size={32} />
+                  <h3 className={`text-lg font-semibold ${textColor} mb-2`}>
+                    Checking Access...
+                  </h3>
+                  <p className={`text-sm ${mutedTextColor} mb-4`}>
+                    Verifying component access...
+                  </p>
+                  <div className="w-full max-w-md">
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                      <div className="bg-blue-500 h-2 rounded-full transition-all duration-500" style={{ width: '50%' }}></div>
+                    </div>
+                    <div className={`text-xs ${mutedTextColor} mt-2 text-center`}>
+                      Checking access...
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : unlockedComponents.chart ? (
             <SentimentChartCard
               chartData={chartData}
               timeRange={timeRange}
@@ -614,7 +644,31 @@ const SentimentDashboard: React.FC = () => {
             
             {/* Sentiment Scores Section - Show on mobile between chart and reddit */}
             <div className="xl:hidden">
-                {unlockedComponents.scores ? (
+              {isCheckingSessions ? (
+                // Show loading while checking sessions to prevent locked overlay flash
+                <div className={`${isLight ? 'bg-stone-300' : 'bg-gray-800'} rounded-lg border ${isLight ? 'border-stone-400' : 'border-gray-700'} overflow-hidden h-96`}>
+                  <div className={`${isLight ? 'bg-stone-400' : 'bg-gray-900'} p-4`}>
+                    <h2 className={`text-lg font-semibold ${textColor}`}>Sentiment Scores</h2>
+                  </div>
+                  <div className="flex flex-col items-center justify-center p-12 text-center">
+                    <Loader2 className="text-blue-500 animate-spin mb-4" size={32} />
+                    <h3 className={`text-lg font-semibold ${textColor} mb-2`}>
+                      Checking Access...
+                    </h3>
+                    <p className={`text-sm ${mutedTextColor} mb-4`}>
+                      Verifying component access...
+                    </p>
+                    <div className="w-full max-w-md">
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                        <div className="bg-blue-500 h-2 rounded-full transition-all duration-500" style={{ width: '50%' }}></div>
+                      </div>
+                      <div className={`text-xs ${mutedTextColor} mt-2 text-center`}>
+                        Checking access...
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : unlockedComponents.scores ? (
               <SentimentScoresSection 
                 redditSentiments={topSentiments}
                 finvizSentiments={finvizSentiments}
@@ -653,12 +707,32 @@ const SentimentDashboard: React.FC = () => {
                            unlockedComponents.reddit ? 'posts' : 'locked'
               });
               return null;
-            })()}
-            {checkingApiKeys ? (
-              // Loading state while checking API keys
-              <div className={`${isLight ? 'bg-stone-300' : 'bg-gray-800'} rounded-lg p-6 border ${isLight ? 'border-stone-400' : 'border-gray-700'} text-center`}>
-                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-500" />
-                <p className={`${mutedTextColor}`}>Checking Reddit configuration...</p>
+
+})()}
+            {/* Show unified loading state during ANY verification step */}
+            {(isCheckingSessions || checkingApiKeys) ? (
+              // Show loading while checking sessions or API keys to prevent empty state flash
+              <div className={`${isLight ? 'bg-stone-300' : 'bg-gray-800'} rounded-lg border ${isLight ? 'border-stone-400' : 'border-gray-700'} overflow-hidden h-96`}>
+                <div className={`${isLight ? 'bg-stone-400' : 'bg-gray-900'} p-4`}>
+                  <h2 className={`text-lg font-semibold ${textColor}`}>Reddit Posts</h2>
+                </div>
+                <div className="flex flex-col items-center justify-center p-12 text-center">
+                  <Loader2 className="text-blue-500 animate-spin mb-4" size={32} />
+                  <h3 className={`text-lg font-semibold ${textColor} mb-2`}>
+                    Checking Access...
+                  </h3>
+                  <p className={`text-sm ${mutedTextColor} mb-4`}>
+                    {isCheckingSessions ? 'Verifying session access...' : 'Checking Reddit configuration...'}
+                  </p>
+                  <div className="w-full max-w-md">
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                      <div className="bg-blue-500 h-2 rounded-full transition-all duration-500" style={{ width: '50%' }}></div>
+                    </div>
+                    <div className={`text-xs ${mutedTextColor} mt-2 text-center`}>
+                      {isCheckingSessions ? 'Checking access...' : 'Validating API keys...'}
+                    </div>
+                  </div>
+                </div>
               </div>
             ) : !hasRedditTierAccess ? (
               // Free users - show upgrade card
@@ -693,7 +767,31 @@ const SentimentDashboard: React.FC = () => {
           {/* Sidebar - Hidden on mobile, shown on xl+ */}
           <div className="hidden xl:block xl:w-1/3 space-y-6">
             {/* Sentiment Scores Section */}
-              {unlockedComponents.scores ? (
+            {isCheckingSessions ? (
+              // Show loading while checking sessions to prevent locked overlay flash
+              <div className={`${isLight ? 'bg-stone-300' : 'bg-gray-800'} rounded-lg border ${isLight ? 'border-stone-400' : 'border-gray-700'} overflow-hidden h-96`}>
+                <div className={`${isLight ? 'bg-stone-400' : 'bg-gray-900'} p-4`}>
+                  <h2 className={`text-lg font-semibold ${textColor}`}>Sentiment Scores</h2>
+                </div>
+                <div className="flex flex-col items-center justify-center p-12 text-center">
+                  <Loader2 className="text-blue-500 animate-spin mb-4" size={32} />
+                  <h3 className={`text-lg font-semibold ${textColor} mb-2`}>
+                    Checking Access...
+                  </h3>
+                  <p className={`text-sm ${mutedTextColor} mb-4`}>
+                    Verifying component access...
+                  </p>
+                  <div className="w-full max-w-md">
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                      <div className="bg-blue-500 h-2 rounded-full transition-all duration-500" style={{ width: '50%' }}></div>
+                    </div>
+                    <div className={`text-xs ${mutedTextColor} mt-2 text-center`}>
+                      Checking access...
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : unlockedComponents.scores ? (
             <SentimentScoresSection 
               redditSentiments={topSentiments}
               finvizSentiments={finvizSentiments}

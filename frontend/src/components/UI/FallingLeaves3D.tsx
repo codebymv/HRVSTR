@@ -5,23 +5,49 @@ interface FallingLeaves3DProps {
   width?: number;
   height?: number;
   leafCount?: number;
+  isPremium?: boolean;
+  isLightTheme?: boolean;
 }
 
 const FallingLeaves3D: React.FC<FallingLeaves3DProps> = ({
   width = 128,
   height = 128,
-  leafCount = 6
+  leafCount = 6,
+  isPremium = false,
+  isLightTheme = false
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const animationIdRef = useRef<number>();
 
-  const createLeafShape = () => {
+  // Create more varied leaf shapes for premium experience
+  const createLeafShape = (variation = 0) => {
     const shape = new THREE.Shape();
-    shape.moveTo(0, 0.5);
-    shape.quadraticCurveTo(0.3, 0.3, 0.2, 0);
-    shape.quadraticCurveTo(0.3, -0.3, 0, -0.5);
-    shape.quadraticCurveTo(-0.3, -0.3, -0.2, 0);
-    shape.quadraticCurveTo(-0.3, 0.3, 0, 0.5);
+    
+    // Basic leaf shape
+    if (variation === 0) {
+      shape.moveTo(0, 0.5);
+      shape.quadraticCurveTo(0.3, 0.3, 0.2, 0);
+      shape.quadraticCurveTo(0.3, -0.3, 0, -0.5);
+      shape.quadraticCurveTo(-0.3, -0.3, -0.2, 0);
+      shape.quadraticCurveTo(-0.3, 0.3, 0, 0.5);
+    } 
+    // Elongated leaf
+    else if (variation === 1) {
+      shape.moveTo(0, 0.6);
+      shape.quadraticCurveTo(0.2, 0.4, 0.15, 0.1);
+      shape.quadraticCurveTo(0.3, -0.2, 0, -0.6);
+      shape.quadraticCurveTo(-0.3, -0.2, -0.15, 0.1);
+      shape.quadraticCurveTo(-0.2, 0.4, 0, 0.6);
+    }
+    // Rounder leaf
+    else {
+      shape.moveTo(0, 0.45);
+      shape.quadraticCurveTo(0.35, 0.25, 0.25, 0);
+      shape.quadraticCurveTo(0.35, -0.25, 0, -0.45);
+      shape.quadraticCurveTo(-0.35, -0.25, -0.25, 0);
+      shape.quadraticCurveTo(-0.35, 0.25, 0, 0.45);
+    }
+    
     return new THREE.ShapeGeometry(shape);
   };
 
@@ -37,20 +63,30 @@ const FallingLeaves3D: React.FC<FallingLeaves3DProps> = ({
     renderer.setClearColor(0x000000, 0);
     mountRef.current.appendChild(renderer.domElement);
 
-    // Lighting
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+    // Enhanced lighting for premium feel
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
     dirLight.position.set(2, 5, 3);
     scene.add(dirLight);
+    
+    // Add subtle point light for highlights
+    const pointLight = new THREE.PointLight(0x4477ff, 0.2, 10);
+    pointLight.position.set(0, 2, 2);
+    scene.add(pointLight);
 
-    // Geometry + Material
-    const sharedGeometry = createLeafShape();
+    // Create leaf geometries with variations
+    const leafGeometries = [
+      createLeafShape(0),
+      createLeafShape(1),
+      createLeafShape(2)
+    ];
+
+    // Base material with premium settings
     const baseMaterial = new THREE.MeshLambertMaterial({
-      color: 0xffffff,
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.7, // Reduced opacity
       emissive: 0x222222,
-      emissiveIntensity: 0.03,
+      emissiveIntensity: 0.03, // Reduced intensity
       side: THREE.DoubleSide
     });
 
@@ -62,55 +98,117 @@ const FallingLeaves3D: React.FC<FallingLeaves3DProps> = ({
       swayStrength: number;
       initialX: number;
       zDepth: number;
+      rotationSpeed: number;
     }> = [];
 
+    // Create more dynamic field of leaves
     for (let i = 0; i < leafCount; i++) {
-      const leaf = new THREE.Mesh(sharedGeometry.clone(), baseMaterial.clone());
-      const size = 0.7 + Math.random() * 0.6;
-      const hueShift = 0.02 * (Math.random() - 0.5);
-      const color = new THREE.Color().setHSL(0, 0, 0.9 + hueShift);
+      // Randomly select geometry variation
+      const geometryIndex = Math.floor(Math.random() * leafGeometries.length);
+      const leafGeometry = leafGeometries[geometryIndex];
+      
+      const leaf = new THREE.Mesh(leafGeometry.clone(), baseMaterial.clone());
+      // Smaller leaf size
+      const size = 0.5 + Math.random() * 0.4;
+
+      // Enhanced color palette - subtle blue-green-teal gradient for premium look
+      let hue, saturation, lightness;
+      if (isPremium) {
+        // Premium leaves have a blue-teal palette
+        hue = 180 + Math.random() * 40; // 180-220 (blue to teal range)
+        saturation = 40 + Math.random() * 30; // 40-70%
+        
+        // Adjust lightness based on theme for better contrast
+        if (isLightTheme) {
+          lightness = 20 + Math.random() * 30; // 20-50%, darker for light theme
+        } else {
+          lightness = 35 + Math.random() * 35; // 35-70%, lighter for dark theme
+        }
+      } else {
+        // Default leaves are green
+        hue = 80 + Math.random() * 40; // 80-120 (green range)
+        saturation = 30 + Math.random() * 30; // 30-60%
+        
+        // Adjust lightness based on theme for better contrast
+        if (isLightTheme) {
+          lightness = 20 + Math.random() * 25; // 20-45%, darker for light theme
+        } else {
+          lightness = 30 + Math.random() * 30; // 30-60%, lighter for dark theme
+        }
+      }
+      
+      const color = new THREE.Color().setHSL(hue, saturation, lightness);
       (leaf.material as THREE.MeshLambertMaterial).color = color;
 
-      const z = (Math.random() - 0.5) * 1.5;
+      // More distributed z-depth for parallax effect
+      const z = (Math.random() - 0.5) * 3;
       leaf.scale.setScalar(size * (1 - Math.abs(z) * 0.2));
 
-      leaf.position.set((Math.random() - 0.5) * 4, 3 + Math.random() * 2, z);
-      leaf.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+      // Wider distribution horizontally and vertically
+      const spreadFactor = width > 400 ? 6 : 4;
+      leaf.position.set(
+        (Math.random() - 0.5) * spreadFactor, 
+        3 + Math.random() * 4, 
+        z
+      );
+      
+      leaf.rotation.set(
+        Math.random() * Math.PI, 
+        Math.random() * Math.PI, 
+        Math.random() * Math.PI
+      );
 
       scene.add(leaf);
 
       leaves.push({
         mesh: leaf,
-        fallSpeed: 0.01 + Math.random() * 0.01,
+        fallSpeed: 0.005 + Math.random() * 0.01, // Slightly slower for elegance
         tumbleAxis: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(),
         phase: Math.random() * Math.PI * 2,
         swayStrength: 0.3 + Math.random() * 0.4,
         initialX: leaf.position.x,
-        zDepth: z
+        zDepth: z,
+        rotationSpeed: 0.005 + Math.random() * 0.01 // Variable rotation speed
       });
     }
 
     const animate = () => {
       animationIdRef.current = requestAnimationFrame(animate);
-      const t = Date.now() * 0.001;
+      const t = Date.now() * 0.0005; // Slower time factor for more elegant motion
+
+      // Subtle movement for point light to create dynamic lighting
+      pointLight.position.x = Math.sin(t * 0.5) * 2;
+      pointLight.position.z = Math.cos(t * 0.5) * 2 + 3;
 
       for (const leaf of leaves) {
-        const { mesh, fallSpeed, tumbleAxis, phase, swayStrength, initialX } = leaf;
+        const { mesh, fallSpeed, tumbleAxis, phase, swayStrength, initialX, rotationSpeed, zDepth } = leaf;
 
-        const yFlutter = Math.sin(t * 2 + phase) * 0.3;
+        // More complex vertical motion with multiple sine waves
+        const yFlutter = 
+          Math.sin(t * 2 + phase) * 0.3 + 
+          Math.sin(t * 3.7 + phase * 2) * 0.1;
+          
         mesh.position.y -= fallSpeed * (1 + yFlutter);
 
-        const sway = Math.sin(t * 1.5 + phase) * swayStrength;
+        // Enhanced horizontal sway with dual frequency
+        const sway = 
+          Math.sin(t * 1.2 + phase) * swayStrength + 
+          Math.sin(t * 2.3 + phase * 0.7) * (swayStrength * 0.3);
+          
         mesh.position.x = initialX + sway;
 
-        mesh.position.z += Math.cos(t + phase) * 0.004;
+        // Z-axis motion for depth
+        mesh.position.z += Math.cos(t + phase) * 0.002;
 
-        mesh.rotateOnAxis(tumbleAxis, 0.01);
+        // Variable rotation speed based on z position (parallax)
+        mesh.rotateOnAxis(tumbleAxis, rotationSpeed * (1 - Math.abs(zDepth) * 0.1));
 
+        // Reset position when leaf falls below view
         if (mesh.position.y < -3.5) {
-          mesh.position.y = 3 + Math.random() * 2;
-          mesh.position.x = (Math.random() - 0.5) * 4;
-          mesh.position.z = (Math.random() - 0.5) * 1.5;
+          const spreadFactor = width > 400 ? 6 : 4;
+          mesh.position.y = 4 + Math.random() * 3;
+          mesh.position.x = (Math.random() - 0.5) * spreadFactor;
+          mesh.position.z = (Math.random() - 0.5) * 3;
           leaf.initialX = mesh.position.x;
         }
       }
@@ -125,11 +223,24 @@ const FallingLeaves3D: React.FC<FallingLeaves3DProps> = ({
       if (mountRef.current && renderer.domElement) {
         mountRef.current.removeChild(renderer.domElement);
       }
+      // Clean up all resources
       renderer.dispose();
-      sharedGeometry.dispose();
+      leafGeometries.forEach(geometry => geometry.dispose());
       baseMaterial.dispose();
+      scene.traverse(object => {
+        if (object instanceof THREE.Mesh) {
+          if (object.geometry) object.geometry.dispose();
+          if (object.material) {
+            if (Array.isArray(object.material)) {
+              object.material.forEach(material => material.dispose());
+            } else {
+              object.material.dispose();
+            }
+          }
+        }
+      });
     };
-  }, [width, height, leafCount]);
+  }, [width, height, leafCount, isPremium]);
 
   return (
     <div

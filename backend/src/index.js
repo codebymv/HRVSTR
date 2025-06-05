@@ -28,6 +28,7 @@ const finvizRoutes = require('./routes/proxy/finviz');
 const secRoutes = require('./routes/proxy/sec');
 const earningsRoutes = require('./routes/proxy/earnings');
 const sentimentRoutes = require('./routes/proxy/sentiment');
+const sentimentUnifiedRoutes = require('./routes/sentimentUnified');
 const yahooRoutes = require('./routes/proxy/yahoo');
 const watchlistRoutes = require('./routes/watchlist');
 const authRoutes = require('./routes/auth');
@@ -160,13 +161,14 @@ app.get('/api/status', async (req, res) => {
         cors: 'operational'
       },
       endpoints: {
-        total: 25,
+        total: 35,
         available: [
           '/api/reddit/*',
           '/api/finviz/*',
           '/api/sec/*',
           '/api/earnings/*',
           '/api/sentiment/*',
+          '/api/sentiment-unified/*',
           '/api/yahoo/*',
           '/api/watchlist',
           '/api/auth',
@@ -230,6 +232,17 @@ app.get('/', (req, res) => {
       '/api/sentiment/reddit/market',
       '/api/sentiment/finviz/tickers',
       '/api/sentiment/aggregate',
+      '/api/sentiment-unified/reddit/tickers',
+      '/api/sentiment-unified/yahoo/tickers',
+      '/api/sentiment-unified/finviz/tickers',
+      '/api/sentiment-unified/combined/tickers',
+      '/api/sentiment-unified/reddit/market',
+      '/api/sentiment-unified/yahoo/market',
+      '/api/sentiment-unified/finviz/market',
+      '/api/sentiment-unified/aggregated/market',
+      '/api/sentiment-unified/stream',
+      '/api/sentiment-unified/cache/status',
+      '/api/sentiment-unified/health',
       '/api/settings/key-status',
       '/api/settings/update-keys',
       '/api/settings/keys',
@@ -254,6 +267,7 @@ app.use('/api/finviz', finvizRoutes);
 app.use('/api/sec', secRoutes);
 app.use('/api/earnings', earningsRoutes);
 app.use('/api/sentiment', sentimentRoutes);
+app.use('/api/sentiment-unified', sentimentUnifiedRoutes);
 app.use('/api/yahoo', yahooRoutes);
 app.use('/api/watchlist', watchlistRoutes);
 app.use('/api/auth', authLimiter, authRoutes);

@@ -158,16 +158,17 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
 
   // Reset displayed items when data source or sentiments change
   useEffect(() => {
-    console.log('[CARD RENDER] Resetting for dataSource:', dataSource, 'length:', currentSentiments.length);
+    const sentiments = getSentimentData();
+    console.log('[CARD RENDER] Resetting for dataSource:', dataSource, 'length:', sentiments.length);
     
-    const initialItems = currentSentiments.slice(0, ITEMS_PER_PAGE);
-    console.log('[CARD RENDER] Initial items:', initialItems.length, 'from total:', currentSentiments.length);
+    const initialItems = sentiments.slice(0, ITEMS_PER_PAGE);
+    console.log('[CARD RENDER] Initial items:', initialItems.length, 'from total:', sentiments.length);
     
     setDisplayedItems(initialItems);
-    setHasMore(ITEMS_PER_PAGE < currentSentiments.length);
+    setHasMore(ITEMS_PER_PAGE < sentiments.length);
     setIsLoadingMore(false);
     isLoadingMoreRef.current = false;
-  }, [dataSource, redditSentiments, finvizSentiments, yahooSentiments, combinedSentiments, currentSentiments]);
+  }, [dataSource, redditSentiments, finvizSentiments, yahooSentiments, combinedSentiments]);
 
   // Debug conditional rendering
   useEffect(() => {

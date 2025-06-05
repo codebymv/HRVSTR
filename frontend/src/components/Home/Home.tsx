@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { BarChart2, ListChecks, TrendingUp, ArrowRight, Eye, Star, Map, MoreHorizontal } from 'lucide-react';
+import BackgroundLeaves from '../UI/BackgroundLeaves';
 import { 
   SentimentPreview, 
   EarningsPreview, 
@@ -84,7 +85,13 @@ const Home: React.FC = () => {
   ];
 
   return (
-    <div className={`min-h-screen ${bgColor}`}>
+    <div className={`min-h-screen ${bgColor} relative overflow-hidden`}>
+      {/* Premium Background Animation */}
+      <BackgroundLeaves 
+        opacity={isLight ? 0.15 : 0.07} 
+        leafCount={12}
+        isLight={isLight}
+      />
       {/* Hero Section */}
       <div className="container mx-auto px-4 py-16">
         <div className="text-center mb-16">

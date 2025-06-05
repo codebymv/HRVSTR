@@ -5,7 +5,7 @@ import FallingLeaves3D from './FallingLeaves3D';
 interface HarvestLoadingCardProps {
   progress: number;
   stage: string;
-  operation: 'insider-trading' | 'institutional-holdings' | 'earnings-calendar' | 'earnings-analysis';
+  operation: 'insider-trading' | 'institutional-holdings' | 'earnings-calendar' | 'earnings-analysis' | 'sentiment-chart' | 'sentiment-scores' | 'sentiment-reddit';
   className?: string;
 }
 
@@ -50,6 +50,24 @@ const HarvestLoadingCard: React.FC<HarvestLoadingCardProps> = ({
       subtitle: "Processing earnings history, surprises, and financial metrics...",
       animation: "📊", 
       creditCost: "8 credits"
+    },
+    'sentiment-chart': {
+      title: "📈 Harvesting Sentiment Trends",
+      subtitle: "Analyzing market sentiment patterns and temporal data...",
+      animation: "📊",
+      creditCost: "12 credits"
+    },
+    'sentiment-scores': {
+      title: "🎯 Cultivating Sentiment Scores", 
+      subtitle: "Processing ticker sentiment data from multiple sources...",
+      animation: "⚖️",
+      creditCost: "8 credits"
+    },
+    'sentiment-reddit': {
+      title: "🔥 Harvesting Reddit Intelligence",
+      subtitle: "Gathering social sentiment from Reddit discussions and posts...",
+      animation: "💬",
+      creditCost: "10 credits"
     }
   };
 
