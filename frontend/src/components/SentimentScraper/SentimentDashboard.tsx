@@ -54,6 +54,9 @@ const SentimentDashboard: React.FC = () => {
   // Add state to track when we're checking sessions (prevents locked overlay flash)
   const [isCheckingSessions, setIsCheckingSessions] = useState(true);
   
+  // Flag to prevent session re-check immediately after unlock
+  const [justUnlocked, setJustUnlocked] = useState<string | null>(null);
+  
   // Time range state
   const [timeRange, setTimeRange] = useState<TimeRange>('1w');
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -124,7 +127,11 @@ const SentimentDashboard: React.FC = () => {
   // Ensure both tier info and API key check are complete before starting data loading
   const isSystemReady = !checkingApiKeys && tierInfo !== null;
   
+  // Combined ready state - ensures loading persists until ALL verifications complete
+  const isFullyReady = !isCheckingSessions && !checkingApiKeys && tierInfo !== null;
+  
   // Use sentiment data hook - now with correct Reddit access based on tier + API keys
+  // 🔧 FIX: Use isFullyReady instead of isSystemReady to prevent multiple hook calls during verification
   const {
     topSentiments,
     finvizSentiments,
@@ -140,24 +147,24 @@ const SentimentDashboard: React.FC = () => {
     handleLoadMorePosts: originalHandleLoadMorePosts,
     isDataLoading,
     refreshData: originalRefreshData
-  } = useSentimentData(timeRange, stableRedditAccess, isSystemReady);
+  } = useSentimentData(timeRange, stableRedditAccess, isFullyReady);
 
   // Debug logging for hook parameters
   useEffect(() => {
     console.log('🎯 SENTIMENT HOOK PARAMS:', {
       timeRange,
       stableRedditAccess,
-      isSystemReady,
+      isFullyReady,
       hookCalled: true
     });
-  }, [timeRange, stableRedditAccess, isSystemReady]);
+  }, [timeRange, stableRedditAccess, isFullyReady]);
 
   // Debug logging for sentiment data
   useEffect(() => {
     console.log('🔍 SENTIMENT DATA DEBUG:', {
       currentTier,
       stableRedditAccess,
-      isSystemReady,
+      isFullyReady,
       topSentimentsLength: topSentiments.length,
       finvizSentimentsLength: finvizSentiments.length,
       yahooSentimentsLength: yahooSentiments.length,
@@ -166,7 +173,7 @@ const SentimentDashboard: React.FC = () => {
       loadingStates: loading,
       errors
     });
-  }, [currentTier, stableRedditAccess, isSystemReady, topSentiments, finvizSentiments, yahooSentiments, combinedSentiments, redditPosts, loading, errors]);
+  }, [currentTier, stableRedditAccess, isFullyReady, topSentiments, finvizSentiments, yahooSentiments, combinedSentiments, redditPosts, loading, errors]);
 
   // Refresh data handler
   const refreshData = () => {
@@ -244,6 +251,12 @@ const SentimentDashboard: React.FC = () => {
     if (!tierInfo) return;
     
     const checkExistingSessions = async () => {
+      // Skip session check if a component was just unlocked to prevent flicker
+      if (justUnlocked) {
+        console.log(`🔄 SKIPPING session check - ${justUnlocked} just unlocked`);
+        return;
+      }
+      
       setIsCheckingSessions(true);
       try {
         const chartSession = await checkComponentAccess('chart', currentTier);
@@ -290,7 +303,7 @@ const SentimentDashboard: React.FC = () => {
     // Check for expired sessions every minute for all users
     const interval = setInterval(checkExistingSessions, 60000);
     return () => clearInterval(interval);
-  }, [tierInfo, currentTier]);
+  }, [tierInfo, currentTier, justUnlocked]);
 
   // Custom handleLoadMorePosts with tier limit checking
   const handleLoadMorePosts = () => {
@@ -353,6 +366,10 @@ const SentimentDashboard: React.FC = () => {
       }
       
       if (data.success) {
+        // Set flag to prevent immediate session re-check
+        setJustUnlocked(component);
+        setTimeout(() => setJustUnlocked(null), 2000); // Clear after 2 seconds
+        
         // Update component state
         setUnlockedComponents(prev => ({
           ...prev,
@@ -378,9 +395,9 @@ const SentimentDashboard: React.FC = () => {
           info(`${data.creditsUsed} credits used`);
         }
         
-        // Refresh tier info to update usage meter
+        // Refresh tier info to update usage meter (but don't await to prevent UI flicker)
         if (refreshTierInfo) {
-          await refreshTierInfo();
+          refreshTierInfo(); // Run in background to avoid triggering re-checks
         }
       }
       
@@ -556,9 +573,9 @@ const SentimentDashboard: React.FC = () => {
                   (unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)
                     ? `${isLight ? 'bg-blue-500' : 'bg-blue-600'} hover:${isLight ? 'bg-blue-600' : 'bg-blue-700'} text-white` // Unlocked: normal blue
                     : 'bg-gray-400 cursor-not-allowed text-gray-200' // Locked: grayed out
-                } ${isDataLoading ? 'opacity-50' : ''}`}
+                } ${(isDataLoading || loading.chart || loading.scores || loading.reddit) ? 'opacity-50' : ''}`}
                 onClick={refreshData}
-                disabled={isDataLoading || !(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)}
+                disabled={(isDataLoading || loading.chart || loading.scores || loading.reddit) || !(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)}
                 title={
                   (unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)
                     ? 'Refresh sentiment data'
@@ -566,7 +583,7 @@ const SentimentDashboard: React.FC = () => {
                 }
               >
                 {/* Only show spinner if components are unlocked AND loading */}
-                {(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit) && isDataLoading ? (
+                {(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit) && (isDataLoading || loading.chart || loading.scores || loading.reddit) ? (
                   <Loader2 size={18} className="text-white animate-spin" />
                 ) : (
                   <RefreshCw size={18} className={
@@ -644,7 +661,7 @@ const SentimentDashboard: React.FC = () => {
             
             {/* Sentiment Scores Section - Show on mobile between chart and reddit */}
             <div className="xl:hidden">
-              {isCheckingSessions ? (
+              {!isFullyReady ? (
                 // Show loading while checking sessions to prevent locked overlay flash
                 <div className={`${isLight ? 'bg-stone-300' : 'bg-gray-800'} rounded-lg border ${isLight ? 'border-stone-400' : 'border-gray-700'} overflow-hidden h-96`}>
                   <div className={`${isLight ? 'bg-stone-400' : 'bg-gray-900'} p-4`}>
@@ -656,14 +673,20 @@ const SentimentDashboard: React.FC = () => {
                       Checking Access...
                     </h3>
                     <p className={`text-sm ${mutedTextColor} mb-4`}>
-                      Verifying component access...
+                      {isCheckingSessions && checkingApiKeys ? 'Verifying access and configuration...' :
+                       isCheckingSessions ? 'Verifying component access...' : 
+                       checkingApiKeys ? 'Checking configuration...' :
+                       'Finalizing setup...'}
                     </p>
                     <div className="w-full max-w-md">
                       <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                         <div className="bg-blue-500 h-2 rounded-full transition-all duration-500" style={{ width: '50%' }}></div>
                       </div>
                       <div className={`text-xs ${mutedTextColor} mt-2 text-center`}>
-                        Checking access...
+                        {isCheckingSessions && checkingApiKeys ? 'Running verifications...' :
+                         isCheckingSessions ? 'Checking access...' : 
+                         checkingApiKeys ? 'Validating setup...' :
+                         'Almost ready...'}
                       </div>
                     </div>
                   </div>
@@ -697,11 +720,14 @@ const SentimentDashboard: React.FC = () => {
             {/* Reddit Posts Section - Now appears last on mobile */}
             {(() => {
               console.log('🔍 REDDIT RENDER DEBUG:', {
+                isCheckingSessions,
                 checkingApiKeys,
+                tierInfo: tierInfo !== null,
+                isFullyReady,
                 hasRedditTierAccess,
                 redditApiKeysConfigured,
                 'unlockedComponents.reddit': unlockedComponents.reddit,
-                renderPath: checkingApiKeys ? 'loading' : 
+                renderPath: !isFullyReady ? 'loading' : 
                            !hasRedditTierAccess ? 'upgrade' :
                            !redditApiKeysConfigured ? 'setup' :
                            unlockedComponents.reddit ? 'posts' : 'locked'
@@ -709,8 +735,8 @@ const SentimentDashboard: React.FC = () => {
               return null;
 
 })()}
-            {/* Show unified loading state during ANY verification step */}
-            {(isCheckingSessions || checkingApiKeys) ? (
+            {/* Show unified loading state until ALL verifications complete */}
+            {!isFullyReady ? (
               // Show loading while checking sessions or API keys to prevent empty state flash
               <div className={`${isLight ? 'bg-stone-300' : 'bg-gray-800'} rounded-lg border ${isLight ? 'border-stone-400' : 'border-gray-700'} overflow-hidden h-96`}>
                 <div className={`${isLight ? 'bg-stone-400' : 'bg-gray-900'} p-4`}>
@@ -722,14 +748,20 @@ const SentimentDashboard: React.FC = () => {
                     Checking Access...
                   </h3>
                   <p className={`text-sm ${mutedTextColor} mb-4`}>
-                    {isCheckingSessions ? 'Verifying session access...' : 'Checking Reddit configuration...'}
+                    {isCheckingSessions && checkingApiKeys ? 'Verifying access and configuration...' :
+                     isCheckingSessions ? 'Verifying session access...' : 
+                     checkingApiKeys ? 'Checking Reddit configuration...' :
+                     'Finalizing setup...'}
                   </p>
                   <div className="w-full max-w-md">
                     <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                       <div className="bg-blue-500 h-2 rounded-full transition-all duration-500" style={{ width: '50%' }}></div>
                     </div>
                     <div className={`text-xs ${mutedTextColor} mt-2 text-center`}>
-                      {isCheckingSessions ? 'Checking access...' : 'Validating API keys...'}
+                      {isCheckingSessions && checkingApiKeys ? 'Running verifications...' :
+                       isCheckingSessions ? 'Checking access...' : 
+                       checkingApiKeys ? 'Validating API keys...' :
+                       'Almost ready...'}
                     </div>
                   </div>
                 </div>
@@ -767,7 +799,7 @@ const SentimentDashboard: React.FC = () => {
           {/* Sidebar - Hidden on mobile, shown on xl+ */}
           <div className="hidden xl:block xl:w-1/3 space-y-6">
             {/* Sentiment Scores Section */}
-            {isCheckingSessions ? (
+            {!isFullyReady ? (
               // Show loading while checking sessions to prevent locked overlay flash
               <div className={`${isLight ? 'bg-stone-300' : 'bg-gray-800'} rounded-lg border ${isLight ? 'border-stone-400' : 'border-gray-700'} overflow-hidden h-96`}>
                 <div className={`${isLight ? 'bg-stone-400' : 'bg-gray-900'} p-4`}>
@@ -779,14 +811,20 @@ const SentimentDashboard: React.FC = () => {
                     Checking Access...
                   </h3>
                   <p className={`text-sm ${mutedTextColor} mb-4`}>
-                    Verifying component access...
+                    {isCheckingSessions && checkingApiKeys ? 'Verifying access and configuration...' :
+                     isCheckingSessions ? 'Verifying component access...' : 
+                     checkingApiKeys ? 'Checking configuration...' :
+                     'Finalizing setup...'}
                   </p>
                   <div className="w-full max-w-md">
                     <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                       <div className="bg-blue-500 h-2 rounded-full transition-all duration-500" style={{ width: '50%' }}></div>
                     </div>
                     <div className={`text-xs ${mutedTextColor} mt-2 text-center`}>
-                      Checking access...
+                      {isCheckingSessions && checkingApiKeys ? 'Running verifications...' :
+                       isCheckingSessions ? 'Checking access...' : 
+                       checkingApiKeys ? 'Validating setup...' :
+                       'Almost ready...'}
                     </div>
                   </div>
                 </div>
