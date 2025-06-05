@@ -163,12 +163,42 @@ export function generateChartData(sentimentData: SentimentData[], timeRange: Tim
         });
       }
       
+      // Ensure percentages always sum to exactly 100% by handling rounding properly
+      let roundedBullish = Math.round(adjustedBullish);
+      let roundedNeutral = Math.round(adjustedNeutral);
+      let roundedBearish = Math.round(adjustedBearish);
+      
+      // Calculate the difference from 100% due to rounding
+      const sum = roundedBullish + roundedNeutral + roundedBearish;
+      const difference = 100 - sum;
+      
+      // Adjust the largest percentage to ensure sum equals 100%
+      if (difference !== 0) {
+        const values = [
+          { type: 'bullish', value: roundedBullish, original: adjustedBullish },
+          { type: 'neutral', value: roundedNeutral, original: adjustedNeutral },
+          { type: 'bearish', value: roundedBearish, original: adjustedBearish }
+        ];
+        
+        // Sort by original (unrounded) value to find which one to adjust
+        values.sort((a, b) => b.original - a.original);
+        
+        // Adjust the largest percentage
+        if (values[0].type === 'bullish') {
+          roundedBullish += difference;
+        } else if (values[0].type === 'neutral') {
+          roundedNeutral += difference;
+        } else {
+          roundedBearish += difference;
+        }
+      }
+
       result.push({
         date: pointDate.toISOString(),
         displayDate,
-        bullish: Math.round(adjustedBullish),
-        neutral: Math.round(adjustedNeutral),
-        bearish: Math.round(adjustedBearish),
+        bullish: roundedBullish,
+        neutral: roundedNeutral,
+        bearish: roundedBearish,
         sources: sourceDistribution,
         isSynthetic: true, // Flag to identify synthetic data
         syntheticInfo: {
@@ -339,12 +369,42 @@ export function generateChartData(sentimentData: SentimentData[], timeRange: Tim
       ? firstDate.toLocaleTimeString('en-US', { hour: '2-digit', hour12: true })
       : firstDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     
+    // Ensure percentages always sum to exactly 100% by handling rounding properly
+    let roundedBullish = Math.round(bullish);
+    let roundedNeutral = Math.round(neutral);
+    let roundedBearish = Math.round(bearish);
+    
+    // Calculate the difference from 100% due to rounding
+    const sum = roundedBullish + roundedNeutral + roundedBearish;
+    const difference = 100 - sum;
+    
+    // Adjust the largest percentage to ensure sum equals 100%
+    if (difference !== 0) {
+      const values = [
+        { type: 'bullish', value: roundedBullish, original: bullish },
+        { type: 'neutral', value: roundedNeutral, original: neutral },
+        { type: 'bearish', value: roundedBearish, original: bearish }
+      ];
+      
+      // Sort by original (unrounded) value to find which one to adjust
+      values.sort((a, b) => b.original - a.original);
+      
+      // Adjust the largest percentage
+      if (values[0].type === 'bullish') {
+        roundedBullish += difference;
+      } else if (values[0].type === 'neutral') {
+        roundedNeutral += difference;
+      } else {
+        roundedBearish += difference;
+      }
+    }
+
     return {
       date: key,
       displayDate,
-      bullish: Math.round(bullish),
-      neutral: Math.round(neutral),
-      bearish: Math.round(bearish),
+      bullish: roundedBullish,
+      neutral: roundedNeutral,
+      bearish: roundedBearish,
       sources,
       isSynthetic: false // Flag to identify this as real historical data
     };

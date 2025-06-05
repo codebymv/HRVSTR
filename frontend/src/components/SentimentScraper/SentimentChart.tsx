@@ -239,7 +239,7 @@ const SentimentChart: React.FC<SentimentChartProps> = ({
       y: {
         stacked: true,
         beginAtZero: true,
-        suggestedMax: 100,
+        max: 100, // Hard maximum to ensure scale never exceeds 100%
         border: {
           color: isLight ? '#a8a29e' : '#374151', // stone-400 for light mode, gray-700 for dark
         },

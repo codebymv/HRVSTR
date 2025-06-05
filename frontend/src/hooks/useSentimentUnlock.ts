@@ -18,9 +18,9 @@ interface FreshUnlockState {
 
 // Credit costs for each component - MUST MATCH EXACT DATABASE COMPONENT NAMES
 const COMPONENT_COSTS = {
-  chart: 12,        // Changed from sentimentChart
-  scores: 8,        // Changed from sentimentScores  
-  reddit: 10,       // Changed from sentimentReddit
+  chart: 10,
+  scores: 8,
+  reddit: 12,
 };
 
 export const useSentimentUnlock = () => {
@@ -30,13 +30,13 @@ export const useSentimentUnlock = () => {
 
   // Component unlock state - managed by sessions - MATCH DATABASE COMPONENT NAMES
   const [unlockedComponents, setUnlockedComponents] = useState<{
-    chart: boolean;      // Changed from sentimentChart
-    scores: boolean;     // Changed from sentimentScores
-    reddit: boolean;     // Changed from sentimentReddit
+    chart: boolean;
+    scores: boolean;
+    reddit: boolean;
   }>({
-    chart: false,        // Changed from sentimentChart
-    scores: false,       // Changed from sentimentScores
-    reddit: false        // Changed from sentimentReddit
+    chart: false,
+    scores: false,
+    reddit: false
   });
 
   // Session state for time tracking
@@ -62,83 +62,55 @@ export const useSentimentUnlock = () => {
     const checkExistingSessions = async () => {
       setIsCheckingSessions(true);
       try {
-        // Use database-only checking - no more localStorage fallback
-        const chartSession = await checkComponentAccess('chart', currentTier);
-        const scoresSession = await checkComponentAccess('scores', currentTier);
-        const redditSession = await checkComponentAccess('reddit', currentTier);
+        const currentTierValue = tierInfo?.tier?.toLowerCase() || 'free';
+        const chartSession = await checkComponentAccess('chart', currentTierValue);
+        const scoresSession = await checkComponentAccess('scores', currentTierValue);
+        const redditSession = await checkComponentAccess('reddit', currentTierValue);
 
         const newUnlockedState = {
-          chart: !!chartSession,      // Changed from sentimentChart
-          scores: !!scoresSession,    // Changed from sentimentScores
-          reddit: !!redditSession     // Changed from sentimentReddit
+          chart: !!chartSession,
+          scores: !!scoresSession,
+          reddit: !!redditSession
         };
 
-        // Log session restoration scenarios
-        if (!unlockedComponents.chart && newUnlockedState.chart) {
-          if (chartSession) {
-            console.log('🎉 SENTIMENT DASHBOARD - Chart session restored from database!');
-          }
-        }
-
-        if (!unlockedComponents.scores && newUnlockedState.scores) {
-          if (scoresSession) {
-            console.log('🎉 SENTIMENT DASHBOARD - Scores session restored from database!');
-          }
-        }
-
-        if (!unlockedComponents.reddit && newUnlockedState.reddit) {
-          if (redditSession) {
-            console.log('🎉 SENTIMENT DASHBOARD - Reddit session restored from database!');
-          }
-        }
-
-        setUnlockedComponents(newUnlockedState);
-
-        // Update active sessions for display - NOW QUERIES DATABASE ONLY
-        const sessions = await getAllUnlockSessions(currentTier);
-        setActiveSessions(sessions);
-        
-        console.log('🔍 SENTIMENT DASHBOARD - Component access check (DATABASE ONLY):', {
+        console.log('🔍 SENTIMENT - Active sessions:', {
           chart: !!chartSession,
           scores: !!scoresSession,
           reddit: !!redditSession,
-          chartSessionId: chartSession?.sessionId,
-          scoresSessionId: scoresSession?.sessionId,
-          redditSessionId: redditSession?.sessionId,
-          currentTier: currentTier,
-          databaseSessions: sessions.length,
+          currentTier: currentTierValue,
           timestamp: Date.now()
         });
+
+        setUnlockedComponents(newUnlockedState);
+        console.log('🔍 SENTIMENT - Updated unlockedComponents state:', newUnlockedState);
+
+        const sessions = await getAllUnlockSessions(currentTierValue);
+        setActiveSessions(sessions);
       } catch (error) {
         console.warn('Database session check failed:', error);
-        // No more localStorage fallback - just set to false if database fails
         setUnlockedComponents({
           chart: false,
           scores: false,
           reddit: false
         });
-
         setActiveSessions([]);
       } finally {
         setIsCheckingSessions(false);
       }
     };
 
-    // Check sessions immediately
     checkExistingSessions();
-    
-    // Check for expired sessions every minute
     const interval = setInterval(checkExistingSessions, 60000);
     return () => clearInterval(interval);
   }, [tierInfo]);
 
   // Handlers for unlocking individual components
-  const handleUnlockComponent = async (component: 'chart' | 'scores' | 'reddit', cost: number): Promise<FreshUnlockState> => {
+  const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number): Promise<FreshUnlockState> => {
     // Check if already unlocked using database-only approach
     const existingSession = await checkComponentAccess(component, currentTier);
     if (existingSession) {
       const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
-      info(`${component} already unlocked (${timeRemaining})`);
+      info(`${component} already unlocked (${timeRemaining}h remaining)`);
       return {
         success: true,
         isExistingSession: true,
@@ -229,7 +201,7 @@ export const useSentimentUnlock = () => {
   };
 
   // Helper to set fresh unlock state (for cleanup after component loading)
-  const setFreshUnlockState = (component: 'chart' | 'scores' | 'reddit', value: boolean) => {
+  const setFreshUnlockState = (component: keyof typeof unlockedComponents, value: boolean) => {
     setIsFreshUnlock(prev => ({
       ...prev,
       [component]: value
@@ -245,7 +217,7 @@ export const useSentimentUnlock = () => {
   const hasAnySentimentAccess = hasChartAccess || hasScoresAccess || hasRedditAccess;
   
   // Get active session info for display
-  const getActiveSessionInfo = (component: 'chart' | 'scores' | 'reddit') => {
+  const getActiveSessionInfo = (component: keyof typeof unlockedComponents) => {
     const session = activeSessions.find(s => s.component === component && s.status === 'active');
     if (!session) return null;
     

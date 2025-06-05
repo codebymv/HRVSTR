@@ -84,9 +84,9 @@ const FallingLeaves3D: React.FC<FallingLeaves3DProps> = ({
     // Base material with premium settings
     const baseMaterial = new THREE.MeshLambertMaterial({
       transparent: true,
-      opacity: 0.7, // Reduced opacity
+      opacity: 0.85, // Increased opacity for better visibility
       emissive: 0x222222,
-      emissiveIntensity: 0.03, // Reduced intensity
+      emissiveIntensity: 0.05, // Slightly increased intensity
       side: THREE.DoubleSide
     });
 
@@ -116,24 +116,24 @@ const FallingLeaves3D: React.FC<FallingLeaves3DProps> = ({
       if (isPremium) {
         // Premium leaves have a blue-teal palette
         hue = 180 + Math.random() * 40; // 180-220 (blue to teal range)
-        saturation = 40 + Math.random() * 30; // 40-70%
+        saturation = 50 + Math.random() * 35; // 50-85% - increased for more vibrant colors
         
         // Adjust lightness based on theme for better contrast
         if (isLightTheme) {
-          lightness = 20 + Math.random() * 30; // 20-50%, darker for light theme
+          lightness = 25 + Math.random() * 35; // 25-60%, improved contrast for light theme
         } else {
-          lightness = 35 + Math.random() * 35; // 35-70%, lighter for dark theme
+          lightness = 45 + Math.random() * 40; // 45-85%, brighter for dark theme
         }
       } else {
         // Default leaves are green
         hue = 80 + Math.random() * 40; // 80-120 (green range)
-        saturation = 30 + Math.random() * 30; // 30-60%
+        saturation = 40 + Math.random() * 40; // 40-80% - increased for more vibrant colors
         
         // Adjust lightness based on theme for better contrast
         if (isLightTheme) {
-          lightness = 20 + Math.random() * 25; // 20-45%, darker for light theme
+          lightness = 25 + Math.random() * 30; // 25-55%, improved contrast for light theme
         } else {
-          lightness = 30 + Math.random() * 30; // 30-60%, lighter for dark theme
+          lightness = 40 + Math.random() * 35; // 40-75%, brighter for dark theme
         }
       }
       

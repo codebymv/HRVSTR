@@ -2,7 +2,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
 import Footer from './Footer';
-import SentimentDashboard from './SentimentScraper/SentimentDashboard';
+import SentimentMonitor from './SentimentScraper/SentimentMonitor';
 import HelpPage from './Help/HelpPage';
 import StatusPage from './Status/StatusPage';
 import { Routes, Route, Navigate } from 'react-router-dom';
@@ -81,7 +81,7 @@ const AppContent = () => {
             } />
             <Route path="/sentiment" element={
               <ProtectedRoute>
-                <SentimentDashboard />
+                <SentimentMonitor />
               </ProtectedRoute>
             } />
             <Route path="/sec-filings" element={

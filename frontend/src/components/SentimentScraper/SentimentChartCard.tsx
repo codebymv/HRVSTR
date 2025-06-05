@@ -3,14 +3,11 @@ import { ChartData, TimeRange } from '../../types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Info } from 'lucide-react';
 import SentimentChart from './SentimentChart';
-import TimeRangeSelector from './TimeRangeSelector';
 import LoadingCard from '../UI/LoadingCard';
 import ErrorCard from '../UI/ErrorCard';
 
 interface SentimentChartCardProps {
   chartData: ChartData[];
-  timeRange: TimeRange;
-  onTimeRangeChange: (range: TimeRange) => void;
   loading: boolean;
   isTransitioning: boolean;
   loadingProgress: number;
@@ -26,8 +23,6 @@ interface SentimentChartCardProps {
 
 const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
   chartData,
-  timeRange,
-  onTimeRangeChange,
   loading,
   isTransitioning,
   loadingProgress,
@@ -115,11 +110,6 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
     <div className={`${cardBgColor} rounded-lg p-4 lg:p-5 border ${borderColor}`}>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
         <h2 className={`text-lg font-semibold ${textColor}`}>Sentiment Overview</h2>
-        <TimeRangeSelector 
-          currentRange={timeRange}
-          onRangeChange={onTimeRangeChange}
-          isDisabled={isDataLoading}
-        />
       </div>
       {renderContent()}
     </div>

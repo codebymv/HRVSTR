@@ -9,7 +9,7 @@ import { fetchRedditPosts as fetchRedditPostsReal } from '../redditClient';
 export const fetchTickerSentiments = async (timeRange: TimeRange = '1w', signal?: AbortSignal): Promise<SentimentData[]> => {
   try {
     console.log(`[REDDIT API DEBUG] Starting fetchTickerSentiments call for timeRange: ${timeRange}`);
-    const url = buildApiUrl(`/api/sentiment/reddit/tickers?timeRange=${timeRange}`);
+    const url = buildApiUrl(`/api/sentiment-unified/reddit/tickers?timeRange=${timeRange}`);
     console.log(`[REDDIT API DEBUG] Making request to: ${url}`);
 
     const headers = getAuthHeaders();
@@ -79,7 +79,7 @@ export const fetchSentimentData = async (timeRange: TimeRange = '1w', signal?: A
   try {
     console.log(`[REDDIT MARKET SENTIMENT DEBUG] Starting fetchSentimentData for timeRange: ${timeRange}`);
     
-    const url = buildApiUrl(`/api/sentiment/reddit/market?timeRange=${timeRange}`);
+    const url = buildApiUrl(`/api/sentiment-unified/reddit/market?timeRange=${timeRange}`);
     console.log(`[REDDIT MARKET SENTIMENT DEBUG] Making request to: ${url}`);
     
     const headers = getAuthHeaders();

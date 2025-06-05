@@ -179,27 +179,18 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
     }
   }, [lastFetchTime]);
   
-  // Loading states
+  // Loading states - Always start with loading = true to prevent empty state flash
   const [loading, setLoading] = useState(() => {
-    // Calculate initial loading state based on cache freshness
-    const hasData = allSentiments.length > 0;
-    const dataIsStale = isDataStale(lastFetchTime);
-    const needsRefresh = !hasData || dataIsStale;
-    
     return {
-      sentiment: needsRefresh,
-      posts: needsRefresh,
-      chart: needsRefresh
+      sentiment: true,
+      posts: true,
+      chart: true
     };
   });
   
   // Unified loading progress tracking
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const [isDataLoading, setIsDataLoading] = useState(() => {
-    const hasData = allSentiments.length > 0;
-    const dataIsStale = isDataStale(lastFetchTime);
-    return !hasData || dataIsStale;
-  });
+  const [isDataLoading, setIsDataLoading] = useState(true);
   const [loadingStage, setLoadingStage] = useState<string>('Initializing...');
   const [isTransitioning, setIsTransitioning] = useState<boolean>(false);
   

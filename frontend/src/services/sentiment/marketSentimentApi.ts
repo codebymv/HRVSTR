@@ -9,7 +9,7 @@ export const fetchYahooMarketSentiment = async (timeRange: TimeRange = '1w', sig
   try {
     console.log(`[YAHOO SENTIMENT DEBUG] Starting fetchYahooMarketSentiment for timeRange: ${timeRange}`);
     
-    const url = buildApiUrl(`/api/sentiment/yahoo/market?timeRange=${timeRange}`);
+    const url = buildApiUrl(`/api/sentiment-unified/yahoo/market?timeRange=${timeRange}`);
     console.log(`[YAHOO SENTIMENT DEBUG] Making request to: ${url}`);
     
     const response = await fetch(url, { signal });
@@ -59,7 +59,7 @@ export const fetchFinvizMarketSentiment = async (timeRange: TimeRange = '1w', si
   try {
     console.log(`[FINVIZ SENTIMENT DEBUG] Starting fetchFinvizMarketSentiment for timeRange: ${timeRange}`);
     
-    const url = buildApiUrl(`/api/sentiment/finviz/market?timeRange=${timeRange}`);
+    const url = buildApiUrl(`/api/sentiment-unified/finviz/market?timeRange=${timeRange}`);
     console.log(`[FINVIZ SENTIMENT DEBUG] Making request to: ${url}`);
     
     const response = await fetch(url, { signal });

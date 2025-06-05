@@ -99,7 +99,7 @@ export const useSentimentDashboardData = (timeRange: TimeRange): UseSentimentDas
     }
   });
 
-  // Loading states
+  // Loading states - Always start with loading = true to prevent empty state flash
   const [loading, setLoading] = useState<LoadingStates>({
     sentiment: true,
     posts: true,

@@ -30,7 +30,7 @@ export const fetchTickerSentiments = async (timeRange: TimeRange = '1w', signal?
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const url = `${proxyUrl}/api/sentiment/reddit/tickers?timeRange=${timeRange}`;
+    const url = `${proxyUrl}/api/sentiment-unified/reddit/tickers?timeRange=${timeRange}`;
     console.log(`[REDDIT API DEBUG] Making request to: ${url}`);
 
     const response = await fetch(url, { 
@@ -112,7 +112,7 @@ export const fetchSentimentData = async (timeRange: TimeRange = '1w', signal?: A
       console.warn(`[REDDIT MARKET SENTIMENT DEBUG] No auth token found for market sentiment`);
     }
     
-    const url = `${proxyUrl}/api/sentiment/reddit/market?timeRange=${timeRange}`;
+    const url = `${proxyUrl}/api/sentiment-unified/reddit/market?timeRange=${timeRange}`;
     console.log(`[REDDIT MARKET SENTIMENT DEBUG] Making request to: ${url}`);
     console.log(`[REDDIT MARKET SENTIMENT DEBUG] Request headers:`, headers);
     
@@ -130,8 +130,15 @@ export const fetchSentimentData = async (timeRange: TimeRange = '1w', signal?: A
       throw new Error(`API request failed with status ${response.status}: ${errorText}`);
     }
     
-    const data = await response.json();
-    console.log(`[REDDIT MARKET SENTIMENT DEBUG] Response data:`, data);
+    const rawData = await response.json();
+    console.log(`[REDDIT MARKET SENTIMENT DEBUG] Raw response data:`, rawData);
+    
+    // Handle unified endpoint response format: extract actual data
+    const intermediateData = rawData.success ? rawData.data : rawData;
+    // The actual sentiment data is nested one level deeper
+    const data = intermediateData.data || intermediateData;
+    console.log(`[REDDIT MARKET SENTIMENT DEBUG] Intermediate data:`, intermediateData);
+    console.log(`[REDDIT MARKET SENTIMENT DEBUG] Final extracted data:`, data);
     
     // Validate the response contains the expected data structure
     if (!data) {
@@ -367,7 +374,7 @@ export const fetchYahooMarketSentiment = async (timeRange: TimeRange = '1w', sig
       headers['Authorization'] = `Bearer ${token}`;
     }
     
-    const response = await fetch(`${proxyUrl}/api/sentiment/yahoo-market?timeRange=${timeRange}`, { 
+    const response = await fetch(`${proxyUrl}/api/sentiment-unified/yahoo/market?timeRange=${timeRange}`, { 
       signal,
       headers
     });
@@ -376,14 +383,24 @@ export const fetchYahooMarketSentiment = async (timeRange: TimeRange = '1w', sig
       throw new Error(`Yahoo market sentiment API returned error: ${response.status}`);
     }
     
-    const data = await response.json();
+    const rawData = await response.json();
+    
+    // Handle unified endpoint response format: extract actual data
+    const intermediateData = rawData.success ? rawData.data : rawData;
+    const data = intermediateData.data || intermediateData;
     
     if (data.sentimentData && Array.isArray(data.sentimentData)) {
       console.log(`Fetched ${data.sentimentData.length} Yahoo Finance historical sentiment data points for ${timeRange}`);
       return data.sentimentData;
     }
     
-    console.warn('Unexpected response format from Yahoo market sentiment API:', data);
+    // Handle timeline format
+    if (data.timeline && Array.isArray(data.timeline)) {
+      console.log(`Fetched ${data.timeline.length} Yahoo Finance timeline sentiment data points for ${timeRange}`);
+      return data.timeline;
+    }
+    
+    console.warn('Unexpected response format from Yahoo market sentiment API:', rawData);
     return [];
   } catch (error) {
     console.error('Failed to fetch Yahoo market sentiment:', error);
@@ -406,7 +423,7 @@ export const fetchFinvizMarketSentiment = async (timeRange: TimeRange = '1w', si
       headers['Authorization'] = `Bearer ${token}`;
     }
     
-    const response = await fetch(`${proxyUrl}/api/sentiment/finviz-market?timeRange=${timeRange}`, { 
+    const response = await fetch(`${proxyUrl}/api/sentiment-unified/finviz/market?timeRange=${timeRange}`, { 
       signal,
       headers
     });
@@ -415,14 +432,24 @@ export const fetchFinvizMarketSentiment = async (timeRange: TimeRange = '1w', si
       throw new Error(`FinViz market sentiment API returned error: ${response.status}`);
     }
     
-    const data = await response.json();
+    const rawData = await response.json();
+    
+    // Handle unified endpoint response format: extract actual data
+    const intermediateData = rawData.success ? rawData.data : rawData;
+    const data = intermediateData.data || intermediateData;
     
     if (data.sentimentData && Array.isArray(data.sentimentData)) {
       console.log(`Fetched ${data.sentimentData.length} FinViz historical sentiment data points for ${timeRange}`);
       return data.sentimentData;
     }
     
-    console.warn('Unexpected response format from FinViz market sentiment API:', data);
+    // Handle timeline format
+    if (data.timeline && Array.isArray(data.timeline)) {
+      console.log(`Fetched ${data.timeline.length} FinViz timeline sentiment data points for ${timeRange}`);
+      return data.timeline;
+    }
+    
+    console.warn('Unexpected response format from FinViz market sentiment API:', rawData);
     return [];
   } catch (error) {
     console.error('Failed to fetch FinViz market sentiment:', error);

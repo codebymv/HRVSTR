@@ -1,10 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { TimeRange, EarningsEvent, EarningsAnalysis } from '../../types';
-import { fetchEarningsAnalysisWithUserCache, fetchUpcomingEarningsWithUserCache, streamUpcomingEarnings } from '../../services/earnings';
-import { RefreshCw, AlertTriangle, Info, TrendingUp, TrendingDown, BarChart2, Loader2, Crown, Lock, Zap } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { TimeRange } from '../../types';
+import { TrendingUp, Loader2 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useAuth } from '../../contexts/AuthContext';
-import { useTier } from '../../contexts/TierContext';
 import { useTierLimits } from '../../hooks/useTierLimits';
 import { useToast } from '../../contexts/ToastContext';
 import { useEarningsUnlock } from '../../hooks/useEarningsUnlock';
@@ -18,7 +15,6 @@ import EarningsMonitorHeader from './EarningsMonitorHeader';
 import EarningsMonitorTabs from './EarningsMonitorTabs';
 import EarningsTable from './EarningsTable';
 import LockedOverlay from './LockedOverlay';
-import EarningsUpgradeCard from './EarningsUpgradeCard';
 import EarningsAnalysisContent from './EarningsAnalysisContent';
 import EarningsAnalysisSearch from './EarningsAnalysisSearch';
 import TierLimitDialog from '../UI/TierLimitDialog';
@@ -29,7 +25,7 @@ interface EarningsMonitorTabbedProps {
 
 const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoadingProgressChange }) => {
   const { theme } = useTheme();
-  const { showTierLimitDialog, tierLimitDialog, closeTierLimitDialog } = useTierLimits();
+  const { tierLimitDialog, closeTierLimitDialog } = useTierLimits();
   const { info, warning } = useToast();
   
   // State management
@@ -58,7 +54,6 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
     loadingProgress,
     loadingStage,
     isFreshUnlock,
-    isRefreshing,
     earningsAnalysis,
     errors,
     setIsRefreshing,
@@ -135,7 +130,6 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
 
   // Add state for ticker input in analysis tab
   const [analysisTickerInput, setAnalysisTickerInput] = useState<string>('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Handle time range changes - no localStorage, just trigger fresh fetch
   const handleTimeRangeChange = (range: TimeRange) => {

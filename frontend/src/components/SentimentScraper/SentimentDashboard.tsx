@@ -14,8 +14,9 @@ import { RefreshCw, Loader2, Crown, Lock, Settings, Key, TrendingUp, Zap, BarCha
 import { useNavigate } from 'react-router-dom';
 
 // Custom hooks
+import { useSentimentUnlock } from '../../hooks/useSentimentUnlock';
+import { useSentimentLoading } from '../../hooks/useSentimentLoading';
 import { useSentimentData } from '../../hooks/useSentimentData';
-import { useTimeRangeDebounce } from '../../hooks/useTimeRangeDebounce';
 
 // Components
 import SentimentChartCard from './SentimentChartCard';
@@ -33,36 +34,9 @@ const SentimentDashboard: React.FC = () => {
   const textColor = isLight ? 'text-stone-800' : 'text-white';
   const mutedTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
   
-  // Add state to control when data should be loaded
-  const [hasRequestedData, setHasRequestedData] = useState(false);
-  const [isManualLoading, setIsManualLoading] = useState(false);
-  
-  // Component unlock state - now managed by sessions
-  const [unlockedComponents, setUnlockedComponents] = useState<{
-    chart: boolean;
-    scores: boolean;
-    reddit: boolean;
-  }>({
-    chart: false,
-    scores: false,
-    reddit: false
-  });
-
-  // Session state for time tracking
-  const [activeSessions, setActiveSessions] = useState<any[]>([]);
-  
-  // Add state to track when we're checking sessions (prevents locked overlay flash)
-  const [isCheckingSessions, setIsCheckingSessions] = useState(true);
-  
-  // Flag to prevent session re-check immediately after unlock
-  const [justUnlocked, setJustUnlocked] = useState<string | null>(null);
-  
   // Time range state
   const [timeRange, setTimeRange] = useState<TimeRange>('1w');
   const [isTransitioning, setIsTransitioning] = useState(false);
-  
-  // Dialog state for tier limits
-  const [tierLimitDialogShown, setTierLimitDialogShown] = useState(false);
   
   // State for API key status
   const [redditApiKeysConfigured, setRedditApiKeysConfigured] = useState<boolean>(false);
@@ -70,16 +44,6 @@ const SentimentDashboard: React.FC = () => {
   
   // Get tier info
   const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
-  const redditPostLimit = currentTier === 'free' ? 5 : -1; // Free users: 5 posts, others: unlimited
-  
-  // Reddit posts tier limits (posts per page = 10)
-  const REDDIT_TIER_LIMITS = {
-    free: 0,         // No access to Reddit posts
-    pro: -1,         // unlimited
-    elite: -1,       // unlimited
-    institutional: -1 // unlimited
-  };
-  
   const hasRedditTierAccess = currentTier !== 'free';
   
   // Combined access: needs both tier access AND API keys configured
@@ -87,8 +51,6 @@ const SentimentDashboard: React.FC = () => {
   
   // 🔧 FIX: Stabilize Reddit access to prevent hook restarts during TierContext updates
   const [stableRedditAccess, setStableRedditAccess] = useState<boolean>(() => {
-    // Wait for tier info to be available before determining Reddit access
-    // This prevents the hook from starting with wrong access level
     return false; // Always start with false, will be updated when tier loads
   });
   
@@ -124,26 +86,53 @@ const SentimentDashboard: React.FC = () => {
     }
   }, [tierInfo, hasFullRedditAccess, stableRedditAccess, currentTier, hasRedditTierAccess, redditApiKeysConfigured]);
 
-  // Ensure both tier info and API key check are complete before starting data loading
-  const isSystemReady = !checkingApiKeys && tierInfo !== null;
-  
+  // Use the new sentiment unlock hook
+  const {
+    unlockedComponents,
+    isCheckingSessions,
+    hasChartAccess,
+    hasScoresAccess,
+    hasRedditAccess,
+    handleUnlockComponent: hookHandleUnlockComponent,
+    COMPONENT_COSTS
+  } = useSentimentUnlock();
+
+  // Use the sentiment loading hook
+  const {
+    loadingState,
+    loadingProgress,
+    loadingStage,
+    isFreshUnlock,
+    isRefreshing,
+    errors,
+    chartData,
+    sentimentScores,
+    redditPosts,
+    setIsRefreshing,
+    handleChartLoading,
+    handleScoresLoading,
+    handleRedditLoading,
+    updateLoadingProgress,
+    setFreshUnlockState,
+    clearData,
+    setNeedsRefresh,
+    handleRefresh,
+  } = useSentimentLoading(hasChartAccess, hasScoresAccess, hasRedditAccess);
+
   // Combined ready state - ensures loading persists until ALL verifications complete
   const isFullyReady = !isCheckingSessions && !checkingApiKeys && tierInfo !== null;
   
-  // Use sentiment data hook - now with correct Reddit access based on tier + API keys
-  // 🔧 FIX: Use isFullyReady instead of isSystemReady to prevent multiple hook calls during verification
+  // Use sentiment data hook for the actual data fetching
   const {
     topSentiments,
     finvizSentiments,
     yahooSentiments,
     combinedSentiments,
-    redditPosts,
-    chartData,
+    redditPosts: originalRedditPosts,
+    chartData: originalChartData,
     loading,
-    errors,
+    errors: dataErrors,
     hasMorePosts,
-    loadingProgress,
-    loadingStage,
     handleLoadMorePosts: originalHandleLoadMorePosts,
     isDataLoading,
     refreshData: originalRefreshData
@@ -185,7 +174,7 @@ const SentimentDashboard: React.FC = () => {
       return;
     }
     
-    originalRefreshData();
+    handleRefresh();
   };
 
   // Handle time range changes
@@ -245,65 +234,7 @@ const SentimentDashboard: React.FC = () => {
     
     return () => clearInterval(interval);
   }, [currentTier]); // 🔧 Added currentTier dependency to trigger refresh on tier changes
-  
-  // Check existing sessions for all users (including Pro users)
-  useEffect(() => {
-    if (!tierInfo) return;
-    
-    const checkExistingSessions = async () => {
-      // Skip session check if a component was just unlocked to prevent flicker
-      if (justUnlocked) {
-        console.log(`🔄 SKIPPING session check - ${justUnlocked} just unlocked`);
-        return;
-      }
-      
-      setIsCheckingSessions(true);
-      try {
-        const chartSession = await checkComponentAccess('chart', currentTier);
-        const scoresSession = await checkComponentAccess('scores', currentTier);
-        const redditSession = await checkComponentAccess('reddit', currentTier);
 
-        setUnlockedComponents({
-          chart: !!chartSession,
-          scores: !!scoresSession,
-          reddit: !!redditSession
-        });
-
-        // Update active sessions for display
-        const sessions = await getAllUnlockSessions(currentTier);
-        setActiveSessions(sessions);
-        
-        console.log('🔍 SENTIMENT - Active sessions:', {
-          chart: chartSession?.sessionId,
-          scores: scoresSession?.sessionId,
-          reddit: redditSession?.sessionId
-        });
-
-        console.log('🔍 SENTIMENT - Updated unlockedComponents state:', {
-          chart: !!chartSession,
-          scores: !!scoresSession,
-          reddit: !!redditSession
-        });
-      } catch (error) {
-        console.error('Error checking existing sessions:', error);
-        // Fallback to empty state on error
-        setUnlockedComponents({
-          chart: false,
-          scores: false,
-          reddit: false
-        });
-      } finally {
-        setIsCheckingSessions(false);
-      }
-    };
-
-    // Check sessions immediately
-    checkExistingSessions();
-    
-    // Check for expired sessions every minute for all users
-    const interval = setInterval(checkExistingSessions, 60000);
-    return () => clearInterval(interval);
-  }, [tierInfo, currentTier, justUnlocked]);
 
   // Custom handleLoadMorePosts with tier limit checking
   const handleLoadMorePosts = () => {

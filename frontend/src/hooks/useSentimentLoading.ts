@@ -1,9 +1,24 @@
 import { useState, useEffect, useCallback } from 'react';
 
-interface LoadingState {
-  chart: { isLoading: boolean; needsRefresh: boolean };
-  scores: { isLoading: boolean; needsRefresh: boolean };
-  reddit: { isLoading: boolean; needsRefresh: boolean };
+interface SentimentLoadingState {
+  chart: {
+    isLoading: boolean;
+    needsRefresh: boolean;
+  };
+  scores: {
+    isLoading: boolean;
+    needsRefresh: boolean;
+  };
+  reddit: {
+    isLoading: boolean;
+    needsRefresh: boolean;
+  };
+}
+
+interface SentimentErrors {
+  chart: string | null;
+  scores: string | null;
+  reddit: string | null;
 }
 
 interface FreshUnlockState {
@@ -12,186 +27,108 @@ interface FreshUnlockState {
   reddit: boolean;
 }
 
-interface SentimentLoadingProps {
-  onLoadingProgressChange?: (progress: number, stage: string) => void;
-  hasChartAccess: boolean;
-  hasScoresAccess: boolean;
-  hasRedditAccess: boolean;
-  isFreshUnlock: FreshUnlockState;
-  isCheckingSessions: boolean;
-  setFreshUnlockState: (component: 'chart' | 'scores' | 'reddit', value: boolean) => void;
-}
-
-export const useSentimentLoading = ({ 
-  onLoadingProgressChange, 
-  hasChartAccess, 
-  hasScoresAccess,
-  hasRedditAccess,
-  isFreshUnlock,
-  isCheckingSessions,
-  setFreshUnlockState
-}: SentimentLoadingProps) => {
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [loadingProgress, setLoadingProgress] = useState(0);
-  const [loadingStage, setLoadingStage] = useState('');
-  
-  // Loading states for components
-  const [loadingState, setLoadingState] = useState<LoadingState>({
-    chart: { isLoading: false, needsRefresh: false },
-    scores: { isLoading: false, needsRefresh: false },
-    reddit: { isLoading: false, needsRefresh: false }
+export const useSentimentLoading = (
+  hasChartAccess: boolean,
+  hasScoresAccess: boolean,
+  hasRedditAccess: boolean,
+  onLoadingProgressChange?: (progress: number, stage: string) => void
+) => {
+  // Loading state for each component - Start with loading = true to prevent empty state flash
+  const [loadingState, setLoadingState] = useState<SentimentLoadingState>({
+    chart: { isLoading: true, needsRefresh: false },
+    scores: { isLoading: true, needsRefresh: false },
+    reddit: { isLoading: true, needsRefresh: false }
   });
 
+  // Progress tracking
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [loadingStage, setLoadingStage] = useState('');
+
+  // Fresh unlock state (for showing harvest loading)
+  const [isFreshUnlock, setIsFreshUnlock] = useState<FreshUnlockState>({
+    chart: false,
+    scores: false,
+    reddit: false
+  });
+
+  // Refresh state
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   // Error states
-  const [errors, setErrors] = useState<{
-    chart: string | null;
-    scores: string | null;
-    reddit: string | null;
-  }>({
+  const [errors, setErrors] = useState<SentimentErrors>({
     chart: null,
     scores: null,
     reddit: null
   });
 
-  // Data states
-  const [chartData, setChartData] = useState<any>(null);
-  const [scoresData, setScoresData] = useState<any[]>([]);
-  const [redditData, setRedditData] = useState<any[]>([]);
+  // Data states - managed at this level
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [sentimentScores, setSentimentScores] = useState<any[]>([]);
+  const [redditPosts, setRedditPosts] = useState<any[]>([]);
 
-  // Handle loading updates from chart component
-  const handleChartLoading = useCallback((
-    isLoading: boolean, 
-    progress: number, 
-    stage: string, 
-    data?: any, 
-    error?: string | null
-  ) => {
+  // Progress update handler
+  const updateLoadingProgress = useCallback((progress: number, stage: string) => {
+    setLoadingProgress(progress);
+    setLoadingStage(stage);
+    onLoadingProgressChange?.(progress, stage);
+  }, [onLoadingProgressChange]);
+
+  // Component loading handlers
+  const handleChartLoading = useCallback((isLoading: boolean, error?: string | null) => {
     setLoadingState(prev => ({
       ...prev,
-      chart: { 
-        isLoading, 
-        needsRefresh: false
-      }
+      chart: { ...prev.chart, isLoading }
     }));
     
-    // When loading completes successfully, update data
-    if (!isLoading && data) {
-      setChartData(data);
-    }
-    
-    // Update error state if provided
     if (error !== undefined) {
       setErrors(prev => ({ ...prev, chart: error }));
     }
-    
-    // Always update progress for loading (to support harvest loading card)
-    setLoadingProgress(progress);
-    setLoadingStage(stage);
-    
-    // Propagate to parent component
-    if (onLoadingProgressChange) {
-      onLoadingProgressChange(progress, stage);
-    }
+  }, []);
 
-    // Clear refresh state when chart loading completes
-    if (!isLoading && isRefreshing) {
-      const scoresComplete = !hasScoresAccess || !loadingState.scores.isLoading;
-      const redditComplete = !hasRedditAccess || !loadingState.reddit.isLoading;
-      if (scoresComplete && redditComplete) {
-        setIsRefreshing(false);
-      }
-    }
-  }, [onLoadingProgressChange, isRefreshing, hasScoresAccess, hasRedditAccess, loadingState.scores.isLoading, loadingState.reddit.isLoading]);
-
-  // Handle loading updates from scores component
-  const handleScoresLoading = useCallback((
-    isLoading: boolean, 
-    progress: number, 
-    stage: string, 
-    data?: any[], 
-    error?: string | null
-  ) => {
+  const handleScoresLoading = useCallback((isLoading: boolean, error?: string | null) => {
     setLoadingState(prev => ({
       ...prev,
-      scores: { 
-        isLoading, 
-        needsRefresh: false
-      }
+      scores: { ...prev.scores, isLoading }
     }));
     
-    // When loading completes successfully, update data
-    if (!isLoading && data) {
-      setScoresData(data);
-    }
-    
-    // Update error state if provided
     if (error !== undefined) {
       setErrors(prev => ({ ...prev, scores: error }));
     }
-    
-    // Always update progress for loading (to support harvest loading card)
-    setLoadingProgress(progress);
-    setLoadingStage(stage);
-    
-    // Propagate to parent component
-    if (onLoadingProgressChange) {
-      onLoadingProgressChange(progress, stage);
-    }
+  }, []);
 
-    // Clear refresh state when scores loading completes
-    if (!isLoading && isRefreshing) {
-      const chartComplete = !hasChartAccess || !loadingState.chart.isLoading;
-      const redditComplete = !hasRedditAccess || !loadingState.reddit.isLoading;
-      if (chartComplete && redditComplete) {
-        setIsRefreshing(false);
-      }
-    }
-  }, [onLoadingProgressChange, isRefreshing, hasChartAccess, hasRedditAccess, loadingState.chart.isLoading, loadingState.reddit.isLoading]);
-
-  // Handle loading updates from reddit component
-  const handleRedditLoading = useCallback((
-    isLoading: boolean, 
-    progress: number, 
-    stage: string, 
-    data?: any[], 
-    error?: string | null
-  ) => {
+  const handleRedditLoading = useCallback((isLoading: boolean, error?: string | null) => {
     setLoadingState(prev => ({
       ...prev,
-      reddit: { 
-        isLoading, 
-        needsRefresh: false
-      }
+      reddit: { ...prev.reddit, isLoading }
     }));
     
-    // When loading completes successfully, update data
-    if (!isLoading && data) {
-      setRedditData(data);
-    }
-    
-    // Update error state if provided
     if (error !== undefined) {
       setErrors(prev => ({ ...prev, reddit: error }));
     }
-    
-    // Always update progress for loading (to support harvest loading card)
-    setLoadingProgress(progress);
-    setLoadingStage(stage);
-    
-    // Propagate to parent component
-    if (onLoadingProgressChange) {
-      onLoadingProgressChange(progress, stage);
-    }
+  }, []);
 
-    // Clear refresh state when reddit loading completes
-    if (!isLoading && isRefreshing) {
-      const chartComplete = !hasChartAccess || !loadingState.chart.isLoading;
-      const scoresComplete = !hasScoresAccess || !loadingState.scores.isLoading;
-      if (chartComplete && scoresComplete) {
-        setIsRefreshing(false);
-      }
-    }
-  }, [onLoadingProgressChange, isRefreshing, hasChartAccess, hasScoresAccess, loadingState.chart.isLoading, loadingState.scores.isLoading]);
+  // Set fresh unlock state
+  const setFreshUnlockState = useCallback((component: keyof FreshUnlockState, value: boolean) => {
+    setIsFreshUnlock(prev => ({
+      ...prev,
+      [component]: value
+    }));
+  }, []);
+
+  // Clear all data
+  const clearData = useCallback(() => {
+    setChartData([]);
+    setSentimentScores([]);
+    setRedditPosts([]);
+  }, []);
+
+  // Set needs refresh for a component
+  const setNeedsRefresh = useCallback((component: keyof SentimentLoadingState, value: boolean) => {
+    setLoadingState(prev => ({
+      ...prev,
+      [component]: { ...prev[component], needsRefresh: value }
+    }));
+  }, []);
 
   // Handle refresh - triggers reload for all unlocked components
   const handleRefresh = async () => {
@@ -244,60 +181,37 @@ export const useSentimentLoading = ({
       }
     }
   }, [isRefreshing, loadingState.chart.isLoading, loadingState.scores.isLoading, loadingState.reddit.isLoading, hasChartAccess, hasScoresAccess, hasRedditAccess]);
-  
-  // Safety mechanism - clear refresh state after 5 seconds maximum
-  useEffect(() => {
-    if (isRefreshing) {
-      const timeout = setTimeout(() => {
-        setIsRefreshing(false);
-        setLoadingState({
-          chart: { isLoading: false, needsRefresh: false },
-          scores: { isLoading: false, needsRefresh: false },
-          reddit: { isLoading: false, needsRefresh: false }
-        });
-      }, 5000);
-      
-      return () => clearTimeout(timeout);
-    }
-  }, [isRefreshing]);
-
-  // Clear fresh unlock flags when loading completes (matching earnings pattern)
-  useEffect(() => {
-    if (!loadingState.chart.isLoading && isFreshUnlock.chart) {
-      console.log('🔄 SENTIMENT DASHBOARD - Clearing chart fresh unlock flag after loading');
-      setFreshUnlockState('chart', false);
-    }
-  }, [loadingState.chart.isLoading, isFreshUnlock.chart, setFreshUnlockState]);
-
-  useEffect(() => {
-    if (!loadingState.scores.isLoading && isFreshUnlock.scores) {
-      console.log('🔄 SENTIMENT DASHBOARD - Clearing scores fresh unlock flag after loading');
-      setFreshUnlockState('scores', false);
-    }
-  }, [loadingState.scores.isLoading, isFreshUnlock.scores, setFreshUnlockState]);
-
-  useEffect(() => {
-    if (!loadingState.reddit.isLoading && isFreshUnlock.reddit) {
-      console.log('🔄 SENTIMENT DASHBOARD - Clearing reddit fresh unlock flag after loading');
-      setFreshUnlockState('reddit', false);
-    }
-  }, [loadingState.reddit.isLoading, isFreshUnlock.reddit, setFreshUnlockState]);
 
   return {
-    isRefreshing,
+    // State
+    loadingState,
     loadingProgress,
     loadingStage,
-    loadingState,
+    isFreshUnlock,
+    isRefreshing,
     errors,
+    
+    // Data
     chartData,
-    scoresData,
-    redditData,
-    loadingIsFreshUnlock: isFreshUnlock, // Match SEC/earnings naming convention
+    sentimentScores,
+    redditPosts,
+    
+    // Setters
+    setIsRefreshing,
+    setLoadingState,
+    setChartData,
+    setSentimentScores,
+    setRedditPosts,
+    setErrors,
+    
+    // Handlers
     handleChartLoading,
     handleScoresLoading,
     handleRedditLoading,
+    updateLoadingProgress,
+    setFreshUnlockState,
+    clearData,
+    setNeedsRefresh,
     handleRefresh,
-    setLoadingState,
-    setErrors
   };
 }; 

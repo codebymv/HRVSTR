@@ -79,7 +79,7 @@ export const AuthButton = () => {
     const hoverBgColor = isLight ? 'hover:bg-stone-400' : 'hover:bg-gray-800';
     
     const userInitials = getUserInitials(user?.name, user?.email);
-    const showImage = user?.picture && !imageError;
+    const showImage = false; // Always show gradient instead of Google avatar
 
     return (
       <div className="relative" ref={dropdownRef}>
@@ -112,19 +112,9 @@ export const AuthButton = () => {
               <div className={`px-4 py-2 border-b ${dropdownBorderColor}`}>
                 <div className="flex items-center gap-3">
                   {/* Larger avatar in dropdown */}
-                  {showImage ? (
-                    <img 
-                      src={user.picture} 
-                      alt={user?.name || 'User'} 
-                      className="w-10 h-10 rounded-full object-cover" 
-                      onError={() => setImageError(true)}
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
-                      {userInitials}
-                    </div>
-                  )}
+                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+                    {userInitials}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <p className={`font-semibold ${dropdownTextColor} truncate`}>{user?.name || 'User'}</p>
                     <p className={`text-xs ${dropdownTextColor} opacity-70 truncate`}>{user?.email}</p>

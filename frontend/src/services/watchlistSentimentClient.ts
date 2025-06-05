@@ -13,7 +13,14 @@ interface CreditInfo {
 
 interface WatchlistSentimentResponse {
   success: boolean;
-  sentimentData: SentimentData[];
+  data?: {
+    sentimentData: SentimentData[];
+    meta?: any;
+  };
+  sentimentData?: SentimentData[]; // For backward compatibility
+  creditsUsed?: number;
+  fromCache?: boolean;
+  freshlyFetched?: boolean;
   credits?: CreditInfo;
   tier?: string;
   message?: string;
@@ -45,7 +52,7 @@ export async function fetchWatchlistRedditSentiment(
       throw new Error('Authentication required. Please log in to access sentiment data.');
     }
 
-    const response = await axios.get<WatchlistSentimentResponse>(`${API_BASE_URL}/api/sentiment/reddit/tickers`, {
+    const response = await axios.get<WatchlistSentimentResponse>(`${API_BASE_URL}/api/sentiment-unified/reddit/tickers`, {
       params: { 
         timeRange,
         // Add cache busting to avoid 304 responses that don't include data
@@ -65,12 +72,18 @@ export async function fetchWatchlistRedditSentiment(
     console.log('Watchlist Reddit sentiment API Response:', response.data);
 
     // Handle credit information
-    if (response.data.credits) {
-      showCreditUsage(response.data.credits);
+    if (response.data.creditsUsed) {
+      showCreditUsage({
+        used: response.data.creditsUsed,
+        remaining: 0, // Will be updated from tier info
+        operation: 'reddit_sentiment',
+        tier: 'pro'
+      });
     }
       
-    // Extract sentiment data
-    const sentimentData = response.data.sentimentData || [];
+    // Extract sentiment data from unified response format
+    const actualData = response.data.data || response.data;
+    const sentimentData = actualData.sentimentData || [];
     
     if (sentimentData.length === 0) {
       console.warn('Watchlist Reddit sentiment API returned no sentiment data');
@@ -120,7 +133,7 @@ export async function fetchWatchlistFinvizSentiment(
       throw new Error('Authentication required. Please log in to access sentiment data.');
     }
 
-    const response = await axios.get<WatchlistSentimentResponse>(`${API_BASE_URL}/api/sentiment/finviz/tickers`, {
+    const response = await axios.get<WatchlistSentimentResponse>(`${API_BASE_URL}/api/sentiment-unified/finviz/tickers`, {
       params: {
         timeRange,
         // Add cache busting to avoid 304 responses that don't include data
@@ -140,12 +153,18 @@ export async function fetchWatchlistFinvizSentiment(
     console.log('Watchlist FinViz sentiment API Response:', response.data);
 
     // Handle credit information
-    if (response.data.credits) {
-      showCreditUsage(response.data.credits);
+    if (response.data.creditsUsed) {
+      showCreditUsage({
+        used: response.data.creditsUsed,
+        remaining: 0,
+        operation: 'finviz_sentiment',
+        tier: 'pro'
+      });
     }
 
-    // Extract sentiment data
-    const sentimentData = response.data.sentimentData || [];
+    // Extract sentiment data from unified response format
+    const actualData = response.data.data || response.data;
+    const sentimentData = actualData.sentimentData || [];
     
     if (sentimentData.length === 0) {
       console.warn('Watchlist FinViz sentiment API returned no sentiment data');
@@ -195,7 +214,7 @@ export async function fetchWatchlistYahooSentiment(
       throw new Error('Authentication required. Please log in to access sentiment data.');
     }
 
-    const response = await axios.get<WatchlistSentimentResponse>(`${API_BASE_URL}/api/sentiment/yahoo/tickers`, {
+    const response = await axios.get<WatchlistSentimentResponse>(`${API_BASE_URL}/api/sentiment-unified/yahoo/tickers`, {
       params: {
         timeRange,
         // Add cache busting to avoid 304 responses that don't include data
@@ -215,12 +234,18 @@ export async function fetchWatchlistYahooSentiment(
     console.log('Watchlist Yahoo sentiment API Response:', response.data);
 
     // Handle credit information
-    if (response.data.credits) {
-      showCreditUsage(response.data.credits);
+    if (response.data.creditsUsed) {
+      showCreditUsage({
+        used: response.data.creditsUsed,
+        remaining: 0,
+        operation: 'yahoo_sentiment',
+        tier: 'pro'
+      });
     }
 
-    // Extract sentiment data
-    const sentimentData = response.data.sentimentData || [];
+    // Extract sentiment data from unified response format
+    const actualData = response.data.data || response.data;
+    const sentimentData = actualData.sentimentData || [];
     
     if (sentimentData.length === 0) {
       console.warn('Watchlist Yahoo sentiment API returned no sentiment data');
@@ -270,7 +295,7 @@ export async function fetchWatchlistCombinedSentiment(
       throw new Error('Authentication required. Please log in to access sentiment data.');
     }
 
-    const response = await axios.get<WatchlistSentimentResponse>(`${API_BASE_URL}/api/sentiment/combined/tickers`, {
+    const response = await axios.get<WatchlistSentimentResponse>(`${API_BASE_URL}/api/sentiment-unified/combined/tickers`, {
       params: { 
         timeRange,
         // Add cache busting to avoid 304 responses that don't include data

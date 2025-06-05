@@ -481,7 +481,7 @@ async function getSentimentDataForUser(userId, userTier, dataType, timeRange, fo
       console.log(`[userSentimentCache] Active session found but no cache, fetching data for free for user ${userId}`);
       
       // Fetch fresh data (no credit deduction for active sessions)
-      const freshData = await fetchFreshSentimentData(dataType, timeRange, options, progressCallback);
+      const freshData = await fetchFreshSentimentData(userId, dataType, timeRange, options, progressCallback);
       if (!freshData.success) {
         return freshData;
       }
@@ -603,7 +603,7 @@ async function getSentimentDataForUser(userId, userTier, dataType, timeRange, fo
     // Fetch fresh data
     console.log(`[userSentimentCache] Fetching fresh ${dataType} data for user ${userId}, credits used: ${creditsUsed}`);
     
-    const freshData = await fetchFreshSentimentData(dataType, timeRange, options, progressCallback);
+    const freshData = await fetchFreshSentimentData(userId, dataType, timeRange, options, progressCallback);
     if (!freshData.success) {
       // If API call failed, refund the credits
       await db.query(`UPDATE users SET credits_used = credits_used - $1 WHERE id = $2`, [creditsRequired, userId]);
@@ -637,13 +637,14 @@ async function getSentimentDataForUser(userId, userTier, dataType, timeRange, fo
 
 /**
  * Fetch fresh sentiment data from APIs
+ * @param {string} userId - User ID for API key resolution
  * @param {string} dataType - Type of data
  * @param {string} timeRange - Time range
  * @param {Object} options - Additional options
  * @param {Function} progressCallback - Progress callback
  * @returns {Promise<Object>} - API response
  */
-async function fetchFreshSentimentData(dataType, timeRange, options, progressCallback) {
+async function fetchFreshSentimentData(userId, dataType, timeRange, options, progressCallback) {
   try {
     // Import sentiment services
     const redditService = require('./redditSentimentService');
@@ -661,22 +662,22 @@ async function fetchFreshSentimentData(dataType, timeRange, options, progressCal
     
     switch (dataType) {
       case 'reddit_tickers':
-        result = await redditService.getTickerSentiment(options.tickers, timeRange, options);
+        result = await redditService.getRedditTickerSentiment(timeRange, userId, options.tickers);
         break;
       case 'yahoo_tickers':
-        result = await yahooService.getTickerSentiment(options.tickers, timeRange, options);
+        result = await yahooService.getYahooTickerSentiment(options.tickers ? options.tickers.join(',') : '');
         break;
       case 'finviz_tickers':
-        result = await finvizService.getTickerSentiment(options.tickers, timeRange, options);
+        result = await finvizService.getFinvizTickerSentiment(options.tickers ? options.tickers.join(',') : '');
         break;
       case 'reddit_market':
-        result = await redditService.getMarketSentiment(timeRange, options);
+        result = await redditService.getRedditMarketSentiment(timeRange, userId);
         break;
       case 'yahoo_market':
-        result = await yahooService.getMarketSentiment(timeRange, options);
+        result = await yahooService.getYahooMarketSentiment(timeRange);
         break;
       case 'finviz_market':
-        result = await finvizService.getMarketSentiment(timeRange, options);
+        result = await finvizService.getFinvizMarketSentiment(timeRange);
         break;
       default:
         return {

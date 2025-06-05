@@ -17,8 +17,8 @@
 
 /* Light theme - Stone/beige color palette */
 .light-theme {
-  --bg-primary: #aca4a1; /* custom stone-350 background (darker) */
-  --bg-secondary: #bfaca6; /* custom stone-375 (even darker) */
+  --bg-primary: #aaabb1; /* custom stone-350 background (darker) */
+  --bg-secondary: #beaca6; /* custom stone-375 (even darker) */
   --bg-tertiary: #9e9995; /* stone-400 */
   --accent-primary: #2563eb; /* keep blue for accents */
   --accent-secondary: #3b82f6;

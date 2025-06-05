@@ -13,14 +13,17 @@ interface SentimentScoresSectionProps {
   yahooSentiments: SentimentData[];
   combinedSentiments: SentimentData[];
   isLoading: boolean;
-  loadingProgress: number;
-  loadingStage: string;
+  loadingProgress?: number;
+  loadingStage?: string;
   error: string | null;
-  isRateLimited: boolean;
+  isRateLimited?: boolean;
   hasRedditAccess?: boolean;
   hasRedditTierAccess?: boolean;
   redditApiKeysConfigured?: boolean;
   className?: string;
+  // New props to match the access-based pattern
+  isCheckingAccess?: boolean;
+  isFreshUnlock?: boolean;
 }
 
 const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
@@ -29,14 +32,16 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
   yahooSentiments,
   combinedSentiments,
   isLoading,
-  loadingProgress,
-  loadingStage,
+  loadingProgress = 0,
+  loadingStage = 'Loading...',
   error,
-  isRateLimited,
+  isRateLimited = false,
   hasRedditAccess = true,
   hasRedditTierAccess,
   redditApiKeysConfigured,
-  className = ''
+  className = '',
+  isCheckingAccess = false,
+  isFreshUnlock = false
 }) => {
   const [dataSource, setDataSource] = useState<DataSource>('combined');
   
@@ -344,11 +349,67 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
         </div>
       )}
       
-      {currentSentiments?.length > 0 ? (
+      {/* Show checking access state first */}
+      {isCheckingAccess ? (
+        <div className="flex flex-col items-center justify-center p-10 text-center">
+          <Loader2 className="text-blue-500 animate-spin mb-4" size={32} />
+          <h3 className={`text-lg font-semibold ${textColor} mb-2`}>
+            Checking Access...
+          </h3>
+          <p className={`text-sm ${mutedTextColor} mb-4`}>
+            Verifying component access...
+          </p>
+          <div className="w-full max-w-md">
+            <ProgressBar progress={50} />
+            <div className={`text-xs ${mutedTextColor} mt-2 text-center`}>
+              Checking access...
+            </div>
+          </div>
+        </div>
+      ) : isLoading || (currentSentiments.length === 0 && !error) ? (
+        <div className="flex flex-col items-center justify-center p-10 text-center">
+          {isFreshUnlock ? (
+            // Fresh unlock with harvest loading
+            <>
+              <div className="bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg p-6 mb-4">
+                <Loader2 className="text-white animate-spin" size={40} />
+              </div>
+              <h3 className={`text-lg font-semibold ${textColor} mb-2`}>
+                Harvesting Sentiment Data
+              </h3>
+              <p className={`text-sm ${mutedTextColor} mb-4`}>
+                {loadingStage}
+              </p>
+              <div className="w-full max-w-md">
+                <ProgressBar progress={loadingProgress} />
+                <div className={`text-xs ${mutedTextColor} mt-2 text-center`}>
+                  {loadingProgress}% complete
+                </div>
+              </div>
+            </>
+          ) : (
+            // Regular loading for cache loads
+            <>
+              <Loader2 className="mb-2 text-blue-500 animate-spin" size={32} />
+              <h3 className={`text-lg font-semibold ${textColor} mb-2`}>
+                Loading Sentiment Scores
+              </h3>
+              <p className={`text-sm ${mutedTextColor} mb-4`}>
+                Loading from cache...
+              </p>
+              <div className="w-full max-w-md">
+                <ProgressBar progress={loadingProgress} />
+                <div className={`text-xs ${mutedTextColor} mt-2 text-center`}>
+                  {loadingStage} - {loadingProgress}%
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      ) : currentSentiments?.length > 0 ? (
         <div 
           ref={containerRef}
-          className="flex flex-col space-y-4"
-          style={{}}
+          className="flex flex-col space-y-4 max-h-[700px] overflow-y-auto pr-2"
         >
           {(() => {
             console.log('[CARD RENDER] About to render', displayedItems.length, 'cards');
@@ -402,22 +463,6 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
             ) : null}
           </div>
           
-          {/* Show loading indicator at bottom if still loading other sources */}
-          {isLoading && (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="mr-2 text-blue-500 animate-spin" size={16} />
-              <p className={`text-sm ${mutedTextColor}`}>{loadingStage} ({loadingProgress}%)</p>
-            </div>
-          )}
-        </div>
-      ) : isLoading ? (
-        <div className="flex flex-col items-center justify-center p-10 text-center">
-          <Loader2 className="mb-2 text-blue-500 animate-spin" size={32} />
-          <p className={`text-lg font-semibold ${textColor}`}>{loadingStage}</p>
-          <div className="w-full max-w-sm mt-4 mb-2">
-            <ProgressBar progress={loadingProgress} />
-          </div>
-          <div className={`text-xs ${isLight ? 'text-blue-600' : 'text-blue-400'}`}>{loadingProgress}% complete</div>
         </div>
       ) : isRateLimited ? (
         <div className="flex flex-col items-center justify-center p-10 text-center">
