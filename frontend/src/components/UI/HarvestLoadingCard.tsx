@@ -84,9 +84,9 @@ const HarvestLoadingCard: React.FC<HarvestLoadingCardProps> = ({
         <FallingLeaves3D width={64} height={64} leafCount={8} />
       </div>
       
-      <h3 className={`text-xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent mb-2`}>
+      {/* <h3 className={`text-xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent mb-2`}>
         {config.title}
-      </h3>
+      </h3> */}
       
       <p className={`text-sm ${mutedTextColor} mb-6 max-w-md`}>
         {config.subtitle}
@@ -100,7 +100,7 @@ const HarvestLoadingCard: React.FC<HarvestLoadingCardProps> = ({
         </div>
         <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 relative overflow-hidden">
           <div 
-            className="bg-gradient-to-r from-green-400 via-blue-500 to-green-600 h-3 rounded-full transition-all duration-500 relative overflow-hidden"
+            className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-500 relative overflow-hidden"
             style={{ width: `${progress}%` }}
           >
             {/* Enhanced shimmer effect - faster during heavy processing */}

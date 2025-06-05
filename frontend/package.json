@@ -33,6 +33,7 @@
     "remark-gfm": "^4.0.1",
     "sentiment": "^5.0.2",
     "serve": "^14.2.1",
+    "simplex-noise": "^4.0.3",
     "three": "^0.177.0"
   },
   "devDependencies": {

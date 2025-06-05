@@ -30,7 +30,8 @@ const ACTIVITY_TYPE_TITLES: Record<string, string> = {
   'news_update': 'News Update',
   
   // Research unlocks
-  'component_unlock': 'Research Unlocked'
+  'component_unlock': 'Research Unlocked',
+  'research_expired': 'Research Expired'
 };
 
 // Component name to research area mapping

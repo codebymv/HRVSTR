@@ -1300,7 +1300,7 @@ export const fetchEarningsAnalysisWithUserCache = async (
   timeRange: TimeRange = '1m',
   refresh: boolean = false,
   signal?: AbortSignal
-): Promise<EarningsAnalysis> => {
+): Promise<{ analysis: EarningsAnalysis; source: string }> => {
   try {
     const proxyUrl = getProxyUrl();
     const refreshParam = refresh ? '&refresh=true' : '';
@@ -1330,8 +1330,11 @@ export const fetchEarningsAnalysisWithUserCache = async (
       throw new Error(result.message || 'Failed to fetch earnings analysis');
     }
     
-    console.log(`Fetched earnings analysis for ${ticker}`);
-    return result.analysis as EarningsAnalysis;
+    console.log(`Fetched earnings analysis for ${ticker}, source: ${result.source}`);
+    return {
+      analysis: result.analysis as EarningsAnalysis,
+      source: result.source || 'unknown'
+    };
   } catch (error) {
     console.error('Earnings analysis API error:', error);
     throw new Error(error instanceof Error ? error.message : 'Failed to fetch earnings analysis');

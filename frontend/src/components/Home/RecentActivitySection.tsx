@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useEffect, useState } from 'react';
-import { Activity, AlertTriangle, Info, Loader2, Star, Crown, Zap, Building, Plus, Minus, BarChart2, TrendingUp, Building2, User, LogIn, LogOut, Search, DollarSign, Trash2, RefreshCw, FileText, ListChecks } from 'lucide-react';
+import { Activity, AlertTriangle, Info, Loader2, Star, Crown, Zap, Building, Plus, Minus, BarChart2, TrendingUp, Building2, User, LogIn, LogOut, Search, DollarSign, Trash2, RefreshCw, FileText, ListChecks, Lock } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { formatActivityType, generateActivityDescription, cleanActivityTitle, cleanActivityDescription, getComponentIcon } from '../../utils/activityFormatter';
 
@@ -239,6 +239,14 @@ const RecentActivitySection: React.FC<RecentActivitySectionProps> = ({
       // System events
       case 'error':
         return <AlertTriangle className={`${iconClasses} text-red-500`} />;
+      
+      // New research expired activity
+      case 'research_expired':
+        return (
+          <div className="w-5 h-5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+            <Lock className="w-3 h-3 text-white" />
+          </div>
+        );
       
       default:
         return <Activity className={`${iconClasses} text-gray-500`} />;

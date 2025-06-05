@@ -336,7 +336,6 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
   };
 
   const loadAnalysis = async (ticker: string) => {
-    // Only load if earnings analysis is unlocked
     if (!hasEarningsAnalysisAccess) {
       return;
     }
@@ -357,6 +356,7 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
     // Helper function to update progress
     const updateProgress = (step: number, stage: string) => {
       const progressPercentage = Math.round((step / totalSteps) * 100);
+      console.log(`Analysis loading progress: ${progressPercentage}%, Stage: ${stage}`);
       setLoadingProgress?.(progressPercentage);
       setLoadingStage?.(stage);
       
@@ -372,11 +372,12 @@ const EarningsMonitor: React.FC<EarningsMonitorProps> = ({ onLoadingProgressChan
       
       // Step 2: Perform analysis
       updateProgress(2, `Analyzing earnings surprises for ${ticker}...`);
-      const analysis = await fetchEarningsAnalysisWithUserCache(ticker);
+      const result = await fetchEarningsAnalysisWithUserCache(ticker);
+      console.log(`✅ Analysis completed for ${ticker}, source: ${result.source}`);
       
       // Step 3: Complete analysis
       updateProgress(3, `Finalizing ${ticker} earnings analysis...`);
-      setEarningsAnalysis(analysis);
+      setEarningsAnalysis(result.analysis);
       setLoading(prev => ({ ...prev, analysis: false }));
     } catch (error) {
       console.error('Earnings analysis error:', error);

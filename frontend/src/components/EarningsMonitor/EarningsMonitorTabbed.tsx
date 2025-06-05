@@ -59,6 +59,9 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
   // Session state for time tracking
   const [activeSessions, setActiveSessions] = useState<any[]>([]);
   
+  // Add state to track when we're checking sessions (prevents locked overlay flash)
+  const [isCheckingSessions, setIsCheckingSessions] = useState(true);
+  
   // Get tier info
   const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
   
@@ -80,6 +83,12 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
 
   // Track fresh unlocks vs cache loads for appropriate loading UI
   const [isFreshUnlock, setIsFreshUnlock] = useState({
+    earningsAnalysis: false,
+    upcomingEarnings: false
+  });
+
+  // Add flag to track when we're in an unlock flow (different from refresh flow)
+  const [isUnlockFlow, setIsUnlockFlow] = useState({
     earningsAnalysis: false,
     upcomingEarnings: false
   });
@@ -108,6 +117,7 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
     if (!tierInfo) return;
     
     const checkExistingSessions = async () => {
+      setIsCheckingSessions(true);
       try {
         const earningsAnalysisSession = await checkComponentAccess('earningsAnalysis', currentTier);
         const upcomingEarningsSession = await checkComponentAccess('upcomingEarnings', currentTier);
@@ -135,6 +145,8 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
           upcomingEarnings: false
         });
         setActiveSessions([]);
+      } finally {
+        setIsCheckingSessions(false);
       }
     };
 
@@ -164,13 +176,13 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
     }
   }, [hasUpcomingEarningsAccess, upcomingEarnings.length]);
 
-  // Auto-load data when component becomes unlocked or needs refresh
+  // Auto-load data when component becomes unlocked and has no data - triggers immediately 
   useEffect(() => {
-    if (hasUpcomingEarningsAccess && !loadingState.upcomingEarnings.isLoading && upcomingEarnings.length === 0) {
+    if (hasUpcomingEarningsAccess && !loadingState.upcomingEarnings.isLoading && upcomingEarnings.length === 0 && !errors.upcomingEarnings) {
       console.log('🔄 EARNINGS MONITOR - Auto-loading data on component unlock');
       loadData(false);
     }
-  }, [hasUpcomingEarningsAccess]);
+  }, [hasUpcomingEarningsAccess, upcomingEarnings.length, errors.upcomingEarnings]);
 
   // Sort earnings by date
   const sortEarnings = (earnings: EarningsEvent[]): EarningsEvent[] => {
@@ -200,28 +212,30 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
     console.log('🚀 EARNINGS TABBED - Starting loadData with forceRefresh:', forceRefresh);
     
     // Determine if this will likely be a fresh API call vs cache load
-    // Show harvest loading card only when:
-    // 1. Force refresh is true (explicit refresh)
-    // 2. We have no existing data (fresh component unlock/first load)
+    // Show harvest loading card when:
+    // 1. We're in an unlock flow (user just spent credits)
+    // 2. Force refresh is true (explicit refresh button)
     const hasExistingData = upcomingEarnings.length > 0;
-    const isLikelyApiCall = forceRefresh || !hasExistingData;
+    const isInUnlockFlow = isUnlockFlow.upcomingEarnings;
     
-    console.log(`📊 Load characteristics: hasExistingData=${hasExistingData}, forceRefresh=${forceRefresh}, isLikelyApiCall=${isLikelyApiCall}`);
+    console.log(`📊 Load characteristics: hasExistingData=${hasExistingData}, forceRefresh=${forceRefresh}, isInUnlockFlow=${isInUnlockFlow}`);
     
-    // Set fresh unlock flag ONLY for explicit force refreshes (manual refresh button)
-    // For auto-loads and component unlocks, use simple loader since they might hit cache
-    if (forceRefresh) {
-      console.log('🌱 Setting fresh unlock flag - explicit force refresh');
+    // Set fresh unlock flag based on unlock flow or manual refresh
+    if (isInUnlockFlow) {
+      console.log('🌟 In unlock flow - maintaining harvest loading card display');
+      // Don't override isFreshUnlock if we're in unlock flow - keep it as set by handleUnlockComponent
+      setLoadingProgress(0);
+      setLoadingStage('Fetching your earnings data...');
+    } else if (forceRefresh) {
+      console.log('🔄 Manual refresh - showing harvest loading card');
       setIsFreshUnlock(prev => ({
         ...prev,
         upcomingEarnings: true
       }));
-      
-      // Immediately reset progress to 0 to prevent showing previous progress
       setLoadingProgress(0);
       setLoadingStage('Starting fresh data fetch...');
     } else {
-      console.log('📦 Using simple loader - auto-load or component unlock (might hit cache)');
+      console.log('📦 Auto-load - using simple loader (cache likely)');
       setIsFreshUnlock(prev => ({
         ...prev,
         upcomingEarnings: false
@@ -246,19 +260,12 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
             handleUpcomingEarningsLoading(true, 25, 'Switching to direct API...', undefined, null);
             const response = await fetchUpcomingEarningsWithUserCache(timeRange, forceRefresh);
             handleUpcomingEarningsLoading(false, 100, 'Completed!', response, null);
-            // Reset fresh unlock flag after fallback API completes
-            setIsFreshUnlock(prev => ({
-              ...prev,
-              upcomingEarnings: false
-            }));
+            // Reset flags after fallback API completes
+            resetUnlockFlags();
           } catch (fallbackError) {
             console.error('❌ Fallback API also failed:', fallbackError);
             handleUpcomingEarningsLoading(false, 0, 'Failed to load', undefined, String(fallbackError) || 'Both streaming and direct API failed');
-            // Reset fresh unlock flag on fallback error
-            setIsFreshUnlock(prev => ({
-              ...prev,
-              upcomingEarnings: false
-            }));
+            resetUnlockFlags();
           }
         }
       }, 5000); // 5 second fallback timeout
@@ -266,11 +273,7 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
       timeoutId = setTimeout(() => {
         console.warn('⚠️ Earnings loading timeout - request taking too long');
         handleUpcomingEarningsLoading(false, 0, 'Loading timeout', undefined, 'Request timed out, please try again');
-        // Reset fresh unlock flag on timeout
-        setIsFreshUnlock(prev => ({
-          ...prev,
-          upcomingEarnings: false
-        }));
+        resetUnlockFlags();
       }, 240000); // Increased from 120s to 240s to match backend
       
       // Use streaming API for better UX - matching original signature
@@ -300,43 +303,38 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
             const isFromCache = data.source === 'cache';
             console.log(`📊 Data source: ${data.source}, fromCache: ${isFromCache}`);
             
-            // Only show harvest loading card retrospectively if:
-            // 1. It was NOT from cache (fresh API call)
-            // 2. We explicitly forced refresh (user clicked refresh button)
-            if (!isFromCache && forceRefresh) {
-              // This confirms it was indeed a fresh API call from manual refresh
-              console.log('✅ Confirmed fresh API call from manual refresh');
-              setIsFreshUnlock(prev => ({
-                ...prev,
-                upcomingEarnings: true
-              }));
-            } else if (isFromCache) {
-              // Cache hit - ensure harvest loading card is not shown
-              console.log('📦 Cache hit confirmed, ensuring simple loader');
-              setIsFreshUnlock(prev => ({
-                ...prev,
-                upcomingEarnings: false
-              }));
+            // For unlock flows, always show harvest loading regardless of cache status
+            if (isInUnlockFlow) {
+              console.log('🌟 Unlock flow - keeping harvest loading card (user spent credits)');
+              // Keep isFreshUnlock as true for unlock flows
+            } else {
+              // For manual refreshes, show harvest loading only for fresh API calls
+              if (!isFromCache && forceRefresh) {
+                console.log('🔄 Manual refresh with fresh API call');
+                setIsFreshUnlock(prev => ({
+                  ...prev,
+                  upcomingEarnings: true
+                }));
+              } else if (isFromCache) {
+                console.log('📦 Cache hit - using simple loader');
+                setIsFreshUnlock(prev => ({
+                  ...prev,
+                  upcomingEarnings: false
+                }));
+              }
             }
             
             handleUpcomingEarningsLoading(false, 100, 'Completed!', data.data, null);
             
-            // Reset fresh unlock flag after completion (with appropriate delay)
-            const resetDelay = isFromCache ? 100 : 1500; // Longer delay for API calls to show harvest card
+            // Reset unlock flags after completion with appropriate delay
+            const resetDelay = (isInUnlockFlow || (!isFromCache && forceRefresh)) ? 1500 : 100;
             setTimeout(() => {
-              setIsFreshUnlock(prev => ({
-                ...prev,
-                upcomingEarnings: false
-              }));
+              resetUnlockFlags();
             }, resetDelay);
           } else {
             console.error('❌ Stream completed but no valid data received:', data);
             handleUpcomingEarningsLoading(false, 0, 'Failed', undefined, 'No data received');
-            // Reset fresh unlock flag on error too
-            setIsFreshUnlock(prev => ({
-              ...prev,
-              upcomingEarnings: false
-            }));
+            resetUnlockFlags();
           }
         },
         (error) => {
@@ -346,11 +344,7 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
           clearTimeout(timeoutId);
           console.error('❌ Earnings stream error:', error);
           handleUpcomingEarningsLoading(false, 0, 'Error occurred', undefined, String(error) || 'Failed to load earnings data');
-          // Reset fresh unlock flag on error
-          setIsFreshUnlock(prev => ({
-            ...prev,
-            upcomingEarnings: false
-          }));
+          resetUnlockFlags();
         }
       );
       
@@ -372,20 +366,12 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
           fetchUpcomingEarningsWithUserCache(timeRange, forceRefresh)
             .then(response => {
               handleUpcomingEarningsLoading(false, 100, 'Completed via fallback!', response, null);
-              // Reset fresh unlock flag after SSE fallback completes
-              setIsFreshUnlock(prev => ({
-                ...prev,
-                upcomingEarnings: false
-              }));
+              resetUnlockFlags();
             })
             .catch(fallbackError => {
-              console.error('❌ Fallback API also failed:', fallbackError);
-              handleUpcomingEarningsLoading(false, 0, 'Failed to load', undefined, String(fallbackError) || 'Both streaming and direct API failed');
-              // Reset fresh unlock flag on SSE fallback error
-              setIsFreshUnlock(prev => ({
-                ...prev,
-                upcomingEarnings: false
-              }));
+              console.error('❌ Fallback API failed:', fallbackError);
+              handleUpcomingEarningsLoading(false, 0, 'Failed to load', undefined, String(fallbackError) || 'Failed to load earnings data');
+              resetUnlockFlags();
             });
         }
       });
@@ -393,22 +379,29 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
       // Cleanup function
       return () => {
         streamAborted = true;
-        clearTimeout(fallbackTimeoutId);
-        clearTimeout(timeoutId);
-        console.log('🛑 Cleaning up earnings stream');
         streamSource.close();
+        clearTimeout(timeoutId);
+        clearTimeout(fallbackTimeoutId);
       };
       
     } catch (error) {
-      console.error('Earnings data loading error:', error);
-      handleUpcomingEarningsLoading(false, 0, 'Error occurred', undefined, String(error) || 'Failed to load earnings data');
-      // Reset fresh unlock flag on general error
-      setIsFreshUnlock(prev => ({
-        ...prev,
-        upcomingEarnings: false
-      }));
+      console.error('❌ Error loading earnings data:', error);
+      handleUpcomingEarningsLoading(false, 0, 'Failed to load', undefined, String(error) || 'Failed to load earnings data');
+      resetUnlockFlags();
     }
-  }, [hasUpcomingEarningsAccess, timeRange, loadingState.upcomingEarnings.isLoading, upcomingEarnings.length]);
+  }, [timeRange, hasUpcomingEarningsAccess, loadingState.upcomingEarnings.isLoading, upcomingEarnings.length, isUnlockFlow.upcomingEarnings]);
+
+  // Helper function to reset unlock flags
+  const resetUnlockFlags = () => {
+    setIsFreshUnlock(prev => ({
+      ...prev,
+      upcomingEarnings: false
+    }));
+    setIsUnlockFlow(prev => ({
+      ...prev,
+      upcomingEarnings: false
+    }));
+  };
 
   // Load analysis function
   const loadAnalysis = useCallback(async (ticker: string) => {
@@ -417,76 +410,103 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
       return;
     }
 
-    // Set fresh unlock flag to true for any new ticker analysis (fresh data fetch)
-    setIsFreshUnlock(prev => ({
-      ...prev,
-      earningsAnalysis: true
-    }));
-
-    // Immediately reset progress to 0 to prevent showing previous analysis's 100% progress
-    setLoadingProgress(0);
-    setLoadingStage(`Starting analysis for ${ticker}...`);
+    // Determine appropriate loading UI based on:
+    // 1. Fresh unlock (credits spent) → Always harvest loading
+    // 2. New ticker (not analyzed in this session) → Harvest loading (likely fresh scraping)
+    // 3. Previously analyzed ticker → Simple cache loading
+    const isInUnlockFlow = isUnlockFlow.earningsAnalysis;
+    const wasAnalyzedBefore = analyzedTickers.has(ticker);
+    const shouldShowHarvestLoading = isInUnlockFlow || !wasAnalyzedBefore;
+    
+    console.log(`🔍 Loading analysis for ${ticker}: isInUnlockFlow=${isInUnlockFlow}, wasAnalyzedBefore=${wasAnalyzedBefore}, showHarvestLoading=${shouldShowHarvestLoading}`);
+    
+    // Set loading UI based on unlock flow or ticker analysis history
+    if (isInUnlockFlow) {
+      console.log('🌟 Just unlocked - showing harvest loading card (user spent credits)');
+      // Keep isFreshUnlock as set by handleUnlockComponent
+      setLoadingProgress(0);
+      setLoadingStage(`Analyzing ${ticker} earnings...`);
+    } else if (!wasAnalyzedBefore) {
+      console.log('🔍 New ticker - showing harvest loading card (likely fresh scraping)');
+      setIsFreshUnlock(prev => ({
+        ...prev,
+        earningsAnalysis: true
+      }));
+      setLoadingProgress(0);
+      setLoadingStage(`Analyzing ${ticker} earnings...`);
+    } else {
+      console.log('📦 Previously analyzed ticker - showing simple cache loading');
+      setIsFreshUnlock(prev => ({
+        ...prev,
+        earningsAnalysis: false
+      }));
+      setLoadingProgress(0);
+      setLoadingStage(`Loading ${ticker} from cache...`);
+    }
 
     handleEarningsAnalysisLoading(true, 0, `Analyzing ${ticker} earnings...`, undefined, null);
     
-    // More granular steps to reflect actual backend work
-    const totalSteps = 8;
-    
-    // Helper function to update progress
-    const updateProgress = (step: number, stage: string) => {
-      const progressPercentage = Math.round((step / totalSteps) * 100);
-      console.log(`📊 Analysis progress: ${progressPercentage}% - ${stage}`);
-      handleEarningsAnalysisLoading(true, progressPercentage, stage, undefined, null);
-    };
-
     try {
-      // Step 1: Initialize analysis
-      updateProgress(1, `Initializing analysis for ${ticker}...`);
-      await new Promise(resolve => setTimeout(resolve, 100));
+      if (shouldShowHarvestLoading) {
+        // Show harvest loading stages for fresh unlocks or new tickers
+        handleEarningsAnalysisLoading(true, 10, `Initializing analysis for ${ticker}...`, undefined, null);
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        handleEarningsAnalysisLoading(true, 25, `Fetching company profile for ${ticker}...`, undefined, null);
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        handleEarningsAnalysisLoading(true, 40, `Scraping historical earnings for ${ticker}...`, undefined, null);
+        await new Promise(resolve => setTimeout(resolve, 400));
+        
+        handleEarningsAnalysisLoading(true, 60, `Processing earnings data for ${ticker}...`, undefined, null);
+      } else {
+        // Show simple cache loading for previously analyzed tickers
+        handleEarningsAnalysisLoading(true, 50, `Loading ${ticker} analysis...`, undefined, null);
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
       
-      // Step 2: Cache lookup
-      updateProgress(2, `Checking cache for ${ticker}...`);
-      await new Promise(resolve => setTimeout(resolve, 200));
-      
-      // Step 3: Company profile
-      updateProgress(3, `Fetching company profile for ${ticker}...`);
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // Step 4: Basic financials
-      updateProgress(4, `Fetching financial data for ${ticker}...`);
-      await new Promise(resolve => setTimeout(resolve, 400));
-      
-      // Step 5: Historical earnings (this is the heavy part)
-      updateProgress(5, `Scraping historical earnings for ${ticker}...`);
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Step 6: Data analysis (the actual API call happens here)
-      updateProgress(6, `Processing earnings data for ${ticker}...`);
-      
+      // Perform the actual API call
       console.log(`🔍 Starting fetchEarningsAnalysisWithUserCache for ${ticker}`);
-      const analysis = await fetchEarningsAnalysisWithUserCache(ticker);
-      console.log(`✅ Analysis completed for ${ticker}:`, analysis);
+      const result = await fetchEarningsAnalysisWithUserCache(ticker);
+      console.log(`✅ Analysis completed for ${ticker}:`, result);
       
-      // Step 7: Computing analysis
-      updateProgress(7, `Computing analysis metrics for ${ticker}...`);
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Log actual data source for monitoring (no UI changes)
+      const isFromCache = result.source === 'cache';
+      console.log(`📊 Data source: ${result.source}, fromCache: ${isFromCache}, UI choice: ${shouldShowHarvestLoading ? 'harvest' : 'simple'}, wasAnalyzedBefore: ${wasAnalyzedBefore}`);
       
-      // Step 8: Finalizing
-      updateProgress(8, `Finalizing ${ticker} analysis...`);
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Complete the loading process based on initial UI choice
+      if (shouldShowHarvestLoading) {
+        // Continue with harvest loading stages
+        handleEarningsAnalysisLoading(true, 80, `Computing analysis metrics for ${ticker}...`, undefined, null);
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        handleEarningsAnalysisLoading(true, 95, `Finalizing ${ticker} analysis...`, undefined, null);
+        await new Promise(resolve => setTimeout(resolve, 200));
+      } else {
+        // Quick completion for cache
+        handleEarningsAnalysisLoading(true, 90, `Finalizing ${ticker} analysis...`, undefined, null);
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
       
-      handleEarningsAnalysisLoading(false, 100, 'Analysis complete!', analysis, null);
+      handleEarningsAnalysisLoading(false, 100, 'Analysis complete!', result.analysis, null);
       
-      // Add ticker to analyzed set for visual cache indication
+      // Add ticker to analyzed set for future reference
       setAnalyzedTickers(prev => new Set([...prev, ticker]));
       
-      // Reset fresh unlock flag after analysis completes with a delay
+      // Reset unlock flags after appropriate delay
+      const resetDelay = shouldShowHarvestLoading ? 1500 : 100;
       setTimeout(() => {
         setIsFreshUnlock(prev => ({
           ...prev,
           earningsAnalysis: false
         }));
-      }, 500);
+        if (isInUnlockFlow) {
+          setIsUnlockFlow(prev => ({
+            ...prev,
+            earningsAnalysis: false
+          }));
+        }
+      }, resetDelay);
       
     } catch (error) {
       console.error('❌ Earnings analysis error:', error);
@@ -494,17 +514,23 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
       // Ensure loading state is properly cleared on error
       handleEarningsAnalysisLoading(false, 0, 'Analysis failed', undefined, String(error) || 'Failed to analyze earnings data');
       
-      // Reset fresh unlock flag immediately on error
+      // Reset unlock flags immediately on error
       setIsFreshUnlock(prev => ({
         ...prev,
         earningsAnalysis: false
       }));
+      if (isInUnlockFlow) {
+        setIsUnlockFlow(prev => ({
+          ...prev,
+          earningsAnalysis: false
+        }));
+      }
       
       // Also reset loading progress explicitly
       setLoadingProgress(0);
       setLoadingStage('Analysis failed');
     }
-  }, [hasEarningsAnalysisAccess]);
+  }, [hasEarningsAnalysisAccess, isUnlockFlow.earningsAnalysis, analyzedTickers]);
 
   // Refresh data function - updated to match SEC filings pattern
   const refreshData = async () => {
@@ -697,18 +723,27 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
         const sessions = await getAllUnlockSessions();
         setActiveSessions(sessions);
         
-        // Show appropriate toast message and track unlock type
+        // Show appropriate toast message and set unlock flow flags
         if (data.existingSession) {
           info(`${component} already unlocked (${data.timeRemaining}h remaining)`);
-          // This is a cache load, not a fresh unlock
+          // This is a cache load, not a fresh unlock - no special loading needed
           setIsFreshUnlock(prev => ({
+            ...prev,
+            [component]: false
+          }));
+          setIsUnlockFlow(prev => ({
             ...prev,
             [component]: false
           }));
         } else {
           info(`${data.creditsUsed} credits used`);
-          // This is a fresh unlock with credits spent - show harvest loading
+          // This is a fresh unlock with credits spent - ALWAYS show harvest loading for initial data fetch
+          console.log(`🌟 FRESH UNLOCK: ${component} - Credits spent, will show harvest loading for initial data fetch`);
           setIsFreshUnlock(prev => ({
+            ...prev,
+            [component]: true
+          }));
+          setIsUnlockFlow(prev => ({
             ...prev,
             [component]: true
           }));
@@ -721,6 +756,7 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
         
         // Trigger data loading if upcoming earnings was unlocked
         if (component === 'upcomingEarnings') {
+          // Pass true to indicate this is a force refresh from unlock (not manual refresh)
           loadData(true);
         }
       }
@@ -1086,9 +1122,31 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
         <div className="flex-1 overflow-hidden">
           {activeTab === 'upcoming' && (
             <>
-              {hasUpcomingEarningsAccess ? (
+              {isCheckingSessions ? (
+                // Show loading while checking sessions to prevent locked overlay flash
+                <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden h-full`}>
+                  <div className={`${headerBg} p-4`}>
+                    <h2 className={`text-lg font-semibold ${textColor}`}>Upcoming Earnings</h2>
+                  </div>
+                  <div className="flex flex-col items-center justify-center p-12 text-center">
+                    <Loader2 className="text-blue-500 animate-spin mb-4" size={32} />
+                    <h3 className={`text-lg font-semibold ${textColor} mb-2`}>
+                      Checking Access...
+                    </h3>
+                    <p className={`text-sm ${subTextColor} mb-4`}>
+                      Verifying component access...
+                    </p>
+                    <div className="w-full max-w-md">
+                      <ProgressBar progress={50} />
+                      <div className={`text-xs ${subTextColor} mt-2 text-center`}>
+                        Checking access...
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : hasUpcomingEarningsAccess ? (
                 <>
-                  {loadingState.upcomingEarnings.isLoading ? (
+                  {loadingState.upcomingEarnings.isLoading || (upcomingEarnings.length === 0 && !errors.upcomingEarnings) ? (
                     <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden h-full`}>
                       <div className={`${headerBg} p-4`}>
                         <h2 className={`text-lg font-semibold ${textColor}`}>Upcoming Earnings</h2>
@@ -1208,7 +1266,7 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
                       <div className="p-6 h-full flex flex-col items-center justify-center">
                         <div className={`flex flex-col items-center text-center max-w-md mx-auto space-y-6`}>
                           <div className={`p-4 rounded-full ${isLight ? 'bg-blue-100' : 'bg-blue-900/30'}`}>
-                            <BarChart2 className={`w-8 h-8 ${isLight ? 'text-blue-600' : 'text-blue-400'}`} />
+                            <TrendingUp className={`w-8 h-8 ${isLight ? 'text-blue-600' : 'text-blue-400'}`} />
                           </div>
                           
                           <div className="space-y-2">
@@ -1331,7 +1389,7 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
                             {/* Company Information */}
                             <div className={`${isLight ? 'bg-stone-200' : 'bg-gray-800/90'} rounded-lg p-4`}>
                               <div className="flex items-center space-x-2 mb-3">
-                                <BarChart2 size={20} className="text-blue-400" />
+                                <TrendingUp size={20} className="text-blue-400" />
                                 <span className="text-sm font-medium">Company Overview</span>
                               </div>
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1469,7 +1527,7 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
                   description="Unlock detailed earnings analysis for any ticker. Analyze historical performance, surprises, and financial metrics independently."
                   cost={COMPONENT_COSTS.earningsAnalysis}
                   componentKey="earningsAnalysis"
-                  icon={<BarChart2 className="w-8 h-8 text-white" />}
+                  icon={<TrendingUp className="w-8 h-8 text-white" />}
                 />
               )}
             </>
