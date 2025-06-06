@@ -37,19 +37,15 @@ const PricingSection: React.FC<PricingSectionProps> = ({
       features: [
         '3 watchlist stocks',
         '50 scrape credits/month',
-        'Basic sentiment (FinViz)',
+        'Basic sentiment (FinViz/Yahoo)',
         'SEC insider trades',
         'Basic earnings calendar',
-        '1-day historical data',
-        'Basic stock search'
       ],
       limitations: [
         'No Reddit sentiment access',
         'Limited historical data',
-        'Limited watchlist capacity',
         'No SEC institutional holdings',
-        'Basic search functionality',
-        'No advanced analytics'
+        'No earnings analysis'
       ]
     },
     {
@@ -64,35 +60,34 @@ const PricingSection: React.FC<PricingSectionProps> = ({
         '25 watchlist stocks',
         '500 scrape credits/month',
         'Reddit sentiment access',
-        'All sentiment sources',
-        'Reddit sentiment',
+        'Alpha Vantage integration',
         'Full SEC filings access',
         'Complete earnings analysis',
-        'Up to 1-month historical data',
-        'Advanced stock search',
-        'Real-time data refresh'
+        'More historical data',
+        'Longer data cache times'
       ]
     },
-    {
-      name: 'Elite',
-      price: '$30',
-      period: 'month',
-      description: 'For serious analysts',
-      icon: <Zap className="w-5 h-5" />,
-      gradient: 'from-purple-400 to-purple-600',
-      features: [
-        '50 watchlist stocks',
-        '2000 scrape credits/month',
-        'All data sources',
-        'Reddit + Alpha Vantage integration',
-        '3+ month historical data',
-        'Advanced time range options',
-        'Enhanced data refresh rates',
-        'Advanced stock search & filters',
-        'Usage analytics dashboard',
-        'Priority data processing'
-      ]
-    },
+    // TODO: Re-enable for post-1.0 release
+    // {
+    //   name: 'Elite',
+    //   price: '$30',
+    //   period: 'month',
+    //   description: 'For serious analysts',
+    //   icon: <Zap className="w-5 h-5" />,
+    //   gradient: 'from-purple-400 to-purple-600',
+    //   features: [
+    //     '50 watchlist stocks',
+    //     '2000 scrape credits/month',
+    //     'Priority fetches and scraping',
+    //     'Every advanced API integration',
+    //     'Longest data caching for easy retrieval',
+    //     'Advanced time range options',
+    //     'Enhanced data refresh rates',
+    //     'Advanced stock search & filters',
+    //     'Usage analytics dashboard',
+    //     'Priority data processing'
+    //   ]
+    // },
     // TODO: Re-enable for post-1.0 release
     // {
     //   name: 'Institutional',
@@ -151,7 +146,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
       )}
 
       {/* Pricing Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
         {tiers.map((tier, index) => (
           <div
             key={index}

@@ -3,7 +3,7 @@ const { pool } = require('../config/data-sources');
 // Tier configuration
 const TIER_LIMITS = {
   free: {
-    watchlistLimit: 5,
+    watchlistLimit: 3,
     monthlyCredits: 50,
     dailyCredits: 10,
     features: ['FinViz', 'SEC-Insider', 'Earnings', 'Yahoo'],

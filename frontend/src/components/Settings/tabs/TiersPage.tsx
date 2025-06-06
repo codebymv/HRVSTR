@@ -238,19 +238,19 @@ const TiersPage: React.FC = () => {
                 <li>• Stock search query: 1 credit</li>
                 <li>• Real-time data refresh: 1 credit</li>
                 <li>• Historical data access: 3-5 credits</li>
-                <li>• Watchlist sync: 1 credit</li>
+                {/* <li>• Watchlist sync: 1 credit</li> */}
               </ul>
             </div>
             <div>
               <h4 className={`font-medium ${textColor} mb-2`}>Tier Limitations</h4>
               <ul className={`text-sm ${secondaryTextColor} space-y-1`}>
                 <li>• Free: 3 watchlist stocks maximum</li>
-                <li>• Pro: 15 watchlist stocks maximum</li>
+                <li>• Pro: 25 watchlist stocks maximum</li>
                 <li>• Elite: 50 watchlist stocks maximum</li>
-                <li>• Institutional: Unlimited watchlist</li>
-                <li>• Upgrade prompts shown at limits</li>
-                <li>• Free tier: Basic search only</li>
-                <li>• Paid tiers: Advanced filtering</li>
+                {/* <li>• Institutional: Unlimited watchlist</li> */}
+                {/* <li>• Upgrade prompts shown at limits</li> */}
+                {/* <li>• Free tier: Basic search only</li>
+                <li>• Paid tiers: Advanced filtering</li> */}
               </ul>
             </div>
             <div>
@@ -261,7 +261,7 @@ const TiersPage: React.FC = () => {
                 <li>• Unused credits don't roll over monthly</li>
                 <li>• Upgrades take effect immediately</li>
                 <li>• Secure payment processing via Stripe</li>
-                <li>• 30-day money-back guarantee on first purchase</li>
+                {/* <li>• 30-day money-back guarantee on first purchase</li> */}
               </ul>
             </div>
           </div>

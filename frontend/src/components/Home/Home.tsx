@@ -176,12 +176,12 @@ const Home: React.FC = () => {
             <ActivityPreview />
             
             {/* Call to Action Card */}
-            <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} h-64 flex flex-col items-center justify-center text-center`}>
+            <div className={`${cardBgColor} rounded-lg p-4 border ${borderColor} shadow-sm hover:shadow-md transition-all duration-200 h-64 flex flex-col items-center justify-center text-center`}>
               <div className="mb-4">
                 <div className="w-16 h-16 bg-gradient-to-r from-teal-400 to-blue-500 rounded-full flex items-center justify-center mb-4 mx-auto">
                   <ArrowRight className="w-8 h-8 text-white" />
                 </div>
-                <h3 className={`text-xl font-semibold mb-2 ${textColor}`}>
+                <h3 className={`text-lg font-semibold mb-2 ${textColor}`}>
                   Ready to Get Started?
                 </h3>
                 <p className={`${secondaryTextColor} mb-4 text-sm`}>

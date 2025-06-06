@@ -209,7 +209,7 @@ const SESSION_CREDIT_COSTS = {
 const TIER_SESSION_LIMITS = {
   free: {
     watchlistLimit: 3,
-    monthlyCredits: 0,          // Trial access only
+    monthlyCredits: 50,         // 50 credits per month
     sessionDuration: 30 * 60 * 1000,  // 30 minutes
     features: ['FinViz', 'SEC-Preview', 'Earnings-Basic'],
     crossDeviceSync: true,

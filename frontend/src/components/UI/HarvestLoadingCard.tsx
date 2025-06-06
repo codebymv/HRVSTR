@@ -24,6 +24,7 @@ const HarvestLoadingCard: React.FC<HarvestLoadingCardProps> = ({
   const progressTextColor = isLight ? 'text-blue-600' : 'text-blue-400';
   const warningBgColor = isLight ? 'bg-amber-50' : 'bg-amber-900/20';
   const warningTextColor = isLight ? 'text-amber-700' : 'text-amber-400';
+  const logoFilter = isLight ? 'invert(1) brightness(0)' : 'none';
   
   // Operation-specific configuration
   const operationConfig = {
@@ -100,6 +101,16 @@ const HarvestLoadingCard: React.FC<HarvestLoadingCardProps> = ({
       {/* Three.js falling leaves animation */}
       <div className="mb-6 relative">
         <FallingLeaves3D width={64} height={64} leafCount={8} />
+      </div>
+
+      {/* Theme-aware HRVSTR Logo */}
+      <div className="mb-4">
+        <img 
+          src="/hrvstr_logo.png" 
+          alt="HRVSTR" 
+          className="h-full w-auto max-h-10" 
+          style={{ filter: logoFilter }}
+        />
       </div>
       
       {/* <h3 className={`text-xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent mb-2`}>

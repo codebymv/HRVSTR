@@ -1,5 +1,5 @@
 const { Pool } = require('pg');
-const { getRedditSentiment } = require('./src/controllers/sentimentController');
+const { getRedditSentiment } = require('../src/controllers/sentimentController');
 
 const databaseUrl = 'postgresql://postgres:uhvLzWQTraqYWeMTmgdvgWzoUvhaJpZj@crossover.proxy.rlwy.net:37814/railway';
 

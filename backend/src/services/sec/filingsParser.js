@@ -10,7 +10,7 @@ const { initSecTickerDatabase } = require('./companyDatabase');
 initSecTickerDatabase();
 
 // Import parsers
-const { parseForm4Data } = require('./parsers/form4Parser');
+const { parseForm4Data } = require('./parsers/form4ParserRefactored');
 const { parseForm13FData, getQuarterEndDate } = require('./parsers/form13FParser');
 
 // Import utilities

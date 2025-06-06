@@ -1,4 +1,4 @@
-const { pool } = require('./src/config/data-sources');
+const { pool } = require('../src/config/data-sources');
 
 async function fixOldSessions() {
   try {

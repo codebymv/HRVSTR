@@ -5,7 +5,7 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const { randomUserAgent, randomDelay, parseNumber } = require('./scraping-helpers');
-const { getYahooEarningsCalendar, scrapeHistoricalEarnings } = require('./yahooFinanceEarnings');
+const { getYahooEarningsCalendar, scrapeHistoricalEarnings } = require('../services/yahoo/yahooFinanceEarningsRefactored');
 
 // API Configuration
 const FMP_API_KEY = process.env.FMP_API_KEY || null;
