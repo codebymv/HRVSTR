@@ -655,8 +655,8 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
           quantity: 1,
         }
       ],
-      success_url: successUrl || `${process.env.FRONTEND_URL || 'https://hrvstr.up.railway.app'}/settings/billing?success=true`,
-      cancel_url: cancelUrl || `${process.env.FRONTEND_URL || 'https://hrvstr.up.railway.app'}/settings/tiers?cancelled=true`,
+      success_url: successUrl || `${process.env.FRONTEND_URL || 'https://hrvstr.us'}/settings/billing?success=true`,
+      cancel_url: cancelUrl || `${process.env.FRONTEND_URL || 'https://hrvstr.us'}/settings/tiers?cancelled=true`,
       metadata: {
         userId: userId.toString(),
         priceId: priceId

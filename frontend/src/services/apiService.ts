@@ -4,9 +4,9 @@
 
 // Get the proxy URL from environment variables or use relative path
 export const getProxyUrl = (): string => {
-  // In production, use the Railway backend service URL
+  // In production, use the custom domain backend service URL
   if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.PROD) {
-    return 'https://backend-production-81ee.up.railway.app';
+    return 'https://hrvstr-backend.up.railway.app';
   }
   // In development, use the proxy URL from env or default
   if (typeof import.meta !== 'undefined' && (import.meta as any).env) {

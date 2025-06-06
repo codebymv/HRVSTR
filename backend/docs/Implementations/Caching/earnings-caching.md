@@ -4,13 +4,148 @@ This document examines the sophisticated caching implementation for the Earnings
 
 ## 1. Architecture Overview
 
-The HRVSTR earnings system implements a **dual-layer session-based caching architecture**:
+The HRVSTR earnings system implements a **database-only session-based caching architecture** (aligned with SEC filings approach):
 
 1. **Database Layer**: PostgreSQL-backed user-specific cache with session management
-2. **Frontend Layer**: localStorage for immediate UI responsiveness (fallback only)
-3. **Session Layer**: `research_sessions` table tracks component unlocks and prevents double-charging
+2. **Session Layer**: `research_sessions` table tracks component unlocks and prevents double-charging
+3. **Frontend Layer**: No localStorage dependency - pure database-driven state management
 
-## 2. Core Components
+## 2. Alignment with SEC Filings Architecture
+
+The earnings components now follow the **exact same patterns** as SEC filings:
+
+### Unified Loading State Management
+```typescript
+// Structured loading states matching SEC filings
+const [loadingState, setLoadingState] = useState({
+  upcomingEarnings: { isLoading: false, needsRefresh: false },
+  earningsAnalysis: { isLoading: false, needsRefresh: false }
+});
+
+// Refresh state management
+const [isRefreshing, setIsRefreshing] = useState(false);
+```
+
+### Loading Handlers Pattern
+```typescript
+// Handle loading updates from upcoming earnings tab
+const handleUpcomingEarningsLoading = (isLoading: boolean, progress: number, stage: string, data?: any[], error?: string | null) => {
+  setLoadingState(prev => ({
+    ...prev,
+    upcomingEarnings: { 
+      isLoading, 
+      needsRefresh: false
+    }
+  }));
+  
+  // When loading completes successfully, update data
+  if (!isLoading && data) {
+    setUpcomingEarnings(data);
+  }
+  
+  // Update error state if provided
+  if (error !== undefined) {
+    setErrors(prev => ({ ...prev, upcomingEarnings: error }));
+  }
+  
+  // Only update overall progress if this is the active tab
+  if (activeTab === 'upcoming' || !isLoading) {
+    setLoadingProgress(progress);
+    setLoadingStage(stage);
+    
+    // Propagate to parent component
+    if (onLoadingProgressChange) {
+      onLoadingProgressChange(progress, stage);
+    }
+  }
+
+  // Clear refresh state when loading completes
+  if (!isLoading && isRefreshing) {
+    const analysisComplete = !hasEarningsAnalysisAccess || !loadingState.earningsAnalysis.isLoading;
+    if (analysisComplete) {
+      setIsRefreshing(false);
+    }
+  }
+};
+```
+
+### Database-Only Caching (No localStorage)
+```typescript
+// Data states - no longer stored in localStorage (matching SEC filings approach)
+const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
+const [earningsAnalysis, setEarningsAnalysis] = useState<EarningsAnalysis | null>(null);
+const [upcomingEarnings, setUpcomingEarnings] = useState<EarningsEvent[]>([]);
+
+// REMOVED: All localStorage persistence logic
+// REMOVED: localStorage.getItem('earnings_upcomingEarnings')
+// REMOVED: localStorage.setItem() calls
+// REMOVED: isDataStale() timestamp checking
+```
+
+### Refresh Management Pattern
+```typescript
+// Refresh data function - updated to match SEC filings pattern
+const refreshData = async () => {
+  // Check if any components are actually unlocked
+  const hasUnlockedComponents = unlockedComponents.earningsAnalysis || unlockedComponents.upcomingEarnings;
+  
+  if (!hasUnlockedComponents) {
+    info('Please unlock at least one component before refreshing');
+    return;
+  }
+
+  setIsRefreshing(true);
+  setLoadingProgress(0);
+  setLoadingStage('Clearing cache...');
+  
+  try {
+    // Clear user's specific cache (using appropriate API)
+    const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
+    const token = localStorage.getItem('auth_token');
+    
+    await fetch(`${proxyUrl}/api/earnings/clear-cache`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      }
+    });
+    
+    // Reset errors and clear existing data
+    setErrors({ upcomingEarnings: null, analysis: null });
+    setUpcomingEarnings([]);
+    setEarningsAnalysis(null);
+    
+    // Trigger refresh for unlocked components only
+    if (unlockedComponents.upcomingEarnings) {
+      setLoadingState(prev => ({
+        ...prev,
+        upcomingEarnings: { 
+          isLoading: false, 
+          needsRefresh: true 
+        }
+      }));
+    }
+    
+    if (unlockedComponents.earningsAnalysis && selectedTicker) {
+      setLoadingState(prev => ({
+        ...prev,
+        earningsAnalysis: { 
+          isLoading: false, 
+          needsRefresh: true 
+        }
+      }));
+    }
+  } catch (error) {
+    console.error('Error during refresh:', error);
+    info('Error refreshing data. Please try again.');
+  } finally {
+    setIsRefreshing(false);
+  }
+};
+```
+
+## 3. Core Components
 
 ### Database-Backed User Cache System
 
@@ -109,40 +244,47 @@ async function getEarningsData(userId, dataType, timeRange, tier, forceRefresh =
 }
 ```
 
-### Session-Based Component Access
+### Session-Based Component Access (Database-Only)
 
 The earnings system integrates with the sophisticated session management:
 
 ```typescript
-// Frontend component access checking
+// Frontend component access checking - DATABASE ONLY
 const checkExistingSessions = async () => {
   try {
-    // Primary: Check database sessions via API
-    const analysisSession = await checkComponentAccess('earningsAnalysis');
+    // Database-only checking - no localStorage fallback
+    const earningsAnalysisSession = await checkComponentAccess('earningsAnalysis', currentTier);
+    const upcomingEarningsSession = await checkComponentAccess('upcomingEarnings', currentTier);
+
+    const newUnlockedState = {
+      earningsAnalysis: !!earningsAnalysisSession,
+      upcomingEarnings: !!upcomingEarningsSession
+    };
+
+    setUnlockedComponents(newUnlockedState);
+
+    const sessions = await getAllUnlockSessions(currentTier);
+    setActiveSessions(sessions);
     
-    setUnlockedComponents({
-      earningsAnalysis: !!analysisSession
+    console.log('🔍 EARNINGS MONITOR TABBED - Component access check:', {
+      earningsAnalysis: !!earningsAnalysisSession,
+      upcomingEarnings: !!upcomingEarningsSession,
+      currentTier,
+      databaseSessions: sessions.length
     });
-    
-    if (analysisSession) {
-      console.log('🔍 EARNINGS - Active session found:', {
-        sessionId: analysisSession.sessionId,
-        expiresAt: analysisSession.expiresAt,
-        timeRemaining: analysisSession.timeRemaining
-      });
-    }
   } catch (error) {
-    // Fallback to localStorage for offline scenarios
-    console.warn('Database session check failed, using localStorage fallback');
-    const localSession = checkUnlockSession('earningsAnalysis');
+    console.warn('Database session check failed:', error);
+    // No more localStorage fallback - just set to false if database fails
     setUnlockedComponents({
-      earningsAnalysis: !!localSession
+      earningsAnalysis: false,
+      upcomingEarnings: false
     });
+    setActiveSessions([]);
   }
 };
 ```
 
-## 3. Cross-Device Session Synchronization
+## 4. Cross-Device Session Synchronization
 
 The system ensures users can access unlocked components across all devices:
 
@@ -150,10 +292,10 @@ The system ensures users can access unlocked components across all devices:
 ```javascript
 const handleUnlockComponent = async (component, cost) => {
   // 1. Check existing session (prevents double-charging)
-  const existingSession = await checkComponentAccess(component);
+  const existingSession = await checkComponentAccess(component, currentTier);
   if (existingSession) {
     const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
-    info(`${component} already unlocked (${timeRemaining})`);
+    info(`${component} already unlocked (${timeRemaining}h remaining)`);
     return;
   }
   
@@ -170,124 +312,28 @@ const handleUnlockComponent = async (component, cost) => {
     // 3. Update UI immediately
     setUnlockedComponents(prev => ({ ...prev, [component]: true }));
     
-    // 4. Store in localStorage for offline fallback
+    // 4. Store in localStorage for backward compatibility only
     storeUnlockSession(component, {
       sessionId: data.sessionId,
       expiresAt: data.expiresAt,
       creditsUsed: data.creditsUsed,
-      tier: tierInfo?.tier
+      tier: tierInfo?.tier || 'free'
     });
     
-    // 5. Trigger immediate data loading if needed
+    // 5. Update active sessions by querying database
+    const sessions = await getAllUnlockSessions();
+    setActiveSessions(sessions);
+    
+    // 6. Trigger immediate data loading if needed
     if (component === 'earningsAnalysis' && selectedTicker) {
       loadAnalysis(selectedTicker);
     }
+    
+    if (component === 'upcomingEarnings') {
+      loadData(true);
+    }
   }
 };
-```
-
-### Database Session Management
-
-Backend session creation with automatic expiration:
-
-```sql
--- Create new research session with tier-based duration
-INSERT INTO research_sessions (
-  user_id, 
-  session_id, 
-  component, 
-  credits_used, 
-  expires_at,
-  metadata
-) VALUES (
-  $1, -- user_id
-  $2, -- session_id
-  $3, -- component ('earningsAnalysis', 'upcomingEarnings')
-  $4, -- credits_used
-  CURRENT_TIMESTAMP + (
-    CASE 
-      WHEN $5 = 'free' THEN INTERVAL '30 minutes'
-      WHEN $5 = 'pro' THEN INTERVAL '2 hours'  
-      WHEN $5 = 'elite' THEN INTERVAL '4 hours'
-      WHEN $5 = 'institutional' THEN INTERVAL '8 hours'
-    END
-  ), -- expires_at (tier-based)
-  $6 -- metadata
-);
-```
-
-## 4. Sophisticated Cache Management
-
-### Tier-Based Cache Expiration
-
-Cache duration varies by user tier to optimize cost and performance:
-
-```javascript
-const EARNINGS_CACHE_CONFIG = {
-  FREE_TIER_TTL: 30 * 60,      // 30 minutes - encourages upgrades
-  PRO_TIER_TTL: 2 * 60 * 60,   // 2 hours - good balance
-  ELITE_TIER_TTL: 4 * 60 * 60, // 4 hours - premium experience
-  INSTITUTIONAL_TIER_TTL: 30 * 60 // 30 minutes - ultra-fresh data for institutions
-};
-
-// Calculate expiration based on tier
-const getEarningsCacheExpiration = (tier, dataType) => {
-  const baseTTL = EARNINGS_CACHE_CONFIG[`${tier.toUpperCase()}_TIER_TTL`] || 
-                  EARNINGS_CACHE_CONFIG.FREE_TIER_TTL;
-  
-  // Earnings analysis gets longer cache (more expensive to compute)
-  const multiplier = dataType === 'earnings_analysis' ? 2 : 1;
-  
-  return `${baseTTL * multiplier} seconds`;
-};
-```
-
-### Intelligent Cache Storage
-
-The system stores earnings data with rich metadata for optimal retrieval:
-
-```javascript
-async function cacheEarningsData(userId, dataType, timeRange, data, creditsUsed, userTier) {
-  // Calculate tier-based expiration
-  const expirationInterval = getEarningsCacheExpiration(userTier, dataType);
-  
-  // Prepare rich metadata
-  const metadata = {
-    dataCount: Array.isArray(data.earnings) ? data.earnings.length : 1,
-    fetchedAt: new Date().toISOString(),
-    userTier,
-    timeRange,
-    source: data.source || 'earnings-api',
-    analysisDepth: dataType === 'earnings_analysis' ? 'detailed' : 'summary'
-  };
-  
-  // Store in user-specific cache table
-  const cacheQuery = `
-    INSERT INTO user_earnings_cache (
-      user_id, data_type, time_range, data_json, metadata, 
-      expires_at, credits_used
-    ) VALUES (
-      $1, $2, $3, $4, $5, 
-      CURRENT_TIMESTAMP + $6::INTERVAL, $7
-    )
-    ON CONFLICT (user_id, data_type, time_range)
-    DO UPDATE SET
-      data_json = EXCLUDED.data_json,
-      metadata = EXCLUDED.metadata,
-      expires_at = EXCLUDED.expires_at,
-      credits_used = EXCLUDED.credits_used,
-      updated_at = CURRENT_TIMESTAMP
-    RETURNING id, expires_at
-  `;
-  
-  const result = await db.query(cacheQuery, [
-    userId, dataType, timeRange, 
-    JSON.stringify(data), JSON.stringify(metadata), 
-    expirationInterval, creditsUsed
-  ]);
-  
-  console.log(`✅ Cached earnings data for user ${userId}, expires: ${result.rows[0].expires_at}`);
-}
 ```
 
 ## 5. Progressive Data Loading with Real-Time Progress

@@ -71,7 +71,7 @@ const authLimiter = rateLimit({
 
 // Configure CORS with specific options
 const corsOptions = {
-  origin: ['https://hrvstr.up.railway.app', 'http://localhost:5173', 'http://localhost:3000'], // Allow specific origins
+  origin: ['https://hrvstr.us', 'https://hrvstr.up.railway.app', 'http://localhost:5173', 'http://localhost:3000'], // Allow specific origins
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: [
     'Content-Type', 
@@ -108,7 +108,7 @@ app.options('*', cors(corsOptions));
 app.use((req, res, next) => {
   // Set CORS headers
   const origin = req.headers.origin;
-  if (['https://hrvstr.up.railway.app', 'http://localhost:5173', 'http://localhost:3000'].includes(origin)) { 
+  if (['https://hrvstr.us', 'https://hrvstr.up.railway.app', 'http://localhost:5173', 'http://localhost:3000'].includes(origin)) { 
     res.header('Access-Control-Allow-Origin', origin); 
   }
   res.header('Access-Control-Allow-Methods', corsOptions.methods.join(','));
