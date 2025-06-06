@@ -99,6 +99,10 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
   const requestManager = useAbortableRequests();
   const { tierInfo } = useTier();
   
+  // Check user tier before making credit-consuming API calls
+  const userTier = tierInfo?.tier?.toLowerCase() || 'free';
+  const isFreeUser = userTier === 'free';
+  
   // Helper function to check if data is stale (older than 30 minutes) - matching earnings/SEC approach
   const isDataStale = (timestamp: number | null): boolean => {
     if (!timestamp) return true;
@@ -481,19 +485,9 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
           // Using existing ticker sentiment data
         }
         
-        // Always fetch FinViz and Yahoo data regardless of ticker sentiment availability
-        // This ensures free users get sentiment scores even without Reddit access
-        
-        console.log('🔄 STARTING FINVIZ/YAHOO WATCHLIST SECTION');
-        
-        // Set topSentiments from available ticker data (could be empty for free users)
-        if (tickerSentimentData.length > 0) {
-          const diverseSentiments = ensureTickerDiversity(tickerSentimentData, 10);
-          setTopSentiments(diverseSentiments);
-        } else {
-          setTopSentiments([]);
-        }
-        
+        // All sentiment APIs are now free - no need to restrict based on user tier
+        // Credit charges only happen when users click unlock buttons
+
         // 🔧 FIX: Use watchlist APIs for all users - backend handles tier limits
         updateProgress(60, 'Fetching FinViz sentiment data from your watchlist...');
         

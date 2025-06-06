@@ -22,6 +22,7 @@ const loadUserApiKeys = async (userId) => {
       const keyIdentifier = `${row.provider === 'reddit' && row.key_name === 'client_id' ? 'reddit_client_id' :
                              row.provider === 'reddit' && row.key_name === 'client_secret' ? 'reddit_client_secret' :
                              row.provider === 'alpha_vantage' ? 'alpha_vantage_key' :
+                             row.provider === 'fmp' ? 'fmp_key' :
                              `${row.provider}_${row.key_name}`}`;
       keys[keyIdentifier] = row.key_value;
     });
@@ -52,6 +53,9 @@ const saveUserApiKeys = async (userId, apiKeys) => {
         keyName = 'client_secret';
       } else if (keyIdentifier === 'alpha_vantage_key') {
         provider = 'alpha_vantage';
+        keyName = 'api_key';
+      } else if (keyIdentifier === 'fmp_key') {
+        provider = 'fmp';
         keyName = 'api_key';
       } else if (keyIdentifier === 'finviz_key') {
         provider = 'finviz';
@@ -89,6 +93,7 @@ const saveUserApiKeys = async (userId, apiKeys) => {
 router.get('/key-status', authenticateToken, async (req, res) => {
   try {
     const userApiKeys = await loadUserApiKeys(req.user.id);
+    const userTier = req.user.tier || 'free';
     
     // Check which keys are configured (have non-empty values)
     const keyStatus = {};
@@ -99,6 +104,7 @@ router.get('/key-status', authenticateToken, async (req, res) => {
       'reddit_client_id': 'reddit',
       'reddit_client_secret': 'reddit',
       'alpha_vantage_key': 'alpha_vantage',
+      'fmp_key': 'fmp',
       'finviz_key': 'finviz',
       'sec_key': 'sec'
     };
@@ -107,26 +113,52 @@ router.get('/key-status', authenticateToken, async (req, res) => {
     Object.keys(expectedKeys).forEach(keyName => {
       // Check if key is available from user config OR environment variables
       const userKey = userApiKeys[keyName] && userApiKeys[keyName].trim();
-      const envKey = keyName === 'reddit_client_id' ? process.env.REDDIT_CLIENT_ID :
-                    keyName === 'reddit_client_secret' ? process.env.REDDIT_CLIENT_SECRET :
-                    keyName === 'alpha_vantage_key' ? process.env.ALPHA_VANTAGE_API_KEY :
-                    keyName === 'finviz_key' ? process.env.FINVIZ_KEY :
-                    keyName === 'sec_key' ? process.env.SEC_KEY : null;
       
-      // Key is available if either user-provided OR environment variable exists
-      keyStatus[keyName] = !!(userKey || (envKey && envKey.trim()));
+      // For BYOK services (Reddit, Alpha Vantage, FMP), only check user-provided keys
+      // For built-in services (FinViz, Yahoo, SEC), these should always be available
+      let keyIsAvailable = false;
+      
+      if (keyName === 'reddit_client_id' || keyName === 'reddit_client_secret' || keyName === 'fmp_key') {
+        // BYOK services - only check user-provided keys
+        keyIsAvailable = !!userKey;
+      } else if (keyName === 'alpha_vantage_key') {
+        // Alpha Vantage - BYOK + tier restriction (Pro+ only)
+        // Free tier users cannot configure Alpha Vantage keys at all
+        if (userTier === 'free') {
+          keyIsAvailable = false; // Always false for free tier users
+        } else {
+          keyIsAvailable = !!userKey; // Pro+ users can configure their own keys
+        }
+      } else if (keyName === 'finviz_key' || keyName === 'sec_key') {
+        // Built-in services - always available (no external keys required)
+        keyIsAvailable = true;
+      } else {
+        // For any other services, check both user keys and environment variables
+        const envKey = keyName === 'reddit_client_id' ? process.env.REDDIT_CLIENT_ID :
+                      keyName === 'reddit_client_secret' ? process.env.REDDIT_CLIENT_SECRET :
+                      keyName === 'alpha_vantage_key' ? process.env.ALPHA_VANTAGE_API_KEY :
+                      keyName === 'fmp_key' ? process.env.FMP_KEY :
+                      keyName === 'finviz_key' ? process.env.FINVIZ_KEY :
+                      keyName === 'sec_key' ? process.env.SEC_KEY : null;
+        
+        keyIsAvailable = !!(userKey || (envKey && envKey.trim()));
+      }
+      
+      keyStatus[keyName] = keyIsAvailable;
     });
 
     // For data sources that require multiple keys (like Reddit), check that ALL required keys are available
     dataSourceStatus.reddit = keyStatus.reddit_client_id && keyStatus.reddit_client_secret;
     dataSourceStatus.alpha_vantage = keyStatus.alpha_vantage_key;
+    dataSourceStatus.fmp = keyStatus.fmp_key;
     dataSourceStatus.finviz = keyStatus.finviz_key;
     dataSourceStatus.sec = keyStatus.sec_key;
     
     res.json({
       success: true,
       keyStatus,
-      dataSources: dataSourceStatus
+      dataSources: dataSourceStatus,
+      userTier: userTier // Include user tier in response for frontend debugging
     });
   } catch (error) {
     console.error('Error fetching API key status:', error);
@@ -142,11 +174,23 @@ router.get('/key-status', authenticateToken, async (req, res) => {
 router.post('/update-keys', authenticateToken, async (req, res) => {
   try {
     const { apiKeys } = req.body;
+    const userTier = req.user.tier || 'free';
     
     if (!apiKeys || typeof apiKeys !== 'object') {
       return res.status(400).json({
         success: false,
         error: 'Invalid API keys data'
+      });
+    }
+    
+    // Check for tier restrictions before saving
+    if (apiKeys.alpha_vantage_key && userTier === 'free') {
+      return res.status(403).json({
+        success: false,
+        error: 'TIER_RESTRICTION',
+        message: 'Alpha Vantage API keys are only available for Pro tier and above',
+        userMessage: 'Upgrade to Pro to configure your own Alpha Vantage API key for real-time market data',
+        tierRequired: 'pro'
       });
     }
     

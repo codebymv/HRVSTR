@@ -532,93 +532,26 @@ async function getSentimentDataForUser(userId, userTier, dataType, timeRange, fo
       }
     }
     
-    // TIER 3: No cache available, need to fetch fresh data and charge credits
+    // TIER 3: No cache available, need to fetch fresh data (NO CREDITS CHARGED)
+    // Note: Credit charging moved to unlock buttons only
     let creditsUsed = 0;
     
-    // Calculate credits cost
-    const creditsRequired = getCreditCost(userTier, dataType, timeRange);
-    
-    // Check if user has enough credits
-    const userQuery = `
-      SELECT 
-        monthly_credits, 
-        credits_used, 
-        credits_purchased,
-        (monthly_credits + COALESCE(credits_purchased, 0) - credits_used) as credits_remaining
-      FROM users 
-      WHERE id = $1
-    `;
-    const userResult = await db.query(userQuery, [userId]);
-    
-    if (userResult.rows.length === 0) {
-      return {
-        success: false,
-        error: 'USER_NOT_FOUND',
-        message: 'User not found'
-      };
-    }
-    
-    const user = userResult.rows[0];
-    const availableCredits = user.credits_remaining;
-    
-    if (availableCredits < creditsRequired) {
-      return {
-        success: false,
-        error: 'INSUFFICIENT_CREDITS',
-        message: 'Insufficient credits for this request',
-        userMessage: `This request requires ${creditsRequired} credits, but you have ${availableCredits} available`,
-        creditsRequired,
-        creditsAvailable: availableCredits
-      };
-    }
-
-    // Deduct credits by incrementing credits_used
-    const updateCreditsQuery = `UPDATE users SET credits_used = credits_used + $1 WHERE id = $2`;
-    await db.query(updateCreditsQuery, [creditsRequired, userId]);
-    
-    creditsUsed = creditsRequired;
-    
-    // Log credit transaction
-    const logQuery = `
-      INSERT INTO credit_transactions (user_id, action, credits_used, credits_remaining, metadata)
-      VALUES ($1, $2, $3, (
-        SELECT (monthly_credits + COALESCE(credits_purchased, 0) - credits_used) 
-        FROM users WHERE id = $1
-      ), $4)
-    `;
-    
-    await db.query(logQuery, [
-      userId,
-      `sentiment_${dataType}`,
-      creditsRequired,
-      JSON.stringify({
-        dataType,
-        timeRange,
-        options,
-        tier: userTier,
-        timestamp: new Date().toISOString()
-      })
-    ]);
-    
-    // Fetch fresh data
-    console.log(`[userSentimentCache] Fetching fresh ${dataType} data for user ${userId}, credits used: ${creditsUsed}`);
+    console.log(`[userSentimentCache] Fetching fresh ${dataType} data for user ${userId} (free - no credits charged)`);
     
     const freshData = await fetchFreshSentimentData(userId, dataType, timeRange, options, progressCallback);
     if (!freshData.success) {
-      // If API call failed, refund the credits
-      await db.query(`UPDATE users SET credits_used = credits_used - $1 WHERE id = $2`, [creditsRequired, userId]);
       return freshData;
     }
     
-    // Cache the fresh data
+    // Cache the fresh data (no credits used)
     await storeSentimentDataInCache(userId, dataType, timeRange, freshData.data, creditsUsed, userTier, options);
     
-    console.log(`[userSentimentCache] Successfully fetched and cached ${dataType} for user ${userId}, credits used: ${creditsUsed}`);
+    console.log(`[userSentimentCache] Successfully fetched and cached ${dataType} for user ${userId} (free - no credits charged)`);
     
     return {
       success: true,
       data: freshData.data,
-      creditsUsed,
+      creditsUsed: 0, // No credits charged for sentiment data
       fromCache: false,
       freshlyFetched: true,
       hasActiveSession: false

@@ -7,7 +7,6 @@ const router = express.Router();
 const finvizController = require('../../controllers/finvizController');
 const validateDataSource = require('../../middleware/dataSourceValidator');
 const authenticateToken = require('../../middleware/authMiddleware');
-const { checkSentimentCredits, deductCredits, addCreditInfoToResponse } = require('../../middleware/tierMiddleware');
 
 // Apply the data source validator middleware to all routes
 router.use(validateDataSource('finviz'));
@@ -15,14 +14,11 @@ router.use(validateDataSource('finviz'));
 /**
  * @route GET /api/finviz/ticker-sentiment
  * @desc Get ticker-specific sentiment data from Finviz
- * @access Protected (requires authentication and credits)
+ * @access Protected (requires authentication only - no credits charged)
  */
 router.get('/ticker-sentiment', 
   authenticateToken,
-  checkSentimentCredits,
-  addCreditInfoToResponse,
-  finvizController.getTickerSentiment,
-  deductCredits
+  finvizController.getTickerSentiment
 );
 
 module.exports = router;

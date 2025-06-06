@@ -9,6 +9,7 @@ import {
 import { mergeSentimentData, aggregateByTicker } from '../services/sentimentMerger';
 import { ensureTickerDiversity } from '../services/tickerUtils';
 import { generateChartData } from '../services/chartUtils';
+import { useTier } from '../contexts/TierContext';
 
 // Simple logger with environment check
 const isDev = process.env.NODE_ENV === 'development';
@@ -59,7 +60,12 @@ interface UseSentimentDashboardDataReturn {
   handleLoadMorePosts: () => void;
 }
 
-export const useSentimentDashboardData = (timeRange: TimeRange): UseSentimentDashboardDataReturn => {
+export const useSentimentDashboardData = (timeRange: TimeRange, hasRedditAccess: boolean = true): UseSentimentDashboardDataReturn => {
+  // Get user tier info to prevent credit charges for free users
+  const { tierInfo } = useTier();
+  const userTier = tierInfo?.tier?.toLowerCase() || 'free';
+  const isFreeUser = userTier === 'free';
+
   // Cache expiration time - 5 minutes
   const CACHE_EXPIRY = 5 * 60 * 1000;
   const POSTS_PER_PAGE = 10;
@@ -272,6 +278,9 @@ export const useSentimentDashboardData = (timeRange: TimeRange): UseSentimentDas
     }
     
     try {
+      // All sentiment APIs are now free for all users - no need to restrict based on tier
+      // Credit charges only happen when users click unlock buttons
+
       // Step 3: Fetch Reddit ticker sentiment data
       let redditTickerData: SentimentData[] = allTickerSentiments;
       if (allTickerSentiments.length === 0) {
@@ -295,7 +304,7 @@ export const useSentimentDashboardData = (timeRange: TimeRange): UseSentimentDas
           
           const finvizSignal = requestManagerRef.current.getSignal(REQUEST_KEYS.finviz);
           // Use watchlist-based FinViz sentiment instead of hardcoded tickers
-          finvizData = await fetchWatchlistFinvizSentiment(finvizSignal);
+          finvizData = await fetchWatchlistFinvizSentiment(timeRange, finvizSignal);
           
           setFinvizSentiments(finvizData);
         } catch (finvizError) {
@@ -309,7 +318,7 @@ export const useSentimentDashboardData = (timeRange: TimeRange): UseSentimentDas
           
           const yahooSignal = requestManagerRef.current.getSignal(REQUEST_KEYS.yahoo);
           // Use watchlist-based Yahoo sentiment instead of hardcoded tickers
-          yahooData = await fetchWatchlistYahooSentiment(yahooSignal);
+          yahooData = await fetchWatchlistYahooSentiment(timeRange, yahooSignal);
           
           setYahooSentiments(yahooData);
         } catch (yahooError) {

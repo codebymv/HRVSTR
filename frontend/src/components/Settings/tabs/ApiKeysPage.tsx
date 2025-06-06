@@ -163,6 +163,8 @@ const ApiKeysPage: React.FC = () => {
   // Load settings from localStorage on component mount
   useEffect(() => {
     const loadSettings = async () => {
+      // Note: These API calls should be free for all users (no credit charges)
+      // fetchServerKeyStatus and fetchServerKeys are settings endpoints that should have 0 credit cost
       await fetchServerKeyStatus();
       await fetchServerKeys(); // Fetch actual keys to display
       
