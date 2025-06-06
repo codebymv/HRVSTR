@@ -441,10 +441,12 @@ async function handleCreditPurchase(session) {
     const userId = session.metadata.userId;
     const priceId = session.metadata.priceId;
     
-    // Map price IDs to credit amounts
+    // Map price IDs to credit amounts (support both test and live)
     const CREDIT_BUNDLES = {
-      // User's specific price ID for 250 credits
+      // Live price ID for 250 credits
       'price_1RUNOmRxBJaRlFvtFDsOkRGL': 250,
+      // Test price ID for 250 credits (add your test price ID here)
+      [process.env.STRIPE_PRICE_CREDITS_250]: 250,
       // Fallback for testing/development
       'price_250_credits_bundle': 250,
     };

@@ -506,10 +506,10 @@ router.get('/pricing', async (req, res) => {
 });
 
 /**
- * POST /api/billing/webhook
  * Handle Stripe webhooks for subscription events
+ * This function is exported to be used at the app level before JSON parsing
  */
-router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+async function handleWebhook(req, res) {
   try {
     const sig = req.headers['stripe-signature'];
     let event;
@@ -521,8 +521,14 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
+    console.log(`🔔 Webhook received: ${event.type}`);
+
     // Handle the event
     switch (event.type) {
+      case 'checkout.session.completed':
+        await handleCheckoutCompleted(event.data.object);
+        break;
+        
       case 'customer.subscription.created':
         await handleSubscriptionCreated(event.data.object);
         break;
@@ -553,7 +559,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     console.error('Error handling webhook:', error);
     res.status(400).json({ error: 'Webhook error' });
   }
-});
+}
 
 /**
  * POST /api/billing/create-checkout-session
@@ -606,6 +612,13 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
       if (customers.data.length > 0) {
         customer = customers.data[0];
         console.log('✅ Found existing customer:', customer.id);
+        
+        // Update user record with customer ID (in case it was cleared)
+        await pool.query(
+          'UPDATE users SET stripe_customer_id = $1 WHERE id = $2',
+          [customer.id, userId]
+        );
+        console.log('✅ Updated user record with existing customer ID');
       } else {
         console.log('🆕 Creating new Stripe customer');
         customer = await stripe.customers.create({
@@ -711,10 +724,53 @@ async function createStripeCustomer(user) {
 }
 
 /**
+ * Handle checkout session completed webhook
+ */
+async function handleCheckoutCompleted(session) {
+  try {
+    console.log('🛒 Checkout completed for session:', session.id);
+    console.log('🛒 Customer:', session.customer);
+    console.log('🛒 Mode:', session.mode);
+    
+    if (session.mode === 'subscription') {
+      // For subscriptions, the subscription will be handled by subscription.created event
+      console.log('🔔 Subscription checkout completed - waiting for subscription.created event');
+    } else if (session.mode === 'payment') {
+      // Handle one-time payments (like credit purchases)
+      const customerId = session.customer;
+      const userResult = await pool.query(
+        'SELECT id FROM users WHERE stripe_customer_id = $1',
+        [customerId]
+      );
+      
+      if (userResult.rows[0]) {
+        console.log('💳 Processing one-time payment for user:', userResult.rows[0].id);
+        // Add credits based on the payment
+        const amount = session.amount_total / 100; // Convert from cents
+        const credits = amount === 10 ? 250 : Math.floor(amount * 25); // $10 = 250 credits
+        
+        await pool.query(
+          'UPDATE users SET credits_purchased = COALESCE(credits_purchased, 0) + $1 WHERE id = $2',
+          [credits, userResult.rows[0].id]
+        );
+        
+        console.log(`✅ Added ${credits} credits to user ${userResult.rows[0].id}`);
+      }
+    }
+  } catch (error) {
+    console.error('Error handling checkout completed:', error);
+  }
+}
+
+/**
  * Handle subscription created webhook
  */
 async function handleSubscriptionCreated(subscription) {
   try {
+    console.log('🔔 Subscription created:', subscription.id);
+    console.log('🔔 Customer:', subscription.customer);
+    console.log('🔔 Status:', subscription.status);
+    
     const customerId = subscription.customer;
     
     // Find user by customer ID
@@ -724,6 +780,8 @@ async function handleSubscriptionCreated(subscription) {
     );
     
     if (userResult.rows[0]) {
+      console.log('✅ Found user for subscription:', userResult.rows[0].id);
+      
       await pool.query(
         'UPDATE users SET stripe_subscription_id = $1 WHERE id = $2',
         [subscription.id, userResult.rows[0].id]
@@ -731,6 +789,9 @@ async function handleSubscriptionCreated(subscription) {
       
       // Update user tier based on subscription
       await updateUserTierFromSubscription(userResult.rows[0].id, subscription);
+      console.log('✅ Updated user tier and subscription data');
+    } else {
+      console.error('❌ No user found with customer ID:', customerId);
     }
   } catch (error) {
     console.error('Error handling subscription created:', error);
@@ -762,6 +823,7 @@ async function handleSubscriptionUpdated(subscription) {
  */
 async function handleSubscriptionDeleted(subscription) {
   try {
+    const { TIER_LIMITS } = require('../middleware/tierMiddleware');
     const customerId = subscription.customer;
     
     const userResult = await pool.query(
@@ -770,11 +832,20 @@ async function handleSubscriptionDeleted(subscription) {
     );
     
     if (userResult.rows[0]) {
-      // Clear subscription and reset to free tier
+      const userId = userResult.rows[0].id;
+      const freeTierCredits = TIER_LIMITS.free.monthlyCredits; // 0 credits for free tier
+      
+      // Calculate new reset date (next month from now)
+      const newResetDate = new Date();
+      newResetDate.setMonth(newResetDate.getMonth() + 1);
+      
+      // Clear subscription, reset to free tier, and update credits
       await pool.query(
-        'UPDATE users SET stripe_subscription_id = NULL, tier = $1 WHERE id = $2',
-        ['free', userResult.rows[0].id]
+        'UPDATE users SET stripe_subscription_id = NULL, tier = $1, monthly_credits = $2, credits_used = 0, credits_reset_date = $3 WHERE id = $4',
+        ['free', freeTierCredits, newResetDate, userId]
       );
+      
+      console.log(`📉 User ${userId} subscription cancelled - downgraded to free tier with ${freeTierCredits} monthly credits`);
     }
   } catch (error) {
     console.error('Error handling subscription deleted:', error);
@@ -810,6 +881,7 @@ async function handlePaymentFailed(invoice) {
  */
 async function updateUserTierFromSubscription(userId, subscription) {
   try {
+    const { TIER_LIMITS } = require('../middleware/tierMiddleware');
     let tier = 'free';
     
     if (subscription.status === 'active' || subscription.status === 'trialing') {
@@ -825,15 +897,44 @@ async function updateUserTierFromSubscription(userId, subscription) {
       }
     }
     
-    await pool.query(
-      'UPDATE users SET tier = $1 WHERE id = $2',
-      [tier, userId]
+    // Get tier limits for monthly credits
+    const tierLimits = TIER_LIMITS[tier] || TIER_LIMITS.free;
+    const monthlyCredits = tierLimits.monthlyCredits;
+    
+    // Get current user data to check if tier changed
+    const currentUser = await pool.query(
+      'SELECT tier, monthly_credits FROM users WHERE id = $1',
+      [userId]
     );
     
-    console.log(`Updated user ${userId} tier to ${tier}`);
+    const oldTier = currentUser.rows[0]?.tier;
+    const tierChanged = oldTier !== tier;
+    
+    if (tierChanged) {
+      // Calculate new reset date (next month from now)
+      const newResetDate = new Date();
+      newResetDate.setMonth(newResetDate.getMonth() + 1);
+      
+      // Update tier, monthly credits, and reset credits_used for tier upgrade
+      await pool.query(
+        'UPDATE users SET tier = $1, monthly_credits = $2, credits_used = 0, credits_reset_date = $3 WHERE id = $4',
+        [tier, monthlyCredits, newResetDate, userId]
+      );
+      
+      console.log(`🎉 User ${userId} upgraded from ${oldTier} to ${tier} tier with ${monthlyCredits} monthly credits`);
+    } else {
+      // Just update tier (same tier, maybe status change)
+      await pool.query(
+        'UPDATE users SET tier = $1 WHERE id = $2',
+        [tier, userId]
+      );
+      
+      console.log(`Updated user ${userId} tier to ${tier} (no credit reset needed)`);
+    }
   } catch (error) {
     console.error('Error updating user tier:', error);
   }
 }
 
-module.exports = router; 
+module.exports = router;
+module.exports.handleWebhook = handleWebhook; 

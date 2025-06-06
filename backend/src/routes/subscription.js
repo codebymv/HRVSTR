@@ -232,4 +232,51 @@ router.get('/usage-stats', authenticateToken, async (req, res) => {
   }
 });
 
+/**
+ * POST /api/subscription/reset-stripe-data
+ * Reset user's Stripe customer data for test mode switching
+ */
+router.post('/reset-stripe-data', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Clear Stripe customer ID and subscription data
+    await pool.query(
+      `UPDATE users SET 
+        stripe_customer_id = NULL,
+        stripe_subscription_id = NULL,
+        tier = 'free',
+        credits_used = 0,
+        monthly_credits = 50,
+        credits_reset_date = $1
+      WHERE id = $2`,
+      [new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), userId] // Reset date 30 days from now
+    );
+
+    // Log the reset
+    await pool.query(
+      `INSERT INTO activities (user_id, activity_type, title, description)
+       VALUES ($1, $2, $3, $4)`,
+      [
+        userId,
+        'stripe_reset',
+        'Stripe Data Reset',
+        'Stripe customer data cleared for test mode'
+      ]
+    );
+
+    const updatedTierInfo = await getUserTierInfo(userId);
+
+    res.json({
+      success: true,
+      message: 'Stripe data reset successfully - you can now create new test subscriptions',
+      data: updatedTierInfo
+    });
+
+  } catch (error) {
+    console.error('Error resetting Stripe data:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router; 

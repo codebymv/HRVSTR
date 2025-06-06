@@ -132,6 +132,13 @@ app.use((req, res, next) => {
   next();
 });
 
+// Apply webhook route BEFORE JSON parser (needs raw body)
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  // Import webhook handler
+  const { handleWebhook } = require('./routes/billing');
+  return handleWebhook(req, res);
+});
+
 app.use(express.json());
 app.use(limiter);
 app.use(requestLogger); // Add request logger middleware

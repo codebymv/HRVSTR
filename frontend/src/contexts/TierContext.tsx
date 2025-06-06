@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 
 interface TierLimits {
@@ -13,6 +13,9 @@ interface TierInfo {
   credits: {
     remaining: number;
     monthly: number;
+    purchased: number;
+    used: number;
+    total: number;
     resetDate: string;
     daysUntilReset?: number;
   };
@@ -43,7 +46,7 @@ export const TierProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refreshTierInfo = async () => {
+  const refreshTierInfo = useCallback(async () => {
     if (!isAuthenticated || !token) {
       setTierInfo(null);
       return;
@@ -97,7 +100,7 @@ export const TierProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAuthenticated, token]);
 
   const simulateUpgrade = async (tier: string): Promise<boolean> => {
     if (!isAuthenticated || !token) return false;
@@ -218,7 +221,7 @@ export const TierProvider: React.FC<{ children: React.ReactNode }> = ({ children
       delete (window as any).simulateUpgrade;
       delete (window as any).debugTierInfo;
     };
-  }, [isAuthenticated, token]);
+  }, [isAuthenticated, token, refreshTierInfo, simulateUpgrade, tierInfo]);
 
   // Separate useEffect to track tierInfo changes and expose to window
   useEffect(() => {
@@ -241,7 +244,7 @@ export const TierProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, 120000); // 2 minutes (120,000ms) - balanced for session detection
 
     return () => clearInterval(interval);
-  }, [isAuthenticated, token]);
+  }, [isAuthenticated, token, refreshTierInfo]);
 
   const value = {
     tierInfo,

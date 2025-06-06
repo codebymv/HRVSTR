@@ -35,8 +35,8 @@ const TierManagement: React.FC = () => {
   const handleAddCredits = async (amount: number) => {
     setAddingCredits(true);
     try {
-      // Use the specific price ID for 250 credits bundle
-      const priceId = 'price_1RUNOmRxBJaRlFvtFDsOkRGL';
+      // Use environment variable for credit bundle price ID
+      const priceId = import.meta.env.VITE_STRIPE_PRICE_CREDITS_250 || 'price_1RUNOmRxBJaRlFvtFDsOkRGL';
       
       // Create Stripe checkout session for credit purchase
       const response = await fetch('/api/billing/create-checkout-session', {
@@ -90,7 +90,7 @@ const TierManagement: React.FC = () => {
   };
 
   const getProgressColor = (remaining: number, total: number) => {
-    const percentage = (remaining / total) * 100;
+    const percentage = total > 0 ? (remaining / total) * 100 : 0;
     if (percentage < 10) return 'bg-red-500';
     if (percentage < 25) return 'bg-yellow-500';
     return 'bg-green-500';
@@ -140,8 +140,15 @@ const TierManagement: React.FC = () => {
     );
   }
 
-  const creditsUsed = tierInfo.credits.monthly - tierInfo.credits.remaining;
-  const usagePercentage = (creditsUsed / tierInfo.credits.monthly) * 100;
+  // Calculate properly with purchased credits included
+  const creditsUsed = tierInfo.credits.used;
+  const totalCredits = tierInfo.credits.total;
+  const monthlyCredits = tierInfo.credits.monthly;
+  const purchasedCredits = tierInfo.credits.purchased;
+  const remainingCredits = tierInfo.credits.remaining;
+  
+  // Calculate usage percentage based on total available credits
+  const usagePercentage = totalCredits > 0 ? (creditsUsed / totalCredits) * 100 : 0;
   const resetDate = new Date(tierInfo.credits.resetDate).toLocaleDateString();
 
   return (
@@ -195,7 +202,10 @@ const TierManagement: React.FC = () => {
           </div>
           <div className="flex items-center text-sm mb-2">
             <span className={secondaryTextColor}>
-              {creditsUsed.toLocaleString()} / {tierInfo.credits.monthly.toLocaleString()} used
+              {tierInfo.tier === 'free' 
+                ? `${creditsUsed.toLocaleString()} / ${monthlyCredits.toLocaleString()}`
+                : `${creditsUsed.toLocaleString()} / ${monthlyCredits.toLocaleString()} Used${purchasedCredits > 0 ? ` (+ ${purchasedCredits.toLocaleString()} additional)` : ''}`
+              }
             </span>
             <span className={`ml-auto ${secondaryTextColor}`}>
               Resets in {tierInfo.credits.daysUntilReset} days
