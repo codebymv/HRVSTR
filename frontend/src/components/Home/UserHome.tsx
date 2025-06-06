@@ -158,7 +158,7 @@ const UserHome: React.FC = () => {
   // Update legacy watchlist state when infinite scroll watchlist changes
   useEffect(() => {
     setWatchlist(infiniteWatchlist);
-    setLoadingWatchlist(!!watchlistLoading);
+    setLoadingWatchlist(watchlistLoading.watchlist); // Fix: access the watchlist property directly
     setWatchlistError(infiniteWatchlistError);
   }, [infiniteWatchlist, watchlistLoading, infiniteWatchlistError]);
 
@@ -167,11 +167,16 @@ const UserHome: React.FC = () => {
     setLoadingActivity(!!activityLoading);
   }, [activityLoading]);
 
-  // Load data on mount
+  // Load recent activity on mount - watchlist handles its own initialization
+  const hasInitialized = useRef<string | null>(null);
+  
   useEffect(() => {
-    fetchInfiniteWatchlist();
-    fetchRecentActivity();
-  }, [fetchInfiniteWatchlist, fetchRecentActivity]);
+    // Only run once per user token for activity data (watchlist hook handles itself)
+    if (user?.token && hasInitialized.current !== user.token) {
+      hasInitialized.current = user.token;
+      fetchRecentActivity();
+    }
+  }, [user?.token, fetchRecentActivity]);
 
   // Load watchlist limit from sessionStorage on mount
   useEffect(() => {

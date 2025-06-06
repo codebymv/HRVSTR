@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Save, RefreshCw, AlertTriangle, HelpCircle, Eye, EyeOff } from 'lucide-react';
+import { Save, RefreshCw, AlertTriangle, HelpCircle, Eye, EyeOff, Crown, Lock } from 'lucide-react';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useToast } from '../../../contexts/ToastContext';
+import { useTier } from '../../../contexts/TierContext';
+import { useTierLimits } from '../../../hooks/useTierLimits';
+import TierLimitDialog from '../../UI/TierLimitDialog';
 
 interface ApiKey {
   name: string;
@@ -21,7 +24,13 @@ const ApiKeysPage: React.FC = () => {
   const { theme } = useTheme();
   const { token } = useAuth();
   const { success, error } = useToast();
+  const { tierInfo } = useTier();
+  const { tierLimitDialog, showTierLimitDialog, closeTierLimitDialog } = useTierLimits();
   const isLight = theme === 'light';
+  
+  // Get user tier - API Keys require Pro+ tier
+  const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
+  const hasApiKeyAccess = currentTier !== 'free';
   
   // Theme-specific styling
   const bgColor = isLight ? 'bg-stone-200' : 'bg-gray-950';
@@ -250,6 +259,65 @@ const ApiKeysPage: React.FC = () => {
       setIsLoading(false);
     }
   };
+
+  // If user doesn't have API key access (free tier), show tier restriction
+  if (!hasApiKeyAccess) {
+    return (
+      <>
+        <div className={`${bgColor} min-h-screen p-4 lg:p-8`}>
+          <div className="max-w-6xl mx-auto">
+            <div className="mb-6 lg:mb-8">
+              <h1 className={`text-2xl lg:text-3xl font-bold ${textColor} mb-2`}>API Keys</h1>
+              <p className={secondaryTextColor}>Configure external API keys for enhanced data access</p>
+            </div>
+
+            {/* Tier Restriction Card */}
+            <div className={`${cardBgColor} rounded-lg p-8 border ${borderColor} text-center`}>
+              <div className="flex justify-center mb-6">
+                <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                  <Lock className="w-8 h-8 text-white" />
+                </div>
+              </div>
+              
+              <h2 className={`text-2xl font-bold ${textColor} mb-4`}>API Key Management</h2>
+              <p className={`text-lg ${secondaryTextColor} mb-6`}>
+                External API key management is available with Pro tier or higher
+              </p>
+              
+              <div className={`${isLight ? 'bg-blue-50' : 'bg-blue-900/20'} rounded-lg p-4 mb-6 border ${isLight ? 'border-blue-200' : 'border-blue-800'}`}>
+                <h4 className={`font-semibold ${textColor} mb-2`}>What you get with Pro:</h4>
+                <ul className={`text-sm ${secondaryTextColor} space-y-1 text-left max-w-xs mx-auto`}>
+                  <li>• Store and manage your own Reddit API credentials</li>
+                  <li>• Add Alpha Vantage API keys for enhanced market data</li>
+                  <li>• Secure encrypted storage of API credentials</li>
+                  <li>• Bypass rate limits with your own API keys</li>
+                  <li>• Access to premium data sources and features</li>
+                </ul>
+              </div>
+              
+              <button
+                onClick={() => window.location.href = '/settings/tiers'}
+                className={`${buttonBgColor} text-white px-8 py-3 rounded-lg font-medium transition-colors flex items-center justify-center mx-auto`}
+              >
+                <Crown className="w-5 h-5 mr-2" />
+                Upgrade to Pro
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        {/* Tier Limit Dialog */}
+        <TierLimitDialog
+          isOpen={tierLimitDialog.isOpen}
+          onClose={closeTierLimitDialog}
+          featureName={tierLimitDialog.featureName}
+          message={tierLimitDialog.message}
+          upgradeMessage={tierLimitDialog.upgradeMessage}
+          context={tierLimitDialog.context}
+        />
+      </>
+    );
+  }
 
   return (
     <div className={`${bgColor} min-h-screen p-4 lg:p-8`}>

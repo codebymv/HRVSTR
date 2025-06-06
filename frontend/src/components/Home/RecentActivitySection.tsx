@@ -363,6 +363,9 @@ const RecentActivitySection: React.FC<RecentActivitySectionProps> = ({
         <div className="flex flex-col items-center justify-center p-10 text-center">
           <Info className={`mb-2 ${mutedTextColor}`} size={32} />
           <p className={mutedTextColor}>No recent activity.</p>
+          <p className={`text-sm ${mutedTextColor} mt-2`}>
+            Your recent activities will appear here.
+          </p>
         </div>
       )}
     </div>

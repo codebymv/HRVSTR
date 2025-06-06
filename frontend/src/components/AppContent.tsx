@@ -16,7 +16,7 @@ import UserHome from './Home/UserHome';
 import SettingsLayout from './Settings/SettingsLayout';
 import UsagePage from './Settings/tabs/UsagePage';
 import ApiKeysPage from './Settings/tabs/ApiKeysPage';
-import DataSourcesPage from './Settings/tabs/DataSourcesPage';
+
 import TiersPage from './Settings/tabs/TiersPage';
 import ProfilePage from './Settings/tabs/ProfilePage';
 import PreferencesPage from './Settings/tabs/PreferencesPage';
@@ -103,7 +103,7 @@ const AppContent = () => {
               <Route index element={<Navigate to="/settings/usage" replace />} />
               <Route path="usage" element={<UsagePage />} />
               <Route path="api-keys" element={<ApiKeysPage />} />
-              <Route path="data-sources" element={<DataSourcesPage />} />
+
               <Route path="profile" element={<ProfilePage />} />
               <Route path="notifications" element={<div className="p-8"><h1 className="text-2xl">Notifications - Coming Soon</h1></div>} />
               <Route path="preferences" element={<PreferencesPage />} />

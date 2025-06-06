@@ -16,7 +16,6 @@ import {
   Cog,
   CreditCard,
   Key,
-  Database,
   Monitor,
   BarChart3,
   DollarSign,
@@ -150,7 +149,6 @@ const Navbar: React.FC = () => {
     
     // FEATURES section
     { path: '/settings/api-keys', label: 'API Keys', icon: Key, category: 'FEATURES' },
-    { path: '/settings/data-sources', label: 'Data Sources', icon: Database, category: 'FEATURES' },
   ];
 
   // Helper function to get user tier information with icon and color

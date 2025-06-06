@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { TimeRange } from '../../types';
-import { TrendingUp, Loader2 } from 'lucide-react';
+import { TrendingUp, Loader2, Lock, Crown } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTierLimits } from '../../hooks/useTierLimits';
 import { useToast } from '../../contexts/ToastContext';
@@ -25,7 +25,7 @@ interface EarningsMonitorTabbedProps {
 
 const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoadingProgressChange }) => {
   const { theme } = useTheme();
-  const { tierLimitDialog, closeTierLimitDialog } = useTierLimits();
+  const { showTierLimitDialog, tierLimitDialog, closeTierLimitDialog } = useTierLimits();
   const { info, warning } = useToast();
   
   // State management
@@ -282,6 +282,50 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
     }
   }, [loadingState.earningsAnalysis.isLoading, isUnlockFlow.earningsAnalysis]);
 
+  // Earnings Analysis Upgrade Card Component for free users
+  const EarningsAnalysisUpgradeCard: React.FC = () => {
+    const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-800';
+    const borderColor = isLight ? 'border-stone-400' : 'border-gray-700';
+    const gradientFrom = isLight ? 'from-blue-500' : 'from-blue-600';
+    const gradientTo = isLight ? 'to-purple-600' : 'to-purple-700';
+    const buttonBg = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
+    
+    return (
+      <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} text-center h-full flex flex-col justify-center`}>
+        <div className={`w-16 h-16 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-full flex items-center justify-center mx-auto mb-4`}>
+          <Lock className="w-8 h-8 text-white" />
+        </div>
+        
+        <h3 className={`text-xl font-bold ${textColor} mb-2`}>
+          Earnings Analysis
+        </h3>
+        
+        <p className={`${subTextColor} mb-4 max-w-md mx-auto`}>
+          Access detailed earnings analysis for any ticker. Analyze historical performance, surprises, and financial metrics to enhance your investment research.
+        </p>
+        
+        <div className={`${isLight ? 'bg-stone-200' : 'bg-gray-900'} rounded-lg p-4 mb-6`}>
+          <h4 className={`font-semibold ${textColor} mb-2`}>Pro Features Include:</h4>
+          <ul className={`text-sm ${subTextColor} space-y-1 text-left max-w-xs mx-auto`}>
+            <li>• Detailed earnings analysis for any ticker</li>
+            <li>• Historical performance tracking</li>
+            <li>• Earnings surprise analysis</li>
+            <li>• Financial metrics and trends</li>
+            <li>• Independent ticker research</li>
+          </ul>
+        </div>
+        
+        <button
+          onClick={() => window.location.href = '/settings/tiers'}
+          className={`${buttonBg} text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center mx-auto`}
+        >
+          <Crown className="w-4 h-4 mr-2" />
+          Upgrade to Pro
+        </button>
+      </div>
+    );
+  };
+
   return (
     <>
       {/* Tier Limit Dialog */}
@@ -416,7 +460,10 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
           
           {activeTab === 'analysis' && (
             <>
-              {hasEarningsAnalysisAccess ? (
+              {/* Check tier first - free users should see upgrade card, not unlock option */}
+              {currentTier === 'free' ? (
+                <EarningsAnalysisUpgradeCard />
+              ) : hasEarningsAnalysisAccess ? (
                 <>
                   {loadingState.earningsAnalysis.isLoading ? (
                     <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden h-full`}>
@@ -476,6 +523,7 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
                   )}
                 </>
               ) : (
+                // Pro+ users without unlock get credit unlock option
                 <LockedOverlay
                   title="Earnings Analysis"
                   description="Unlock detailed earnings analysis for any ticker. Analyze historical performance, surprises, and financial metrics independently."

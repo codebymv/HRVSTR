@@ -398,7 +398,7 @@ const SentimentDashboard: React.FC = () => {
                 description="Access detailed sentiment analysis and scoring across multiple data sources and tickers."
                 cost={COMPONENT_COSTS.scores}
                 componentKey="scores"
-                icon={<TrendingUp className="w-8 h-8 text-white" />}
+                icon={<BarChart2 className="w-8 h-8 text-white" />}
               />
             )}
           </div>

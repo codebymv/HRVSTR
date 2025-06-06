@@ -151,12 +151,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
         </div>
         
         <button
-          onClick={() => showTierLimitDialog(
-            'Institutional Holdings',
-            'Institutional holdings analysis is a Pro feature. Upgrade to access comprehensive 13F filing data and institutional investment tracking.',
-            'Unlock institutional holdings, advanced SEC analysis, and comprehensive regulatory filing insights with HRVSTR Pro.',
-            'pro'
-          )}
+          onClick={() => window.location.href = '/settings/tiers'}
           className={`${buttonBg} text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center mx-auto`}
         >
           <Crown className="w-4 h-4 mr-2" />

@@ -170,6 +170,12 @@ export const useWatchlistInfiniteScroll = (): UseWatchlistInfiniteScrollReturn =
       setLoadingProgress(100);
       setLoadingStage('Watchlist loaded successfully');
       
+      // Clear the completed state after a brief moment for better UX
+      setTimeout(() => {
+        setLoadingProgress(0);
+        setLoadingStage('');
+      }, 400);
+      
     } catch (error: any) {
       console.error('Error fetching watchlist:', error);
       if (error.response?.status === 429) {
@@ -219,6 +225,16 @@ export const useWatchlistInfiniteScroll = (): UseWatchlistInfiniteScrollReturn =
       updateLoadingState({ watchlist: false });
     }
   }, [page, hasMore, loading.watchlist, cachedWatchlist, updateLoadingState]);
+  
+  // Initialize data fetch when user is authenticated
+  const hasAutoFetched = useRef(false);
+  
+  useEffect(() => {
+    if (user?.token && !hasAutoFetched.current) {
+      hasAutoFetched.current = true;
+      fetchWatchlist();
+    }
+  }, [user?.token, fetchWatchlist]);
   
   // Reset pagination when cached data changes
   useEffect(() => {

@@ -339,9 +339,12 @@ const WatchlistSection: React.FC<WatchlistSectionProps> = ({
         <div className="flex flex-col items-center justify-center p-10 text-center">
           <Info className={`mb-2 ${mutedTextColor}`} size={32} />
           <p className={mutedTextColor}>Your watchlist is empty.</p>
+          <p className={`text-sm ${mutedTextColor} mt-2 mb-4`}>
+            Add stocks you want to track to get personalized insights.
+          </p>
           <button 
             onClick={onAddTicker}
-            className={`mt-4 px-4 py-2 ${buttonBgColor} text-white rounded-md transition-colors`}
+            className={`px-4 py-2 ${buttonBgColor} text-white rounded-md transition-colors`}
           >
             Add Your First Stock
           </button>

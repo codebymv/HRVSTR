@@ -7,7 +7,6 @@ import {
   CreditCard, 
   BarChart3, 
   Key, 
-  Database,
   Monitor,
   DollarSign
 } from 'lucide-react';
@@ -53,7 +52,6 @@ const SettingsLayout: React.FC = () => {
       label: 'FEATURES',
       items: [
         { path: '/settings/api-keys', label: 'API Keys', icon: Key },
-        { path: '/settings/data-sources', label: 'Data Sources', icon: Database },
       ]
     }
   ];

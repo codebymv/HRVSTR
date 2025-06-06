@@ -455,7 +455,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                   description="Access detailed sentiment analysis and scoring across multiple data sources and tickers."
                   cost={COMPONENT_COSTS.scores}
                   componentKey="scores"
-                  icon={<TrendingUp className="w-8 h-8 text-white" />}
+                  icon={<BarChart2 className="w-8 h-8 text-white" />}
                 />
               )}
             </div>
@@ -472,6 +472,46 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                   error={null}
                   isCheckingAccess={true}
                 />
+              ) : !hasRedditTierAccess ? (
+                // Tier-based lock for free users (can't access Reddit API keys)
+                <div className={`${isLight ? 'bg-white border-gray-200' : 'bg-gray-800 border-gray-700'} rounded-lg border p-8 text-center relative overflow-hidden`}>
+                  <div className="relative z-10">
+                    <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <MessageSquare className="w-8 h-8 text-white" />
+                    </div>
+                    
+                    <h3 className={`text-xl font-bold ${textColor} mb-2`}>
+                      Reddit Posts
+                    </h3>
+                    
+                    <p className={`${subTextColor} mb-4 max-w-md mx-auto`}>
+                      Reddit API integration is available with Pro tier or higher. Upgrade to monitor real-time Reddit discussions and sentiment from financial communities.
+                    </p>
+                    
+                    <div className={`${isLight ? 'bg-blue-50' : 'bg-blue-900/20'} rounded-lg p-4 mb-6 border ${isLight ? 'border-blue-200' : 'border-blue-800'}`}>
+                      <h4 className={`font-semibold ${textColor} mb-2`}>What you get with Pro:</h4>
+                      <ul className={`text-sm ${subTextColor} space-y-1 text-left max-w-xs mx-auto`}>
+                        <li>• Real-time Reddit posts from financial communities</li>
+                        <li>• Sentiment analysis of discussions</li>
+                        <li>• Configure your own Reddit API credentials</li>
+                        <li>• Bypass rate limits with your own keys</li>
+                        <li>• Enhanced market sentiment tracking</li>
+                      </ul>
+                    </div>
+                    
+                    <button
+                      onClick={() => window.location.href = '/settings/tiers'}
+                      className={`${isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700'} text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center mx-auto`}
+                    >
+                      <Crown className="w-4 h-4 mr-2" />
+                      Upgrade to Pro
+                    </button>
+                    
+                    {/* <p className={`text-xs ${subTextColor} mt-3`}>
+                      Current tier: <span className="font-medium capitalize">{currentTier}</span>
+                    </p> */}
+                  </div>
+                </div>
               ) : hasRedditAccess ? (
                 <>
                   {loading.posts || (redditPosts.length === 0 && !dataErrors.posts) ? (
@@ -508,6 +548,16 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
           </div>
         </div>
       </div>
+      
+      {/* Tier Limit Dialog */}
+      <TierLimitDialog
+        isOpen={tierLimitDialog.isOpen}
+        onClose={closeTierLimitDialog}
+        featureName={tierLimitDialog.featureName}
+        message={tierLimitDialog.message}
+        upgradeMessage={tierLimitDialog.upgradeMessage}
+        context={tierLimitDialog.context}
+      />
     </>
   );
 };

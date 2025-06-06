@@ -417,12 +417,7 @@ const SentimentDashboard: React.FC = () => {
         </div>
         
         <button
-          onClick={() => showTierLimitDialog(
-            'Reddit Sentiment',
-            'Reddit sentiment analysis is a Pro feature. Upgrade to access real-time social media monitoring and community insights.',
-            'Unlock Reddit posts, sentiment analysis, and advanced social media monitoring with HRVSTR Pro.',
-            'reddit'
-          )}
+          onClick={() => window.location.href = '/settings/tiers'}
           className={`${buttonBg} text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center mx-auto`}
         >
           <Crown className="w-4 h-4 mr-2" />

@@ -208,7 +208,14 @@ const UpcomingEventsSection: React.FC<UpcomingEventsSectionProps> = ({
   }
 
   if (events.length === 0) {
-    return <p className={mutedTextColor}>No upcoming events.</p>;
+    return (
+      <div className="flex flex-col items-center justify-center py-8 text-center">
+        <p className={mutedTextColor}>No upcoming events.</p>
+        <p className={`text-sm ${mutedTextColor} mt-2`}>
+          Events linked to your watchlist tickers will appear here.
+        </p>
+      </div>
+    );
   }
 
   return (

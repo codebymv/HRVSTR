@@ -42,12 +42,7 @@ const EarningsUpgradeCard: React.FC<EarningsUpgradeCardProps> = ({
       </div>
       
       <button
-        onClick={() => onShowTierLimitDialog(
-          'Earnings Analysis',
-          'Earnings analysis is a Pro feature. Upgrade to access comprehensive company analysis, financial metrics, and professional insights.',
-          'Unlock advanced earnings analysis, sector information, trading ranges, and detailed financial insights with HRVSTR Pro.',
-          'general'
-        )}
+        onClick={() => window.location.href = '/settings/tiers'}
         className={`${buttonBg} text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center mx-auto`}
       >
         <Crown className="w-4 h-4 mr-2" />

@@ -17,15 +17,15 @@
 
 /* Light theme - Stone/beige color palette */
 .light-theme {
-  --bg-primary: #aaabb1; /* custom stone-350 background (darker) */
-  --bg-secondary: #beaca6; /* custom stone-375 (even darker) */
-  --bg-tertiary: #9e9995; /* stone-400 */
+  --bg-primary: #a8a8b1; /* custom stone-350 background (warmer) */
+  --bg-secondary: #c0ada7; /* custom stone-375 (warmer) */
+  --bg-tertiary: #a19a95; /* stone-400 (warmer) */
   --accent-primary: #2563eb; /* keep blue for accents */
   --accent-secondary: #3b82f6;
-  --text-primary: #44403c; /* stone-700 */
-  --text-secondary: #57534e; /* stone-600 */
-  --text-muted: #78716c; /* stone-500 */
-  --border-color: #a8a29e; /* stone-400 */
+  --text-primary: #2c2824; /* stone-800 (much darker for better contrast) */
+  --text-secondary: #3c3530; /* stone-700 (darker) */
+  --text-muted: #57534e; /* stone-600 (darker) */
+  --border-color: #aaa39e; /* stone-400 (warmer) */
 }
 
 /* Apply theme variables */
