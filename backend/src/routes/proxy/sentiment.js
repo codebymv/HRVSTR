@@ -7,6 +7,12 @@ const router = express.Router();
 const sentimentController = require('../../controllers/sentimentController');
 const validateDataSource = require('../../middleware/dataSourceValidator');
 const authenticateToken = require('../../middleware/authMiddleware');
+const {
+  getHistoricalSentimentController,
+  getSentimentTrendsController,
+  getComparativeHistoricalController,
+  getHistoricalSummaryController
+} = require('../../controllers/historicalSentimentController');
 
 // Apply the data source validator middleware to all routes
 router.use(validateDataSource('sentiment'));
@@ -90,6 +96,76 @@ router.get('/aggregate',
   authenticateToken,
   sentimentController.getAggregatedSentiment
 );
+
+// Historical Sentiment Routes
+
+/**
+ * @route GET /api/sentiment/historical/:ticker
+ * @desc Get historical sentiment data for a ticker
+ * @access Protected (requires authentication)
+ */
+router.get('/historical/:ticker', authenticateToken, getHistoricalSentimentController);
+
+/**
+ * @route GET /api/sentiment/trends/:ticker
+ * @desc Get sentiment trends for a ticker
+ * @access Protected (requires authentication)
+ */
+router.get('/trends/:ticker', authenticateToken, getSentimentTrendsController);
+
+/**
+ * @route GET /api/sentiment/comparative
+ * @desc Get comparative historical sentiment for multiple tickers
+ * @access Protected (requires authentication)
+ */
+router.get('/comparative', authenticateToken, getComparativeHistoricalController);
+
+/**
+ * @route GET /api/sentiment/summary/:ticker
+ * @desc Get historical sentiment summary with key metrics
+ * @access Protected (requires authentication)
+ */
+router.get('/summary/:ticker', authenticateToken, getHistoricalSummaryController);
+
+/**
+ * @route POST /api/sentiment/test/manual-aggregation
+ * @desc Manual test route for sentiment aggregation (development only)
+ * @access Protected (requires authentication)
+ */
+router.post('/test/manual-aggregation', authenticateToken, async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({
+      error: 'Manual aggregation test route not available in production'
+    });
+  }
+
+  try {
+    const { runManualAggregation } = require('../../jobs/dailySentimentAggregation');
+    const { tickers } = req.body;
+    
+    console.log('🔧 Manual aggregation requested by:', req.user.email);
+    
+    // Use custom tickers or default subset for testing
+    const testTickers = tickers || ['AAPL', 'TSLA', 'MSFT'];
+    
+    const results = await runManualAggregation(testTickers);
+    
+    res.json({
+      success: true,
+      message: 'Manual sentiment aggregation completed',
+      data: results,
+      requestedBy: req.user.email,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Manual aggregation test failed:', error);
+    res.status(500).json({
+      error: 'Manual aggregation failed',
+      message: error.message
+    });
+  }
+});
 
 /**
  * Clear sentiment cache

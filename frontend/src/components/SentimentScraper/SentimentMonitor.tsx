@@ -7,11 +7,13 @@ import { useToast } from '../../contexts/ToastContext';
 import { useSentimentUnlock } from '../../hooks/useSentimentUnlock';
 import { useSentimentLoading } from '../../hooks/useSentimentLoading';
 import { useSentimentData } from '../../hooks/useSentimentData';
+import { SentimentTickerProvider } from '../../contexts/SentimentTickerContext';
 import HarvestLoadingCard from '../UI/HarvestLoadingCard';
 import ProgressBar from '../ProgressBar';
 import SentimentChartCard from './SentimentChartCard';
 import SentimentScoresSection from './SentimentScoresSection';
 import RedditPostsSection from './RedditPostsSection';
+
 import TierLimitDialog from '../UI/TierLimitDialog';
 
 interface SentimentMonitorProps {
@@ -317,9 +319,10 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
         
         {/* Content */}
         <div className="flex-1 overflow-hidden">
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 p-6 h-full">
-            {/* Chart Section - Full Width */}
-            <div className="xl:col-span-2">
+          <SentimentTickerProvider>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 p-6 h-full">
+              {/* Chart Section with Ticker Analysis - Full Width */}
+              <div className="xl:col-span-2">
               {isCheckingSessions ? (
                 // Show loading while checking sessions to prevent locked overlay flash
                 <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden h-96`}>
@@ -381,14 +384,16 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                       loadingProgress={loadingProgress}
                       loadingStage={loadingStage}
                       isDataLoading={isRefreshing}
-                      timeRange={timeRange}
-                      onTimeRangeChange={setTimeRange}
                       errors={{
                         chart: errors.chart || dataErrors.chart,
                         rateLimited: false
                       }}
                       onRefresh={handleRefresh}
                       hasRedditAccess={stableRedditAccess}
+                      isHistoricalEnabled={true}
+                      combinedSentiments={combinedSentiments}
+                      finvizSentiments={finvizSentiments}
+                      yahooSentiments={yahooSentiments}
                     />
                   )}
                 </>
@@ -546,6 +551,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
               )}
             </div>
           </div>
+          </SentimentTickerProvider>
         </div>
       </div>
       

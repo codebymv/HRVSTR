@@ -193,13 +193,17 @@ app.get('/api/status', async (req, res) => {
         cors: 'operational'
       },
       endpoints: {
-        total: 35,
+        total: 39,
         available: [
           '/api/reddit/*',
           '/api/finviz/*',
           '/api/sec/*',
           '/api/earnings/*',
           '/api/sentiment/*',
+          '/api/sentiment/historical/:ticker',
+          '/api/sentiment/trends/:ticker',
+          '/api/sentiment/comparative',
+          '/api/sentiment/summary/:ticker',
           '/api/sentiment-unified/*',
           '/api/yahoo/*',
           '/api/watchlist',
@@ -336,6 +340,17 @@ sessionCleanupScheduler.start({
   longRunningCheckInterval: 60 * 60 * 1000, // 1 hour
   enabled: true // Can be disabled via environment variable if needed
 });
+
+// Initialize daily sentiment aggregation job
+const { initializeDailySentimentJob } = require('./jobs/dailySentimentAggregation');
+
+// Start the daily sentiment aggregation job
+if (process.env.NODE_ENV === 'production' || process.env.ENABLE_SENTIMENT_JOB === 'true') {
+  initializeDailySentimentJob();
+  console.log('🤖 Daily sentiment aggregation job enabled for production environment');
+} else {
+  console.log('🤖 Daily sentiment aggregation job disabled for development (set ENABLE_SENTIMENT_JOB=true to enable)');
+}
 
 // Graceful shutdown handling
 process.on('SIGTERM', () => {

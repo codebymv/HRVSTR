@@ -1,6 +1,7 @@
 const { getRedditTickerSentiment } = require('./redditSentimentService');
 const { getFinvizTickerSentiment } = require('./finvizSentimentService');
 const { getYahooTickerSentiment } = require('./yahooSentimentService');
+const { saveDailySentiment } = require('./historicalSentimentService');
 const sentimentUtils = require('../utils/sentiment');
 const cacheManager = require('../utils/cacheManager');
 
@@ -81,33 +82,67 @@ async function getAggregatedSentiment(tickers, timeRange = '1w', sources = ['red
     });
 
     // Calculate average confidence and strength for each ticker
-  const aggregatedSentimentData = Object.values(byTicker).map(t => {
-    // Calculate weighted average score
-    const avgScore = t.scoreCount ? t.scoreSum / t.scoreCount : 0;
-    
-    // Calculate average confidence if available
-    let confidence = 50; // Default confidence for combined data
-    if (t.confidenceSum && t.confidenceCount) {
-      confidence = Math.round(t.confidenceSum / t.confidenceCount);
-    }
-    
-    // Use strength if available, otherwise calculate from score
-    const strength = t.strengthSum && t.strengthCount 
-      ? Math.round(t.strengthSum / t.strengthCount)
-      : Math.round(Math.abs(avgScore) * 100);
-    
-    // Use the enhanced formatSentimentData function
-    return sentimentUtils.formatSentimentData(
-      t.ticker, 
-      avgScore, 
-      t.postCount, 
-      t.commentCount, 
-      'combined', 
-      new Date().toISOString(),
-      confidence, // baseConfidence from aggregation
-      strength // strength as percentage
-    );
-  }).sort((a, b) => Math.abs(b.score) - Math.abs(a.score));
+    const aggregatedSentimentData = Object.values(byTicker).map(t => {
+      // Calculate weighted average score
+      const avgScore = t.scoreCount ? t.scoreSum / t.scoreCount : 0;
+      
+      // Calculate average confidence if available
+      let confidence = 50; // Default confidence for combined data
+      if (t.confidenceSum && t.confidenceCount) {
+        confidence = Math.round(t.confidenceSum / t.confidenceCount);
+      }
+      
+      // Use strength if available, otherwise calculate from score
+      const strength = t.strengthSum && t.strengthCount 
+        ? Math.round(t.strengthSum / t.strengthCount)
+        : Math.round(Math.abs(avgScore) * 100);
+      
+      // Use the enhanced formatSentimentData function
+      return sentimentUtils.formatSentimentData(
+        t.ticker, 
+        avgScore, 
+        t.postCount, 
+        t.commentCount, 
+        'combined', 
+        new Date().toISOString(),
+        confidence, // baseConfidence from aggregation
+        strength // strength as percentage
+      );
+    }).sort((a, b) => Math.abs(b.score) - Math.abs(a.score));
+
+    // Save historical data for each ticker (fire-and-forget)
+    aggregatedSentimentData.forEach(async (sentimentData) => {
+      try {
+        // Prepare source breakdown for historical tracking
+        const sourceBreakdown = {};
+        all.filter(item => item.ticker === sentimentData.ticker)
+           .forEach(item => {
+             sourceBreakdown[item.source] = {
+               score: item.score,
+               confidence: item.confidence || 50,
+               postCount: item.postCount || 0,
+               commentCount: item.commentCount || 0
+             };
+           });
+
+        // Normalize score to -1 to 1 range for database storage
+        const normalizedScore = Math.max(-1, Math.min(1, sentimentData.score / 100));
+        
+        await saveDailySentiment({
+          ticker: sentimentData.ticker,
+          score: normalizedScore,
+          sentiment: sentimentData.sentiment,
+          confidence: sentimentData.confidence,
+          postCount: sentimentData.postCount,
+          commentCount: sentimentData.commentCount,
+          sources: sentimentData.sources ? sentimentData.sources.split(',') : Object.keys(sourceBreakdown),
+          sourceBreakdown: sourceBreakdown
+        });
+      } catch (error) {
+        // Don't let historical saving errors break the main response
+        console.warn(`Failed to save historical data for ${sentimentData.ticker}:`, error.message);
+      }
+    });
 
     return { 
       aggregatedSentimentData, 

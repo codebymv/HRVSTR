@@ -206,3 +206,62 @@ export interface EarningsAnalysis {
 }
 
 export type TimeRange = '1d' | '3d' | '1w' | '1m' | '3m' | '6m';
+
+// Historical Sentiment Types
+export interface HistoricalSentimentData {
+  ticker: string;
+  date: string;
+  sentiment_score: number;
+  sentiment_label: 'bullish' | 'neutral' | 'bearish';
+  confidence?: number;
+  post_count?: number;
+  comment_count?: number;
+  sources?: string[];
+  source_breakdown?: Record<string, any>;
+  volume?: number;
+  market_cap?: number;
+}
+
+export interface SentimentTrends {
+  ticker: string;
+  averageScore: number;
+  volatility: number;
+  trend: 'improving' | 'declining' | 'stable';
+  consistency: number;
+  dataPoints: number;
+  confidence: number;
+  streaks?: {
+    current: {
+      type: 'positive' | 'negative' | 'neutral';
+      length: number;
+    };
+    longest: {
+      type: 'positive' | 'negative' | 'neutral';
+      length: number;
+    };
+  };
+}
+
+export interface SentimentSummary {
+  ticker: string;
+  currentScore: number;
+  averageScore: number;
+  minScore: number;
+  maxScore: number;
+  dataPoints: number;
+  timeRange: string;
+  trend: SentimentTrends;
+}
+
+export interface ComparativeSentiment {
+  ticker: string;
+  averageScore: number;
+  currentScore: number;
+  trend: string;
+  dataPoints: number;
+  change: number;
+  volatility: number;
+}
+
+export type HistoricalTimeRange = '7' | '30' | '60' | '90' | '365';
+export type ChartViewMode = 'market' | 'ticker' | 'comparative';

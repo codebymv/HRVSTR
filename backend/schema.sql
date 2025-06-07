@@ -70,11 +70,38 @@ CREATE TABLE api_usage (
     UNIQUE(user_id, usage_date)
 );
 
+-- Sentiment History table for tracking historical sentiment data
+CREATE TABLE sentiment_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    ticker VARCHAR(10) NOT NULL,
+    date DATE NOT NULL,
+    sentiment_score DECIMAL(4,3) NOT NULL,
+    sentiment_label VARCHAR(20) NOT NULL, -- 'bullish', 'bearish', 'neutral'
+    confidence INTEGER NOT NULL,
+    post_count INTEGER NOT NULL DEFAULT 0,
+    comment_count INTEGER NOT NULL DEFAULT 0,
+    sources JSONB NOT NULL, -- Array of sources: ['reddit', 'finviz', 'yahoo']
+    source_breakdown JSONB, -- Individual scores per source
+    price_change DECIMAL(8,4), -- Optional: daily price change for correlation
+    volume INTEGER, -- Optional: trading volume
+    market_cap BIGINT, -- Optional: market cap at time of sentiment
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(ticker, date)
+);
+
 -- Create indexes for better query performance
 CREATE INDEX idx_watchlist_user_id ON watchlist(user_id);
 CREATE INDEX idx_activities_user_id ON activities(user_id);
 CREATE INDEX idx_events_symbol ON events(symbol);
 CREATE INDEX idx_events_scheduled_at ON events(scheduled_at);
+
+-- Sentiment history indexes for efficient queries
+CREATE INDEX idx_sentiment_history_ticker ON sentiment_history(ticker);
+CREATE INDEX idx_sentiment_history_date ON sentiment_history(date);
+CREATE INDEX idx_sentiment_history_ticker_date ON sentiment_history(ticker, date);
+CREATE INDEX idx_sentiment_history_score ON sentiment_history(sentiment_score);
+CREATE INDEX idx_sentiment_history_confidence ON sentiment_history(confidence);
 
 -- Add trigger to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -97,5 +124,10 @@ CREATE TRIGGER update_watchlist_updated_at
 
 CREATE TRIGGER update_events_updated_at
     BEFORE UPDATE ON events
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_sentiment_history_updated_at
+    BEFORE UPDATE ON sentiment_history
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column(); 

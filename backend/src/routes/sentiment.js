@@ -1,9 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/data-sources');
-const { authenticateToken } = require('../middleware/auth');
+const authenticateToken = require('../middleware/authMiddleware');
 const redditSentimentService = require('../services/redditSentimentService');
 const yahooSentimentService = require('../services/yahooSentimentService');
+const {
+  getHistoricalSentimentController,
+  getSentimentTrendsController,
+  getComparativeHistoricalController,
+  getHistoricalSummaryController
+} = require('../controllers/historicalSentimentController');
 
 router.get('/yahoo/tickers', authenticateToken, async (req, res) => {
   const startTime = Date.now();
@@ -115,6 +121,60 @@ router.get('/reddit/tickers', authenticateToken, async (req, res) => {
         timestamp: new Date().toISOString(),
         userId: req.user.id
       }
+    });
+  }
+});
+
+// Historical Sentiment Routes
+
+// Get historical sentiment data for a ticker
+// GET /api/sentiment/historical/:ticker?days=30
+router.get('/historical/:ticker', authenticateToken, getHistoricalSentimentController);
+
+// Get sentiment trends for a ticker  
+// GET /api/sentiment/trends/:ticker?days=30
+router.get('/trends/:ticker', authenticateToken, getSentimentTrendsController);
+
+// Get comparative historical sentiment for multiple tickers
+// GET /api/sentiment/comparative?tickers=AAPL,MSFT,GOOGL&days=30
+router.get('/comparative', authenticateToken, getComparativeHistoricalController);
+
+// Get historical sentiment summary with key metrics
+// GET /api/sentiment/summary/:ticker?days=30
+router.get('/summary/:ticker', authenticateToken, getHistoricalSummaryController);
+
+// Manual test route for sentiment aggregation (development only)
+router.post('/test/manual-aggregation', authenticateToken, async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({
+      error: 'Manual aggregation test route not available in production'
+    });
+  }
+
+  try {
+    const { runManualAggregation } = require('../jobs/dailySentimentAggregation');
+    const { tickers } = req.body;
+    
+    console.log('🔧 Manual aggregation requested by:', req.user.email);
+    
+    // Use custom tickers or default subset for testing
+    const testTickers = tickers || ['AAPL', 'TSLA', 'MSFT'];
+    
+    const results = await runManualAggregation(testTickers);
+    
+    res.json({
+      success: true,
+      message: 'Manual sentiment aggregation completed',
+      data: results,
+      requestedBy: req.user.email,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Manual aggregation test failed:', error);
+    res.status(500).json({
+      error: 'Manual aggregation failed',
+      message: error.message
     });
   }
 });

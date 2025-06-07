@@ -16,6 +16,8 @@ import RedditPostsSection from './RedditPostsSection';
 import TierLimitDialog from '../UI/TierLimitDialog';
 import HarvestLoadingCard from '../UI/HarvestLoadingCard';
 import ProgressBar from '../ProgressBar';
+import SentimentOverview from './SentimentOverview';
+import { SentimentTickerProvider } from '../../contexts/SentimentTickerContext';
 
 const SentimentDashboard: React.FC = () => {
   const { theme } = useTheme();
@@ -299,135 +301,53 @@ const SentimentDashboard: React.FC = () => {
         </div>
 
         {/* Content Grid */}
-        <div className="flex-1 grid grid-cols-1 xl:grid-cols-2 gap-6 p-6">
-          {/* Chart Section */}
-          <div className="xl:col-span-2">
-            {isCheckingSessions ? (
-              <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden h-96`}>
-                <div className={`${headerBg} p-4`}>
-                  <h2 className={`text-lg font-semibold ${textColor}`}>Market Sentiment Chart</h2>
-                </div>
-                <div className="flex flex-col items-center justify-center p-12 text-center">
-                  <Loader2 className="text-blue-500 animate-spin mb-4" size={32} />
-                  <h3 className={`text-lg font-semibold ${textColor} mb-2`}>
-                    Checking Access...
-                  </h3>
-                  <p className={`text-sm ${mutedTextColor} mb-4`}>
-                    Verifying component access...
-                  </p>
-                </div>
-              </div>
-            ) : hasChartAccess ? (
-              <>
-                {loadingState.chart.isLoading ? (
-                  <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden h-96`}>
-                    <div className={`${headerBg} p-4`}>
-                      <h2 className={`text-lg font-semibold ${textColor}`}>Market Sentiment Chart</h2>
-                    </div>
-                    {isFreshUnlock.chart ? (
-                      <HarvestLoadingCard
-                        progress={loadingProgress}
-                        stage={loadingStage}
-                        operation="sentiment-chart"
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center p-12 text-center">
-                        <Loader2 className="text-blue-500 animate-spin mb-4" size={32} />
-                        <h3 className={`text-lg font-semibold ${textColor} mb-2`}>
-                          Loading Chart Data
-                        </h3>
-                        <p className={`text-sm ${mutedTextColor} mb-4`}>
-                          Loading from cache...
-                        </p>
-                        <div className="w-full max-w-md">
-                          <ProgressBar progress={loadingProgress} />
-                          <div className={`text-xs ${mutedTextColor} mt-2 text-center`}>
-                            {loadingStage} - {loadingProgress}%
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <SentimentChartCard
-                    chartData={chartData}
-                    loading={loading.chart}
-                    isTransitioning={isTransitioning}
-                    loadingProgress={loadingProgress}
-                    loadingStage={loadingStage}
-                    isDataLoading={loading.chart}
-                    errors={{
-                      chart: errors.chart,
-                      rateLimited: false
-                    }}
-                    onRefresh={refreshData}
-                    hasRedditAccess={stableRedditAccess}
-                  />
-                )}
-              </>
-            ) : (
-              <LockedOverlay
-                title="Market Sentiment Chart"
-                description="Unlock real-time market sentiment timeline showing bullish, bearish, and neutral trends across multiple timeframes."
-                cost={COMPONENT_COSTS.chart}
-                componentKey="chart"
-                icon={<BarChart2 className="w-8 h-8 text-white" />}
-              />
-            )}
-          </div>
-
-          {/* Sentiment Scores Section */}
-          <div>
-            {hasScoresAccess ? (
-              <SentimentScoresSection
-                topSentiments={topSentiments}
-                finvizSentiments={finvizSentiments}
-                yahooSentiments={yahooSentiments}
-                combinedSentiments={combinedSentiments}
-                isLoading={loading.scores}
-                errors={{
-                  scores: errors.scores,
-                  rateLimited: false
-                }}
+        <div className={`flex-1 p-4 space-y-6 ${cardBg}`}>
+          {/* Wrap sentiment components with shared ticker context */}
+          <SentimentTickerProvider>
+            {/* Add the new Sentiment Overview component */}
+            <SentimentOverview />
+            
+            {/* Existing content */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Chart Card */}
+              <SentimentChartCard
+                chartData={chartData}
+                loading={loading.chart}
+                isTransitioning={isTransitioning}
+                loadingProgress={loadingProgress}
+                loadingStage={loadingStage}
+                isDataLoading={isDataLoading}
+                errors={errors}
                 onRefresh={refreshData}
-                hasRedditAccess={stableRedditAccess}
+                hasRedditAccess={hasRedditAccess}
+                isHistoricalEnabled={true}
               />
-            ) : (
-              <LockedOverlay
-                title="Sentiment Scores"
-                description="Access detailed sentiment analysis and scoring across multiple data sources and tickers."
-                cost={COMPONENT_COSTS.scores}
-                componentKey="scores"
-                icon={<BarChart2 className="w-8 h-8 text-white" />}
-              />
-            )}
+
+            {/* Sentiment Scores Section */}
+            <SentimentScoresSection
+              currentSentiments={combinedSentiments}
+              isLoading={loading.sentiment}
+              loadingProgress={loadingProgress}
+              loadingStage={loadingStage}
+              isDataLoading={isDataLoading}
+              errors={errors}
+              onRefresh={refreshData}
+              dataSource="combined"
+              hasRedditAccess={hasRedditAccess}
+            />
           </div>
+          </SentimentTickerProvider>
 
           {/* Reddit Posts Section */}
-          <div>
-            {hasRedditAccess ? (
-              <RedditPostsSection
-                redditPosts={redditPosts}
-                isLoading={loading.reddit}
-                hasMorePosts={hasMorePosts}
-                onLoadMore={handleLoadMorePosts}
-                errors={{
-                  reddit: errors.reddit,
-                  rateLimited: false
-                }}
-                onRefresh={refreshData}
-                hasRedditAccess={stableRedditAccess}
-              />
-            ) : (
-              <LockedOverlay
-                title="Reddit Posts"
-                description="Monitor real-time Reddit discussions and sentiment from financial communities."
-                cost={COMPONENT_COSTS.reddit}
-                componentKey="reddit"
-                icon={<Key className="w-8 h-8 text-white" />}
-              />
-            )}
-          </div>
+          {hasRedditAccess && (
+            <RedditPostsSection
+              posts={redditPosts}
+              isLoading={loading.posts}
+              hasMore={hasMorePosts}
+              onLoadMore={handleLoadMorePosts}
+              onRefresh={refreshData}
+            />
+          )}
         </div>
       </div>
     </>
