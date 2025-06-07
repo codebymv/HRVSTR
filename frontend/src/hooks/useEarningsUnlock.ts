@@ -9,6 +9,11 @@ import {
   getSessionTimeRemainingFormatted
 } from '../utils/sessionStorage';
 
+interface FreshUnlockState {
+  earningsAnalysis: boolean;
+  upcomingEarnings: boolean;
+}
+
 // Credit costs for each component
 const COMPONENT_COSTS = {
   earningsAnalysis: 8,
@@ -40,6 +45,12 @@ export const useEarningsUnlock = () => {
   
   // Add state to track when we're checking sessions (prevents locked overlay flash)
   const [isCheckingSessions, setIsCheckingSessions] = useState(true);
+
+  // Track fresh unlocks vs cache loads for appropriate loading UI
+  const [isFreshUnlock, setIsFreshUnlock] = useState<FreshUnlockState>({
+    earningsAnalysis: false,
+    upcomingEarnings: false
+  });
 
   // Check existing sessions for all users
   useEffect(() => {
@@ -153,6 +164,13 @@ export const useEarningsUnlock = () => {
         const sessions = await getAllUnlockSessions(currentTier);
         setActiveSessions(sessions);
         
+        // Set fresh unlock state based on whether this is a new unlock or existing session
+        const isFreshUnlockValue = !data.existingSession;
+        setIsFreshUnlock(prev => ({
+          ...prev,
+          [component]: isFreshUnlockValue
+        }));
+        
         // Show appropriate toast message
         if (data.existingSession) {
           info(`${component} already unlocked (${data.timeRemaining}h remaining)`);
@@ -168,7 +186,7 @@ export const useEarningsUnlock = () => {
         return {
           success: true,
           isExistingSession: data.existingSession,
-          isFreshUnlock: !data.existingSession
+          isFreshUnlock: isFreshUnlockValue
         };
       }
       
@@ -207,6 +225,14 @@ export const useEarningsUnlock = () => {
     }
   };
 
+  // Helper to set fresh unlock state (for cleanup after component loading)
+  const setFreshUnlockState = (component: keyof FreshUnlockState, value: boolean) => {
+    setIsFreshUnlock(prev => ({
+      ...prev,
+      [component]: value
+    }));
+  };
+
   // Calculate component access state based on sessions
   const hasEarningsAnalysisAccess = unlockedComponents.earningsAnalysis;
   const hasUpcomingEarningsAccess = unlockedComponents.upcomingEarnings;
@@ -217,6 +243,7 @@ export const useEarningsUnlock = () => {
     activeSessions,
     isCheckingSessions,
     isUnlocking,
+    isFreshUnlock,
     currentTier,
     
     // Computed values
@@ -225,6 +252,7 @@ export const useEarningsUnlock = () => {
     
     // Functions
     handleUnlockComponent,
+    setFreshUnlockState,
     
     // Constants
     COMPONENT_COSTS,

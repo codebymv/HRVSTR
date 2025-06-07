@@ -53,10 +53,12 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
   const {
     unlockedComponents,
     isCheckingSessions,
+    isFreshUnlock: hookIsFreshUnlock,
     currentTier,
     hasEarningsAnalysisAccess,
     hasUpcomingEarningsAccess,
     handleUnlockComponent: hookHandleUnlockComponent,
+    setFreshUnlockState: hookSetFreshUnlockState,
     COMPONENT_COSTS
   } = useEarningsUnlock();
   
@@ -87,12 +89,12 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
     timeRange,
     hasUpcomingEarningsAccess,
     loadingState: loadingState.upcomingEarnings,
-    isFreshUnlock: isFreshUnlock.upcomingEarnings,
+    isFreshUnlock: hookIsFreshUnlock.upcomingEarnings,
     isUnlockFlow: isUnlockFlow.upcomingEarnings,
     errors,
     handleUpcomingEarningsLoading,
     updateLoadingProgress,
-    setFreshUnlockState,
+    setFreshUnlockState: (component: 'upcomingEarnings', value: boolean) => hookSetFreshUnlockState(component, value),
     setNeedsRefresh,
   });
   
@@ -102,10 +104,10 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
     loadAnalysis,
   } = useEarningsAnalysis({
     hasEarningsAnalysisAccess,
-    isFreshUnlock: isFreshUnlock.earningsAnalysis,
+    isFreshUnlock: hookIsFreshUnlock.earningsAnalysis,
     handleEarningsAnalysisLoading,
     updateLoadingProgress,
-    setFreshUnlockState,
+    setFreshUnlockState: (component: 'earningsAnalysis', value: boolean) => hookSetFreshUnlockState(component, value),
   });
 
   // Use the earnings refresh hook
@@ -188,17 +190,34 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
     console.log('🔄 EARNINGS MONITOR - Setting unlock flow flag for:', component);
     
     try {
-      await hookHandleUnlockComponent(component, cost);
-      console.log('🔄 EARNINGS MONITOR - Unlock completed for:', component);
+      const unlockResult = await hookHandleUnlockComponent(component, cost);
+      console.log('🔄 EARNINGS MONITOR - Unlock completed for:', component, unlockResult);
       
-      // Clear unlock flow flag after a timeout as a safety measure
+      // If unlock was successful, the component state should already be updated by the hook
+      // But we need to handle the fresh unlock flag properly
+      if (unlockResult?.success && unlockResult?.isFreshUnlock) {
+        console.log('🔄 EARNINGS MONITOR - Fresh unlock detected, will show harvest loading');
+        // The hook should have already set isFreshUnlock state
+        // Auto-trigger data loading for the unlocked component
+        setTimeout(() => {
+          if (component === 'upcomingEarnings') {
+            setNeedsRefresh('upcomingEarnings', true);
+          } else if (component === 'earningsAnalysis') {
+            // Don't auto-trigger analysis since it needs a ticker
+            console.log('🔄 EARNINGS MONITOR - Earnings analysis unlocked and ready');
+          }
+        }, 100); // Small delay to ensure state updates have propagated
+      }
+      
+      // Clear unlock flow flag after a short delay for fresh unlocks, immediately for existing sessions
+      const clearDelay = unlockResult?.isFreshUnlock ? 5000 : 1000;
       setTimeout(() => {
         setIsUnlockFlow(prev => ({
           ...prev,
           [component]: false
         }));
-        console.log('🔄 EARNINGS MONITOR - Cleared unlock flow flag after timeout for:', component);
-      }, 10000); // 10 second safety timeout
+        console.log('🔄 EARNINGS MONITOR - Cleared unlock flow flag after unlock for:', component);
+      }, clearDelay);
       
     } catch (error) {
       console.error('🔄 EARNINGS MONITOR - Unlock failed for:', component, error);
@@ -223,7 +242,7 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
       return;
     }
 
-    setFreshUnlockState('earningsAnalysis', true);
+    hookSetFreshUnlockState('earningsAnalysis', true);
     
     try {
       await loadAnalysis(ticker);
@@ -450,7 +469,7 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
                       <div className={`${headerBg} p-4`}>
                         <h2 className={`text-lg font-semibold ${textColor}`}>Upcoming Earnings</h2>
                       </div>
-                      {isFreshUnlock.upcomingEarnings ? (
+                      {hookIsFreshUnlock.upcomingEarnings ? (
                         <HarvestLoadingCard
                           progress={loadingProgress}
                           stage={loadingStage}
@@ -521,7 +540,7 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
                       <div className={`${headerBg} p-4`}>
                         <h2 className={`text-lg font-semibold ${textColor}`}>Earnings Analysis</h2>
                       </div>
-                      {isFreshUnlock.earningsAnalysis ? (
+                      {hookIsFreshUnlock.earningsAnalysis ? (
                         <HarvestLoadingCard
                           progress={loadingProgress}
                           stage={loadingStage}
