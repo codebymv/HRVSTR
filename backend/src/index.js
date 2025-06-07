@@ -54,7 +54,7 @@ cacheManager.registerRateLimit('api-global', 100, 15 * 60); // 100 requests per 
 // Setup rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: process.env.NODE_ENV === 'development' ? 1000 : 100, // Much higher limit for dev
+  limit: process.env.NODE_ENV === 'development' ? 1000 : 500, // Increased for testing
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: 'Too many requests, please try again later.',
@@ -63,7 +63,7 @@ const limiter = rateLimit({
 // Setup more lenient auth rate limiting
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: process.env.NODE_ENV === 'development' ? 50 : 10, // 50 auth attempts per 15 min in dev, 10 in prod
+  limit: process.env.NODE_ENV === 'development' ? 50 : 50, // Increased for testing billing flows
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: 'Too many authentication attempts, please try again later.',
