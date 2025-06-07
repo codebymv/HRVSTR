@@ -144,6 +144,7 @@ const performComponentAccessCheck = async (component: string, currentTier?: stri
 
 /**
  * Check if the current tier supports a specific component
+ * This checks what components can be UNLOCKED with credits for each tier
  */
 const checkTierSupportsComponent = (component: string, currentTier?: string): boolean => {
   console.log(`[checkTierSupportsComponent] Input - Component: ${component}, Tier: ${currentTier} (type: ${typeof currentTier})`);
@@ -157,15 +158,14 @@ const checkTierSupportsComponent = (component: string, currentTier?: string): bo
   console.log(`[checkTierSupportsComponent] Normalized tier: ${tier}`);
   
   // Define tier access rules - what features each tier can access/unlock
-  // Free users are completely blocked from premium features
   const tierAccess: Record<string, string[]> = {
-    // Free tier: Can only unlock insider trading with credits
-    'free': ['insiderTrading'],
+    // Free tier: Can unlock basic features with credits (matching useTierAccess.ts configuration)
+    'free': ['insiderTrading', 'upcomingEarnings', 'chart', 'scores'],
     
     // Pro tier and above: Can unlock all features with credits (including premium ones)
-    'pro': ['insiderTrading', 'institutionalHoldings', 'earningsAnalysis', 'chart', 'scores', 'reddit'],
-    'elite': ['insiderTrading', 'institutionalHoldings', 'earningsAnalysis', 'chart', 'scores', 'reddit'],
-    'institutional': ['insiderTrading', 'institutionalHoldings', 'earningsAnalysis', 'chart', 'scores', 'reddit'],
+    'pro': ['insiderTrading', 'institutionalHoldings', 'earningsAnalysis', 'upcomingEarnings', 'chart', 'scores', 'reddit'],
+    'elite': ['insiderTrading', 'institutionalHoldings', 'earningsAnalysis', 'upcomingEarnings', 'chart', 'scores', 'reddit'],
+    'institutional': ['insiderTrading', 'institutionalHoldings', 'earningsAnalysis', 'upcomingEarnings', 'chart', 'scores', 'reddit'],
   };
   
   const allowedComponents = tierAccess[tier] || [];
