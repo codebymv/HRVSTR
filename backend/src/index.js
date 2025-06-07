@@ -69,14 +69,32 @@ const authLimiter = rateLimit({
   message: 'Too many authentication attempts, please try again later.',
 });
 
-// Configure CORS with specific options
-const corsOptions = {
-  origin: [
-    'https://hrvstr.us', 
+// Configure CORS with environment-based origins
+const getAllowedOrigins = () => {
+  const origins = [];
+  
+  // Add environment-specific frontend URL
+  if (process.env.FRONTEND_URL) {
+    origins.push(process.env.FRONTEND_URL);
+    console.log('🌍 CORS: Added FRONTEND_URL from environment:', process.env.FRONTEND_URL);
+  }
+  
+  // Always include these origins for development and backup
+  origins.push(
+    'https://hrvstr.us',
     'https://hrvstr.up.railway.app', 
     'http://localhost:5173', 
     'http://localhost:3000'
-  ], // Allow specific origins
+  );
+  
+  // Remove duplicates
+  const uniqueOrigins = [...new Set(origins)];
+  console.log('🌍 CORS: Allowed origins configured:', uniqueOrigins);
+  return uniqueOrigins;
+};
+
+const corsOptions = {
+  origin: getAllowedOrigins(), // Dynamic origins based on environment
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: [
     'Content-Type', 
@@ -113,12 +131,7 @@ app.options('*', cors(corsOptions));
 app.use((req, res, next) => {
   // Set CORS headers
   const origin = req.headers.origin;
-  const allowedOrigins = [
-    'https://hrvstr.us', 
-    'https://hrvstr.up.railway.app', 
-    'http://localhost:5173', 
-    'http://localhost:3000'
-  ];
+  const allowedOrigins = getAllowedOrigins();
   
   if (allowedOrigins.includes(origin)) { 
     res.header('Access-Control-Allow-Origin', origin); 
