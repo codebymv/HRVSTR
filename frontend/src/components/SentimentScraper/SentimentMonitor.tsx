@@ -421,7 +421,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                 />
               ) : hasScoresAccess ? (
                 <>
-                  {loading.sentiment || (topSentiments.length === 0 && finvizSentiments.length === 0 && !dataErrors.sentiment) ? (
+                  {loading.sentiment ? (
                     <SentimentScoresSection
                       redditSentiments={[]}
                       finvizSentiments={[]}

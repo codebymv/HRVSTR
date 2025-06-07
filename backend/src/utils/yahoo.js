@@ -128,6 +128,8 @@ async function analyzeYahooNewsSentiment(ticker, limit = 10) {
       return getNeutralSentiment(ticker, 'No news items found');
     }
     
+    console.log(`Processing ${newsItems.length} news items for ${ticker} sentiment analysis...`);
+    
     // Helper function to get neutral sentiment response
     function getNeutralSentiment(ticker, reason = '') {
       const message = reason ? ` (${reason})` : '';
@@ -172,11 +174,17 @@ async function analyzeYahooNewsSentiment(ticker, limit = 10) {
         
         const sentiment = sentimentUtils.analyzeSentiment(text);
         
+        console.log(`[${ticker}] Sentiment analysis result for news item ${validSentiments + 1}:`, {
+          score: sentiment?.score,
+          comparative: sentiment?.comparative,
+          confidence: sentiment?.confidence
+        });
+        
         // Validate sentiment result
         if (typeof sentiment !== 'object' || 
             typeof sentiment.score !== 'number' || 
             typeof sentiment.comparative !== 'number') {
-          console.warn('Invalid sentiment result format, skipping');
+          console.warn(`[${ticker}] Invalid sentiment result format, skipping:`, sentiment);
           continue;
         }
         
@@ -214,6 +222,8 @@ async function analyzeYahooNewsSentiment(ticker, limit = 10) {
       return getNeutralSentiment(ticker, 'No valid sentiment results');
     }
     
+    console.log(`[${ticker}] Sentiment analysis summary: validSentiments=${validSentiments}, avgScore=${avgScore}, avgConfidence=${avgConfidence}`);
+    
     // Use the enhanced formatSentimentData function
     const sentimentData = sentimentUtils.formatSentimentData(
       ticker,
@@ -226,12 +236,23 @@ async function analyzeYahooNewsSentiment(ticker, limit = 10) {
       Math.round(Math.abs(avgScore) * 100) // strength as percentage
     );
     
+    console.log(`[${ticker}] Final sentiment data:`, {
+      ticker: sentimentData.ticker,
+      score: sentimentData.score,
+      sentiment: sentimentData.sentiment,
+      confidence: sentimentData.confidence,
+      newsCount: newsItems.length
+    });
+    
     // Add additional Yahoo-specific fields
-    return {
+    const result = {
       ...sentimentData,
       newsItems: sentimentResults,
       newsCount: newsItems.length
     };
+    
+    console.log(`[${ticker}] Returning sentiment result with ${result.newsItems?.length || 0} news items`);
+    return result;
   } catch (error) {
     console.error(`Error analyzing Yahoo news sentiment for ${ticker}:`, error.message);
     return {

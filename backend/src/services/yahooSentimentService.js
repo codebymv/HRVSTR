@@ -94,6 +94,13 @@ async function getYahooTickerSentiment(tickers) {
         
         // Get news sentiment from Yahoo Finance
         const sentimentResult = await yahooUtils.analyzeYahooNewsSentiment(ticker, 10);
+        console.log(`[YAHOO SERVICE] Raw sentiment result for ${ticker}:`, {
+          ticker: sentimentResult?.ticker,
+          score: sentimentResult?.score,
+          comparative: sentimentResult?.comparative,
+          newsCount: sentimentResult?.newsCount,
+          hasError: !!sentimentResult?.error
+        });
         
         // Get current stock data with error handling
         let stockData = null;
@@ -107,7 +114,8 @@ async function getYahooTickerSentiment(tickers) {
         // Ensure we have valid sentiment data with proper fallbacks
         const hasValidSentiment = sentimentResult && typeof sentimentResult.score === 'number';
         const rawScore = hasValidSentiment ? sentimentResult.score : 0;
-        const comparative = hasValidSentiment ? (sentimentResult.comparative || 0) : 0;
+        // Fix: Use score as fallback if comparative is missing
+        const comparative = hasValidSentiment ? (sentimentResult.comparative !== undefined ? sentimentResult.comparative : sentimentResult.score) : 0;
         const newsCount = (sentimentResult && typeof sentimentResult.newsCount === 'number') ? sentimentResult.newsCount : 0;
         
         // Use the comparative score directly (already in -1 to 1 range)
@@ -137,7 +145,7 @@ async function getYahooTickerSentiment(tickers) {
         if (comparative > 0.1) sentiment = 'bullish';
         if (comparative < -0.1) sentiment = 'bearish';
         
-        sentimentData.push({
+        const finalSentimentItem = {
           ticker: ticker.toUpperCase(),
           score: comparative, // Use comparative score directly
           sentiment: sentiment,
@@ -149,7 +157,10 @@ async function getYahooTickerSentiment(tickers) {
           confidence: confidence,
           strength: Math.round(Math.abs(comparative) * 100), // Convert to 0-100 percentage
           lastUpdated: new Date().toISOString()
-        });
+        };
+        
+        console.log(`[YAHOO SERVICE] Final processed sentiment for ${ticker}:`, finalSentimentItem);
+        sentimentData.push(finalSentimentItem);
         
         // Add delay between requests to respect rate limits
         if (tickerList.length > 1) {
@@ -170,6 +181,7 @@ async function getYahooTickerSentiment(tickers) {
       }
     }
 
+    console.log(`[YAHOO SERVICE] Returning ${sentimentData.length} sentiment items for tickers: ${tickers}`);
     return { sentimentData };
   }, ttl);
 }

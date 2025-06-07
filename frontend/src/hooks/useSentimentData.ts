@@ -306,12 +306,15 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
           setChartData([]);
         }
         
+        // Reset ALL loading states properly for cached data
         setLoading({
           sentiment: false,
           posts: false,
           chart: false
         });
         setIsDataLoading(false);
+        setLoadingProgress(100); // Complete progress for cached data
+        setLoadingStage('Cached data loaded');
         loadingRef.current = false;
         return;
       }

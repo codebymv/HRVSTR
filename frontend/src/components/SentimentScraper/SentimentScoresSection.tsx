@@ -60,6 +60,46 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
   const ITEMS_PER_PAGE = 4;
   const THROTTLE_MS = 500;
   
+  // Temporary cache clearing function for debugging
+  const clearTickerSentimentCache = async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        console.error('❌ No auth token found for cache clearing');
+        alert('No authentication token found. Please log in again.');
+        return;
+      }
+      
+      console.log('🧹 Starting cache clear process...');
+      console.log('🔑 Using auth token:', token.substring(0, 20) + '...');
+      
+      const response = await fetch(`http://localhost:3001/api/sentiment-unified/cache`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('📡 Cache clear response status:', response.status);
+      console.log('📡 Cache clear response headers:', Object.fromEntries(response.headers.entries()));
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Cache clear result:', result);
+        console.log('🔄 Cache cleared successfully! Refresh the page to reload with fresh data.');
+        alert('✅ Cache cleared! Please refresh the page to see fresh sentiment data.\n\nWatch the console for enhanced logging during fresh data processing.');
+      } else {
+        const errorText = await response.text();
+        console.error('❌ Cache clear failed:', response.status, errorText);
+        alert(`❌ Failed to clear cache: ${response.status}\n${errorText}`);
+      }
+    } catch (error) {
+      console.error('❌ Error during cache clear:', error);
+      alert(`❌ Error clearing cache: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+  
   // Theme-specific styling using ThemeContext
   const { theme } = useTheme();
   const isLight = theme === 'light';
@@ -366,7 +406,7 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
             </div>
           </div>
         </div>
-      ) : isLoading || (currentSentiments.length === 0 && !error) ? (
+      ) : isLoading ? (
         <div className="flex flex-col items-center justify-center p-10 text-center">
           {isFreshUnlock ? (
             // Fresh unlock with harvest loading
@@ -486,13 +526,13 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
             </>
           ) : (
             <>
-              <p className={`${textColor} font-medium mb-2`}>No stocks in your watchlist</p>
+              <p className={`${textColor} font-medium mb-2`}>No sentiment data available</p>
               <p className={`${mutedTextColor} mb-4`}>Add stocks to your watchlist to see sentiment analysis from {dataSource === 'combined' ? 'FinViz, Yahoo Finance' + (hasRedditAccess ? ', and Reddit' : '') : dataSource}.</p>
               <button
-                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-                onClick={() => window.location.href = '/'}
+                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors mb-2"
+                onClick={clearTickerSentimentCache}
               >
-                Go to Watchlist
+                🧹 Clear Cache & Retry
               </button>
             </>
           )}

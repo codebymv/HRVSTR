@@ -41,7 +41,11 @@ class SessionCleanupScheduler {
 
     // Schedule session cleanup
     const sessionInterval = setInterval(async () => {
-      await this.cleanupExpiredSessions();
+      console.log('⏰ [Scheduler] Running scheduled session cleanup...');
+      const result = await this.cleanupExpiredSessions();
+      if (result.success && result.expired > 0) {
+        console.log(`✅ [Scheduler] Session cleanup completed: ${result.expired} sessions expired`);
+      }
     }, finalConfig.sessionCleanupInterval);
     this.intervals.set('session', sessionInterval);
 
@@ -97,7 +101,7 @@ class SessionCleanupScheduler {
       const duration = Date.now() - startTime;
 
       if (expiredCount > 0) {
-        console.log(`🧹 [Session Cleanup] Marked ${expiredCount} expired sessions as expired (${duration}ms)`);
+        console.log(`🧹 [Session Cleanup] Processed ${expiredCount} expired sessions and logged activities (${duration}ms)`);
       }
 
       return { success: true, expired: expiredCount, duration };
@@ -205,17 +209,22 @@ class SessionCleanupScheduler {
       if (longRunningSessions.rows.length > 0) {
         console.log(`⚠️  [Long Running Check] Found ${longRunningSessions.rows.length} sessions exceeding tier limits`);
         
-        // Force expire these sessions
+        // Force expire these sessions by updating their expires_at to now, then call cleanup
         const sessionIds = longRunningSessions.rows.map(s => s.session_id);
         await pool.query(`
           UPDATE research_sessions 
-          SET status = 'expired', updated_at = (NOW() AT TIME ZONE 'UTC')
+          SET expires_at = (NOW() AT TIME ZONE 'UTC'), updated_at = (NOW() AT TIME ZONE 'UTC')
           WHERE session_id = ANY($1)
         `, [sessionIds]);
+        
+        // Now call the cleanup function to properly log expiration activities
+        const cleanupResult = await pool.query('SELECT cleanup_expired_sessions()');
+        const actualExpired = cleanupResult.rows[0].cleanup_expired_sessions;
         
         forcedExpirations = sessionIds.length;
         
         console.log(`🔒 [Long Running Check] Force-expired ${forcedExpirations} sessions exceeding limits`);
+        console.log(`📝 [Long Running Check] Logged ${actualExpired} expiration activities`);
         
         // Log details of force-expired sessions
         longRunningSessions.rows.forEach(session => {

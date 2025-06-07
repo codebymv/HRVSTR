@@ -1,8 +1,8 @@
 import React from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
-import { ArrowUpRight, ArrowDownRight, Minus, TrendingUp, TrendingDown, Info } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Minus, TrendingUp, TrendingDown, Info, Shield, ChevronDown, ChevronUp } from 'lucide-react';
 import { SentimentData } from '../../types';
-import { getSentimentTextColor, getConfidenceColor } from './sentimentUtils';
+import { getSentimentTextColor, getConfidenceColor, calculateSentimentQuality, getQualityGradeColor, calculateUnifiedReliability } from './sentimentUtils';
 
 interface SentimentCardProps {
   data: SentimentData;
@@ -61,6 +61,97 @@ const getDataSummary = (source: string, postCount: number, commentCount: number,
     return 'No data';
   }
   return 'Live data';
+};
+
+// Unified Reliability Indicator Component (replaces separate confidence and signal quality)
+const UnifiedReliabilityIndicator: React.FC<{ sentimentData: SentimentData; isLight: boolean }> = ({ 
+  sentimentData, 
+  isLight 
+}) => {
+  const [isExpanded, setIsExpanded] = React.useState(false);
+  const reliability = calculateUnifiedReliability(sentimentData);
+  
+  const reliabilityBgColor = isLight ? 'bg-gray-50' : 'bg-gray-700';
+  const textColor = isLight ? 'text-gray-700' : 'text-gray-300';
+  const mutedTextColor = isLight ? 'text-gray-600' : 'text-gray-400';
+  const linkColor = isLight ? 'text-blue-600 hover:text-blue-800' : 'text-blue-400 hover:text-blue-300';
+
+  return (
+    <div className={`mt-3 p-3 ${reliabilityBgColor} rounded-lg border-l-4 border-blue-400`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <Shield size={16} className="text-blue-500" />
+          <span className={`text-sm font-medium ${textColor}`}>Reliability Score</span>
+        </div>
+        <div className="flex items-center space-x-2">
+          <span className={`px-2 py-1 rounded-full text-xs font-bold border ${reliability.reliabilityColor}`}>
+            {reliability.reliabilityLabel} ({reliability.reliabilityScore}%)
+          </span>
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className={`${linkColor} hover:bg-opacity-10 p-1 rounded transition-colors`}
+          >
+            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+        </div>
+      </div>
+      
+      <p className={`text-xs ${mutedTextColor} mt-2`}>
+        {reliability.recommendation}
+      </p>
+      
+      {isExpanded && (
+        <div className="mt-3 space-y-2">
+          <div className={`text-xs ${textColor} font-medium mb-2`}>Reliability Breakdown:</div>
+          
+          {/* Main Components */}
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="text-center">
+              <div className={`h-3 bg-blue-200 rounded overflow-hidden`}>
+                <div 
+                  className="h-full bg-blue-500 transition-all duration-300"
+                  style={{ width: `${reliability.breakdown.confidenceScore}%` }}
+                ></div>
+              </div>
+              <span className={`${mutedTextColor} text-xs mt-1 block`}>
+                AI Confidence: {reliability.breakdown.confidenceScore}%
+              </span>
+              <span className={`${mutedTextColor} text-xs opacity-75`}>
+                (40% weight → {reliability.breakdown.confidenceContribution}pts)
+              </span>
+            </div>
+            <div className="text-center">
+              <div className={`h-3 bg-blue-200 rounded overflow-hidden`}>
+                <div 
+                  className="h-full bg-blue-500 transition-all duration-300"
+                  style={{ width: `${reliability.breakdown.qualityScore}%` }}
+                ></div>
+              </div>
+              <span className={`${mutedTextColor} text-xs mt-1 block`}>
+                Data Quality: {reliability.breakdown.qualityScore}%
+              </span>
+              <span className={`${mutedTextColor} text-xs opacity-75`}>
+                (60% weight → {reliability.breakdown.qualityContribution}pts)
+              </span>
+            </div>
+          </div>
+          
+          {/* Detailed Quality Factors */}
+          <div className="pt-2 border-t border-gray-300">
+            <div className={`text-xs ${textColor} font-medium mb-2`}>Data Quality Details:</div>
+            <div className="space-y-1">
+              {reliability.qualityDetails.factors.map((factor, index) => (
+                <div key={index} className={`text-xs ${mutedTextColor} flex items-start`}>
+                  <span className="text-blue-500 mr-1">•</span>
+                  <span>{factor}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
@@ -132,11 +223,6 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
       <div className="mb-4">
         <div className={`inline-flex items-center px-3 py-2 rounded-full text-sm font-semibold ${badgeBgColor}`}>
           <span className={sentimentColor}>{sentimentDescription}</span>
-          {hasValidConfidence && (
-            <span className={`ml-2 ${subTextColor}`}>
-              • {Number(confidence).toFixed(0)}% confidence
-            </span>
-          )}
         </div>
       </div>
 
@@ -166,8 +252,11 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
         </div>
       )}
 
+      {/* Unified Reliability Indicator (replaces separate confidence and signal quality) */}
+      <UnifiedReliabilityIndicator sentimentData={data} isLight={isLight} />
+
       {/* Data source and summary */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mt-4">
         <div className="flex items-center space-x-2">
           <div className="h-2 w-2 rounded-full bg-green-500"></div>
           <span className={`text-sm ${subTextColor}`}>Live • {dataSummary}</span>
@@ -198,18 +287,14 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
       {/* Momentum indicator if significant */}
       {momentum !== undefined && !isNaN(momentum) && Math.abs(momentum) > 0.1 && (
         <div className="mt-3 flex items-center justify-center">
-          <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium ${
-            momentum > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-          }`}>
-            {momentum > 0 ? (
-              <ArrowUpRight size={12} />
-            ) : (
-              <ArrowDownRight size={12} />
-            )}
-            <span>
-              {momentum > 0 ? 'Trending up' : 'Trending down'} {Math.abs(momentum).toFixed(1)}%
-            </span>
-          </div>
+          <span className={`text-xs ${subTextColor} mr-2`}>
+            Momentum: {momentum > 0 ? '+' : ''}{Number(momentum).toFixed(1)}%
+          </span>
+          {momentum > 0 ? (
+            <TrendingUp size={14} className="text-green-500" />
+          ) : (
+            <TrendingDown size={14} className="text-red-500" />
+          )}
         </div>
       )}
     </div>

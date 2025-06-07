@@ -106,7 +106,7 @@ const HarvestLoadingCard: React.FC<HarvestLoadingCardProps> = ({
       {/* Theme-aware HRVSTR Logo */}
       <div className="mb-4">
         <img 
-          src="/hrvstr_logo.png" 
+          src="/hrvstr_icon.png" 
           alt="HRVSTR" 
           className="h-full w-auto max-h-10" 
           style={{ filter: logoFilter }}

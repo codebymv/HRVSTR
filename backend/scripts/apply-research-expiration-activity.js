@@ -36,8 +36,8 @@ async function applyResearchExpirationActivity() {
               WHERE status = 'active' 
               AND expires_at < (NOW() AT TIME ZONE 'UTC')
           LOOP
-              -- Extract tier from metadata if available
-              tier_hours := COALESCE((expired_session.metadata->>'unlockDurationHours')::INTEGER, 2);
+              -- Extract tier from metadata if available (handle decimal hours)
+              tier_hours := COALESCE(ROUND((expired_session.metadata->>'unlockDurationHours')::NUMERIC)::INTEGER, 2);
               
               -- Format component name for display
               component_name := CASE 

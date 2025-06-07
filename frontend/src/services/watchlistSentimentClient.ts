@@ -70,6 +70,12 @@ export async function fetchWatchlistRedditSentiment(
     });
 
     console.log('Watchlist Reddit sentiment API Response:', response.data);
+    console.log('🔍 REDDIT CLIENT DEBUG: Raw response structure:', {
+      hasData: !!response.data.data,
+      hasSentimentData: !!response.data.sentimentData,
+      dataKeys: Object.keys(response.data),
+      nestedDataKeys: response.data.data ? Object.keys(response.data.data) : 'No nested data'
+    });
 
     // Handle credit information
     if (response.data.creditsUsed) {
@@ -83,10 +89,19 @@ export async function fetchWatchlistRedditSentiment(
       
     // Extract sentiment data from unified response format
     const actualData = response.data.data || response.data;
-    const sentimentData = actualData.sentimentData || [];
+    const nestedData = (actualData as any).data || actualData;
+    const sentimentData = nestedData.sentimentData || [];
+    
+    console.log('🔍 REDDIT CLIENT DEBUG: Extracted data:', {
+      actualDataKeys: Object.keys(actualData),
+      nestedDataKeys: Object.keys(nestedData),
+      sentimentDataLength: sentimentData.length,
+      sentimentDataSample: sentimentData.slice(0, 2)
+    });
     
     if (sentimentData.length === 0) {
       console.warn('Watchlist Reddit sentiment API returned no sentiment data');
+      console.warn('🔍 REDDIT CLIENT DEBUG: Full response for debugging:', JSON.stringify(response.data, null, 2));
       return [];
     }
 
@@ -164,7 +179,8 @@ export async function fetchWatchlistFinvizSentiment(
 
     // Extract sentiment data from unified response format
     const actualData = response.data.data || response.data;
-    const sentimentData = actualData.sentimentData || [];
+    const nestedData = (actualData as any).data || actualData;
+    const sentimentData = nestedData.sentimentData || [];
     
     if (sentimentData.length === 0) {
       console.warn('Watchlist FinViz sentiment API returned no sentiment data');
@@ -232,6 +248,12 @@ export async function fetchWatchlistYahooSentiment(
     });
 
     console.log('Watchlist Yahoo sentiment API Response:', response.data);
+    console.log('🔍 YAHOO CLIENT DEBUG: Raw response structure:', {
+      hasData: !!response.data.data,
+      hasSentimentData: !!response.data.sentimentData,
+      dataKeys: Object.keys(response.data),
+      nestedDataKeys: response.data.data ? Object.keys(response.data.data) : 'No nested data'
+    });
 
     // Handle credit information
     if (response.data.creditsUsed) {
@@ -245,10 +267,19 @@ export async function fetchWatchlistYahooSentiment(
 
     // Extract sentiment data from unified response format
     const actualData = response.data.data || response.data;
-    const sentimentData = actualData.sentimentData || [];
+    const nestedData = (actualData as any).data || actualData;
+    const sentimentData = nestedData.sentimentData || [];
+    
+    console.log('🔍 YAHOO CLIENT DEBUG: Extracted data:', {
+      actualDataKeys: Object.keys(actualData),
+      nestedDataKeys: Object.keys(nestedData),
+      sentimentDataLength: sentimentData.length,
+      sentimentDataSample: sentimentData.slice(0, 2)
+    });
     
     if (sentimentData.length === 0) {
       console.warn('Watchlist Yahoo sentiment API returned no sentiment data');
+      console.warn('🔍 YAHOO CLIENT DEBUG: Full response for debugging:', JSON.stringify(response.data, null, 2));
       return [];
     }
 
