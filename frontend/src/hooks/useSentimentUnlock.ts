@@ -52,6 +52,9 @@ export const useSentimentUnlock = () => {
     isFreshUnlock: false
   });
 
+  // Track recently unlocked components to prevent session checker from overriding them
+  const [recentlyUnlocked, setRecentlyUnlocked] = useState<Set<string>>(new Set());
+
   // Get tier info
   const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
 
@@ -68,15 +71,17 @@ export const useSentimentUnlock = () => {
         const redditSession = await checkComponentAccess('reddit', currentTierValue);
 
         const newUnlockedState = {
-          chart: !!chartSession,
-          scores: !!scoresSession,
-          reddit: !!redditSession
+          chart: !!chartSession || recentlyUnlocked.has('chart'),
+          scores: !!scoresSession || recentlyUnlocked.has('scores'),
+          reddit: !!redditSession || recentlyUnlocked.has('reddit')
         };
 
         console.log('🔍 SENTIMENT - Active sessions:', {
           chart: !!chartSession,
           scores: !!scoresSession,
           reddit: !!redditSession,
+          recentlyUnlocked: Array.from(recentlyUnlocked),
+          finalState: newUnlockedState,
           currentTier: currentTierValue,
           timestamp: Date.now()
         });
@@ -88,11 +93,12 @@ export const useSentimentUnlock = () => {
         setActiveSessions(sessions);
       } catch (error) {
         console.warn('Database session check failed:', error);
-        setUnlockedComponents({
-          chart: false,
-          scores: false,
-          reddit: false
-        });
+        // Don't override recently unlocked components even on error
+        setUnlockedComponents(prev => ({
+          chart: recentlyUnlocked.has('chart') || prev.chart,
+          scores: recentlyUnlocked.has('scores') || prev.scores,
+          reddit: recentlyUnlocked.has('reddit') || prev.reddit
+        }));
         setActiveSessions([]);
       } finally {
         setIsCheckingSessions(false);
@@ -102,7 +108,7 @@ export const useSentimentUnlock = () => {
     checkExistingSessions();
     const interval = setInterval(checkExistingSessions, 60000);
     return () => clearInterval(interval);
-  }, [tierInfo]);
+  }, [tierInfo, recentlyUnlocked]);
 
   // Handlers for unlocking individual components
   const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number): Promise<FreshUnlockState> => {
@@ -137,15 +143,31 @@ export const useSentimentUnlock = () => {
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to unlock component');
+        // Create an error with the response status for better error handling
+        const error = new Error(data.error || 'Failed to unlock component');
+        (error as any).status = response.status;
+        (error as any).data = data;
+        throw error;
       }
       
       if (data.success) {
-        // Update component state
-        setUnlockedComponents(prev => ({
-          ...prev,
-          [component]: true
-        }));
+        // Add to recently unlocked set to prevent session checker from overriding
+        setRecentlyUnlocked(prev => {
+          const newSet = new Set(prev);
+          newSet.add(component);
+          console.log(`🔓 SENTIMENT UNLOCK - Added ${component} to recently unlocked:`, Array.from(newSet));
+          return newSet;
+        });
+
+        // IMMEDIATELY update component state to prevent UI flicker
+        setUnlockedComponents(prev => {
+          const newState = {
+            ...prev,
+            [component]: true
+          };
+          console.log(`🔓 SENTIMENT UNLOCK - Immediately updating ${component} to unlocked:`, newState);
+          return newState;
+        });
         
         // Set fresh unlock flag for harvest loading (when credits are actually spent)
         if (!data.existingSession) {
@@ -161,9 +183,43 @@ export const useSentimentUnlock = () => {
           tier: tierInfo?.tier || 'free'
         });
         
-        // Update active sessions by querying database
-        const sessions = await getAllUnlockSessions(currentTier);
-        setActiveSessions(sessions);
+        // Clear component access cache to force fresh database check
+        clearComponentAccessCache(component);
+        
+        // Update active sessions by querying database with a small delay
+        // to ensure database consistency
+        setTimeout(async () => {
+          try {
+            const sessions = await getAllUnlockSessions(currentTier);
+            setActiveSessions(sessions);
+            console.log(`🔓 SENTIMENT UNLOCK - Updated active sessions for ${component}`);
+            
+            // Remove from recently unlocked after confirming session is active
+            setTimeout(() => {
+              setRecentlyUnlocked(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(component);
+                console.log(`🔓 SENTIMENT UNLOCK - Removed ${component} from recently unlocked after confirmation:`, Array.from(newSet));
+                return newSet;
+              });
+            }, 1000);
+          } catch (error) {
+            console.warn(`Failed to update active sessions after unlocking ${component}:`, error);
+          }
+        }, 500);
+
+        // Fallback cleanup: remove from recently unlocked after 10 seconds regardless
+        setTimeout(() => {
+          setRecentlyUnlocked(prev => {
+            if (prev.has(component)) {
+              const newSet = new Set(prev);
+              newSet.delete(component);
+              console.log(`🔓 SENTIMENT UNLOCK - Fallback cleanup: removed ${component} from recently unlocked:`, Array.from(newSet));
+              return newSet;
+            }
+            return prev;
+          });
+        }, 10000);
         
         // Show appropriate toast message
         if (data.existingSession) {
@@ -172,9 +228,11 @@ export const useSentimentUnlock = () => {
           info(`${data.creditsUsed} credits used`);
         }
         
-        // Refresh tier info to update usage meter
+        // Refresh tier info to update usage meter (run in background)
         if (refreshTierInfo) {
-          await refreshTierInfo();
+          refreshTierInfo().catch(error => {
+            console.warn('Failed to refresh tier info after unlock:', error);
+          });
         }
         
         return {
@@ -185,7 +243,31 @@ export const useSentimentUnlock = () => {
       }
       
     } catch (error) {
-      info(`Failed to unlock ${component}. Please try again.`);
+      console.error('Sentiment unlock error:', error);
+      
+      // Handle different types of errors with specific messages
+      const errorStatus = (error as any)?.status;
+      const errorData = (error as any)?.data;
+      
+             if (errorStatus === 402) {
+         const remainingCredits = errorData?.remaining ?? errorData?.remainingCredits ?? 0;
+         const requiredCredits = errorData?.required ?? errorData?.requiredCredits ?? cost;
+         warning(
+           `Insufficient credits! You need ${requiredCredits} credits but only have ${remainingCredits} remaining.`, 
+           8000, 
+           {
+             clickable: true,
+             linkTo: '/settings/usage'
+           }
+         );
+       } else if (errorStatus === 401) {
+        warning('Please log in to unlock components.');
+      } else if (errorStatus === 403) {
+        warning('Access denied. This feature may not be available for your tier.');
+      } else {
+        info(`Failed to unlock ${component}. Please try again.`);
+      }
+      
       return {
         success: false,
         isExistingSession: false,

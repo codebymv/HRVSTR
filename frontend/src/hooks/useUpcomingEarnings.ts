@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { TimeRange, EarningsEvent } from '../types';
 import { fetchUpcomingEarningsWithUserCache, streamUpcomingEarnings } from '../services/earnings';
 
@@ -21,6 +21,10 @@ interface UseUpcomingEarningsProps {
   setNeedsRefresh: (component: 'upcomingEarnings', needsRefresh: boolean) => void;
 }
 
+// Add retry tracking
+const MAX_RETRIES = 2;
+const RETRY_DELAY = 3000; // 3 seconds between retries
+
 export const useUpcomingEarnings = ({
   timeRange,
   hasUpcomingEarningsAccess,
@@ -34,6 +38,8 @@ export const useUpcomingEarnings = ({
   setNeedsRefresh,
 }: UseUpcomingEarningsProps) => {
   const [upcomingEarnings, setUpcomingEarnings] = useState<EarningsEvent[]>([]);
+  const [retryCount, setRetryCount] = useState(0);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   // Sort earnings by date
   const sortEarnings = useCallback((earnings: EarningsEvent[]): EarningsEvent[] => {
@@ -55,18 +61,30 @@ export const useUpcomingEarnings = ({
 
     // Check current loading state directly
     const currentLoadingState = loadingState.isLoading;
-    if (currentLoadingState) {
-      console.log('🔄 EARNINGS TABBED - Already loading, skipping...');
+    if (currentLoadingState || isRetrying) {
+      console.log('🔄 EARNINGS TABBED - Already loading or retrying, skipping...');
       return;
     }
 
-    console.log('🚀 EARNINGS TABBED - Starting loadData with forceRefresh:', forceRefresh);
+    // Prevent infinite retries
+    if (retryCount >= MAX_RETRIES && !forceRefresh) {
+      console.error('❌ EARNINGS TABBED - Max retry attempts reached, stopping');
+      handleUpcomingEarningsLoading(false, 0, 'Max retries reached', undefined, 'Unable to load data after multiple attempts. Please try refreshing the page.');
+      return;
+    }
+
+    console.log('🚀 EARNINGS TABBED - Starting loadData with forceRefresh:', forceRefresh, 'retryCount:', retryCount);
+    
+    // Reset retry count on manual refresh
+    if (forceRefresh) {
+      setRetryCount(0);
+    }
     
     // Determine if this will likely be a fresh API call vs cache load
     const hasExistingData = upcomingEarnings.length > 0;
     const isInUnlockFlow = isFreshUnlock;
     
-    console.log(`📊 Load characteristics: hasExistingData=${hasExistingData}, forceRefresh=${forceRefresh}, isInUnlockFlow=${isInUnlockFlow}`);
+    console.log(`📊 Load characteristics: hasExistingData=${hasExistingData}, forceRefresh=${forceRefresh}, isInUnlockFlow=${isInUnlockFlow}, retryCount=${retryCount}`);
     
     // Set fresh unlock flag based on unlock flow or manual refresh
     if (isInUnlockFlow) {
@@ -196,20 +214,48 @@ export const useUpcomingEarnings = ({
         clearTimeout(fallbackTimeoutId);
         clearTimeout(timeoutId);
         
-        // If SSE fails to connect, try fallback API
-        if (!streamInitialized) {
+        // If SSE fails to connect, try fallback API with retry limit
+        if (!streamInitialized && retryCount < MAX_RETRIES) {
           console.log('🔄 SSE failed to connect, trying fallback API...');
+          setIsRetrying(true);
+          
           fetchUpcomingEarningsWithUserCache(timeRange, forceRefresh)
             .then(response => {
               setUpcomingEarnings(response);
               handleUpcomingEarningsLoading(false, 100, 'Completed via fallback!', response, null);
               setFreshUnlockState('upcomingEarnings', false);
+              setIsRetrying(false);
+              setRetryCount(0); // Reset on success
             })
             .catch(fallbackError => {
               console.error('❌ Fallback API failed:', fallbackError);
-              handleUpcomingEarningsLoading(false, 0, 'Failed to load', undefined, String(fallbackError) || 'Failed to load earnings data');
-              setFreshUnlockState('upcomingEarnings', false);
+              setIsRetrying(false);
+              
+              // Increment retry count
+              const newRetryCount = retryCount + 1;
+              setRetryCount(newRetryCount);
+              
+              if (newRetryCount < MAX_RETRIES) {
+                console.log(`🔄 Will retry in ${RETRY_DELAY / 1000} seconds (attempt ${newRetryCount}/${MAX_RETRIES})`);
+                handleUpcomingEarningsLoading(false, 0, `Retrying in ${RETRY_DELAY / 1000}s...`, undefined, null);
+                
+                // Schedule retry
+                setTimeout(() => {
+                  if (hasUpcomingEarningsAccess) {
+                    loadData(forceRefresh);
+                  }
+                }, RETRY_DELAY);
+              } else {
+                // Max retries reached
+                console.error('❌ Max retries reached for earnings data');
+                handleUpcomingEarningsLoading(false, 0, 'Failed to load', undefined, 'Unable to connect to earnings service. Please check your connection and try again later.');
+                setFreshUnlockState('upcomingEarnings', false);
+              }
             });
+        } else if (retryCount >= MAX_RETRIES) {
+          console.error('❌ Max retry attempts reached, not attempting fallback');
+          handleUpcomingEarningsLoading(false, 0, 'Failed to load', undefined, 'Max retry attempts reached. Please refresh the page to try again.');
+          setFreshUnlockState('upcomingEarnings', false);
         }
       });
       
@@ -226,32 +272,17 @@ export const useUpcomingEarnings = ({
       handleUpcomingEarningsLoading(false, 0, 'Failed to load', undefined, String(error) || 'Failed to load earnings data');
       setFreshUnlockState('upcomingEarnings', false);
     }
-  }, [timeRange, hasUpcomingEarningsAccess, loadingState.isLoading, upcomingEarnings.length, isFreshUnlock, handleUpcomingEarningsLoading, updateLoadingProgress, setFreshUnlockState]);
+  }, [timeRange, hasUpcomingEarningsAccess, loadingState.isLoading, isFreshUnlock, retryCount, isRetrying, handleUpcomingEarningsLoading, updateLoadingProgress, setFreshUnlockState]);
 
-  // Calculate initial loading state based on cache freshness
-  useEffect(() => {
-    if (!hasUpcomingEarningsAccess) {
-      setNeedsRefresh('upcomingEarnings', false);
-      return;
-    }
+  // This hook no longer manages needsRefresh state to prevent infinite loops
+  // All refresh logic is now handled by the main EarningsMonitorTabbed component
+  // This prevents race conditions between multiple auto-loading mechanisms
+  
+  // NOTE: The initial loading state and refresh triggers are now managed entirely
+  // by the main component using hasLoadedOnce tracking to prevent infinite loops
 
-    const hasData = upcomingEarnings.length > 0;
-    const needsRefresh = !hasData;
-    
-    if (needsRefresh && !loadingState.isLoading) {
-      setNeedsRefresh('upcomingEarnings', true);
-    } else if (!needsRefresh) {
-      setNeedsRefresh('upcomingEarnings', false);
-    }
-  }, [hasUpcomingEarningsAccess, upcomingEarnings.length, loadingState.isLoading, setNeedsRefresh]);
-
-  // Auto-load data when component becomes unlocked and has no data - triggers immediately 
-  useEffect(() => {
-    if (hasUpcomingEarningsAccess && !loadingState.isLoading && upcomingEarnings.length === 0 && !errors.upcomingEarnings) {
-      console.log('🔄 EARNINGS MONITOR - Auto-loading data on component unlock');
-      loadData(false);
-    }
-  }, [hasUpcomingEarningsAccess, upcomingEarnings.length, errors.upcomingEarnings, loadingState.isLoading, loadData]);
+  // NOTE: Auto-loading is now handled by the main EarningsMonitorTabbed component
+  // to prevent race conditions and duplicate requests
 
   return {
     upcomingEarnings,

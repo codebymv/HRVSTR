@@ -110,13 +110,25 @@ router.get('/upcoming/stream', async (req, res) => {
       }
     }
     
-    // Set SSE headers
+    // Set SSE headers with proper CORS handling
+    const origin = req.headers.origin;
+    const allowedOrigins = [
+      'https://hrvstr.us', 
+      'https://hrvstr.up.railway.app', 
+      'http://localhost:5173', 
+      'http://localhost:3000'
+    ];
+    
+    const corsOrigin = allowedOrigins.includes(origin) ? origin : 'https://hrvstr.us';
+    
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Cache-Control'
+      'Access-Control-Allow-Origin': corsOrigin,
+      'Access-Control-Allow-Headers': 'Cache-Control, Authorization, Content-Type',
+      'Access-Control-Allow-Credentials': 'true',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS'
     });
 
     const sessionId = uuidv4();

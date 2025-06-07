@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { TimeRange } from '../../types';
 import { TrendingUp, Loader2, Lock, Crown } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -35,6 +35,18 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
   const [isUnlockFlow, setIsUnlockFlow] = useState({
     earningsAnalysis: false,
     upcomingEarnings: false
+  });
+  
+  // Add ref to prevent multiple auto-load triggers and track successful loads
+  const autoLoadTriggered = useRef({
+    upcomingEarnings: false,
+    earningsAnalysis: false
+  });
+  
+  // Track whether we've successfully completed at least one load (regardless of result)
+  const hasLoadedOnce = useRef({
+    upcomingEarnings: false,
+    earningsAnalysis: false
   });
   
   // Use the new earnings unlock hook
@@ -178,6 +190,16 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
     try {
       await hookHandleUnlockComponent(component, cost);
       console.log('🔄 EARNINGS MONITOR - Unlock completed for:', component);
+      
+      // Clear unlock flow flag after a timeout as a safety measure
+      setTimeout(() => {
+        setIsUnlockFlow(prev => ({
+          ...prev,
+          [component]: false
+        }));
+        console.log('🔄 EARNINGS MONITOR - Cleared unlock flow flag after timeout for:', component);
+      }, 10000); // 10 second safety timeout
+      
     } catch (error) {
       console.error('🔄 EARNINGS MONITOR - Unlock failed for:', component, error);
       // Clear unlock flow flag on error
@@ -240,12 +262,15 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
     const tierSupportsAnalysis = ['pro', 'elite', 'institutional'].includes(currentTier.toLowerCase());
     
     // Trigger data loading for upcoming earnings when it becomes unlocked
+    // BUT only if we haven't successfully loaded at least once
     if (unlockedComponents.upcomingEarnings && 
         tierSupportsUpcoming &&
         !loadingState.upcomingEarnings.isLoading && 
         !loadingState.upcomingEarnings.needsRefresh &&
-        upcomingEarnings.length === 0) {
-      console.log('🔄 EARNINGS MONITOR - Auto-triggering upcoming earnings data load');
+        !hasLoadedOnce.current.upcomingEarnings &&
+        !errors.upcomingEarnings) {
+      console.log('🔄 EARNINGS MONITOR - Auto-triggering upcoming earnings data load (first time)');
+      autoLoadTriggered.current.upcomingEarnings = true;
       setNeedsRefresh('upcomingEarnings', true);
     }
     
@@ -253,9 +278,22 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
     // But we ensure the component state is ready when unlocked
     if (unlockedComponents.earningsAnalysis && 
         tierSupportsAnalysis &&
-        !loadingState.earningsAnalysis.isLoading) {
+        !loadingState.earningsAnalysis.isLoading &&
+        !autoLoadTriggered.current.earningsAnalysis) {
       console.log('🔄 EARNINGS MONITOR - Earnings analysis unlocked and ready');
+      autoLoadTriggered.current.earningsAnalysis = true;
     }
+    
+    // Reset auto-load and hasLoaded flags when components are locked again
+    if (!unlockedComponents.upcomingEarnings) {
+      autoLoadTriggered.current.upcomingEarnings = false;
+      hasLoadedOnce.current.upcomingEarnings = false;
+    }
+    if (!unlockedComponents.earningsAnalysis) {
+      autoLoadTriggered.current.earningsAnalysis = false;
+      hasLoadedOnce.current.earningsAnalysis = false;
+    }
+    
   }, [
     unlockedComponents.upcomingEarnings, 
     unlockedComponents.earningsAnalysis,
@@ -263,15 +301,22 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
     loadingState.earningsAnalysis.isLoading,
     loadingState.upcomingEarnings.needsRefresh,
     loadingState.earningsAnalysis.needsRefresh,
-    upcomingEarnings.length,
-    currentTier // Add currentTier as dependency to react to tier changes
+    errors.upcomingEarnings,
+    currentTier
+    // NOTE: Deliberately excluding upcomingEarnings.length to prevent infinite re-triggers
   ]);
 
-  // Clear unlock flow flags when loading completes
+  // Clear unlock flow flags when loading completes and track successful loads
   useEffect(() => {
     if (!loadingState.upcomingEarnings.isLoading && isUnlockFlow.upcomingEarnings) {
       console.log('🔄 EARNINGS MONITOR - Clearing upcoming earnings unlock flow flag after loading');
       setIsUnlockFlow(prev => ({ ...prev, upcomingEarnings: false }));
+    }
+    
+    // Mark as loaded once when loading completes (successfully or with empty data)
+    if (!loadingState.upcomingEarnings.isLoading && !hasLoadedOnce.current.upcomingEarnings) {
+      console.log('🔄 EARNINGS MONITOR - Marking upcoming earnings as loaded once');
+      hasLoadedOnce.current.upcomingEarnings = true;
     }
   }, [loadingState.upcomingEarnings.isLoading, isUnlockFlow.upcomingEarnings]);
 
@@ -279,6 +324,12 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
     if (!loadingState.earningsAnalysis.isLoading && isUnlockFlow.earningsAnalysis) {
       console.log('🔄 EARNINGS MONITOR - Clearing earnings analysis unlock flow flag after loading');
       setIsUnlockFlow(prev => ({ ...prev, earningsAnalysis: false }));
+    }
+    
+    // Mark as loaded once when loading completes (successfully or with empty data)
+    if (!loadingState.earningsAnalysis.isLoading && !hasLoadedOnce.current.earningsAnalysis) {
+      console.log('🔄 EARNINGS MONITOR - Marking earnings analysis as loaded once');
+      hasLoadedOnce.current.earningsAnalysis = true;
     }
   }, [loadingState.earningsAnalysis.isLoading, isUnlockFlow.earningsAnalysis]);
 
@@ -394,7 +445,7 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
                 </div>
               ) : hasUpcomingEarningsAccess ? (
                 <>
-                  {loadingState.upcomingEarnings.isLoading || (upcomingEarnings.length === 0 && !errors.upcomingEarnings) ? (
+                  {loadingState.upcomingEarnings.isLoading ? (
                     <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden h-full`}>
                       <div className={`${headerBg} p-4`}>
                         <h2 className={`text-lg font-semibold ${textColor}`}>Upcoming Earnings</h2>

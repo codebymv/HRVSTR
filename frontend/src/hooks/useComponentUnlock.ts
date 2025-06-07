@@ -27,7 +27,7 @@ interface UseComponentUnlockConfig {
 
 export const useComponentUnlock = (config: UseComponentUnlockConfig) => {
   const { tierInfo, refreshTierInfo } = useTier();
-  const { info } = useToast();
+  const { info, warning } = useToast();
   
   const [unlockedComponents, setUnlockedComponents] = useState<ComponentUnlockState>(() => {
     const initialState: ComponentUnlockState = {};
@@ -125,7 +125,11 @@ export const useComponentUnlock = (config: UseComponentUnlockConfig) => {
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to unlock component');
+        // Create an error with the response status for better error handling
+        const error = new Error(data.error || 'Failed to unlock component');
+        (error as any).status = response.status;
+        (error as any).data = data;
+        throw error;
       }
       
       if (data.success) {
@@ -170,7 +174,29 @@ export const useComponentUnlock = (config: UseComponentUnlockConfig) => {
       
     } catch (error) {
       console.error('Component unlock error:', error);
-      info(`Failed to unlock ${component}. Please try again.`);
+      
+      // Handle different types of errors with specific messages
+      const errorStatus = (error as any)?.status;
+      const errorData = (error as any)?.data;
+      
+             if (errorStatus === 402) {
+         const remainingCredits = errorData?.remaining ?? errorData?.remainingCredits ?? 0;
+         const requiredCredits = errorData?.required ?? errorData?.requiredCredits ?? cost;
+         warning(
+           `Insufficient credits! You need ${requiredCredits} credits but only have ${remainingCredits} remaining.`, 
+           8000, 
+           {
+             clickable: true,
+             linkTo: '/settings/usage'
+           }
+         );
+       } else if (errorStatus === 401) {
+        warning('Please log in to unlock components.');
+      } else if (errorStatus === 403) {
+        warning('Access denied. This feature may not be available for your tier.');
+      } else {
+        info(`Failed to unlock ${component}. Please try again.`);
+      }
     }
   };
   

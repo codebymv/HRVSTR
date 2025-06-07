@@ -28,7 +28,7 @@ const SentimentDashboard: React.FC = () => {
   const { theme } = useTheme();
   const { tierInfo, refreshTierInfo } = useTier();
   const { showTierLimitDialog, closeTierLimitDialog, tierLimitDialog } = useTierLimits();
-  const { info } = useToast();
+  const { info, warning } = useToast();
   const navigate = useNavigate();
   const isLight = theme === 'light';
   const textColor = isLight ? 'text-stone-800' : 'text-white';
@@ -293,7 +293,11 @@ const SentimentDashboard: React.FC = () => {
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to unlock component');
+        // Create an error with the response status for better error handling
+        const error = new Error(data.error || 'Failed to unlock component');
+        (error as any).status = response.status;
+        (error as any).data = data;
+        throw error;
       }
       
       if (data.success) {
@@ -333,7 +337,30 @@ const SentimentDashboard: React.FC = () => {
       }
       
     } catch (error) {
-      info(`Failed to unlock ${component}. Please try again.`);
+      console.error('Sentiment unlock error:', error);
+      
+      // Handle different types of errors with specific messages
+      const errorStatus = (error as any)?.status;
+      const errorData = (error as any)?.data;
+      
+      if (errorStatus === 402) {
+        const remainingCredits = errorData?.remainingCredits ?? 0;
+        const requiredCredits = errorData?.requiredCredits ?? cost;
+        warning(
+          `Insufficient credits! You need ${requiredCredits} credits but only have ${remainingCredits} remaining.`, 
+          8000, 
+          {
+            clickable: true,
+            linkTo: '/settings/usage'
+          }
+        );
+      } else if (errorStatus === 401) {
+        warning('Please log in to unlock components.');
+      } else if (errorStatus === 403) {
+        warning('Access denied. This feature may not be available for your tier.');
+      } else {
+        info(`Failed to unlock ${component}. Please try again.`);
+      }
     }
   };
 

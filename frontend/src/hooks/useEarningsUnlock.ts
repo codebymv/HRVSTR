@@ -23,6 +23,9 @@ export const useEarningsUnlock = () => {
   // Get tier info
   const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
   
+  // Add state to prevent double-clicking and race conditions
+  const [isUnlocking, setIsUnlocking] = useState<Record<string, boolean>>({});
+  
   // Component unlock state - managed by sessions
   const [unlockedComponents, setUnlockedComponents] = useState<{
     earningsAnalysis: boolean;
@@ -85,15 +88,27 @@ export const useEarningsUnlock = () => {
 
   // Handle component unlock
   const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
-    // Check if already unlocked using database-only approach
-    const existingSession = await checkComponentAccess(component, currentTier);
-    if (existingSession) {
-      const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
-      info(`${component} already unlocked (${timeRemaining}h remaining)`);
+    // Prevent double-clicking and race conditions
+    if (isUnlocking[component]) {
+      console.log(`🔒 ${component} unlock already in progress, ignoring request`);
       return;
     }
     
+    setIsUnlocking(prev => ({ ...prev, [component]: true }));
+    
     try {
+      // Check if already unlocked using database-only approach
+      const existingSession = await checkComponentAccess(component, currentTier);
+      if (existingSession) {
+        const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
+        info(`${component} already unlocked (${timeRemaining}h remaining)`);
+        return {
+          success: true,
+          isExistingSession: true,
+          isFreshUnlock: false
+        };
+      }
+      
       const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
       const token = localStorage.getItem('auth_token');
       
@@ -112,7 +127,11 @@ export const useEarningsUnlock = () => {
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to unlock component');
+        // Create an error with the response status for better error handling
+        const error = new Error(data.error || 'Failed to unlock component');
+        (error as any).status = response.status;
+        (error as any).data = data;
+        throw error;
       }
       
       if (data.success) {
@@ -154,12 +173,37 @@ export const useEarningsUnlock = () => {
       }
       
     } catch (error) {
-      info(`Failed to unlock ${component}. Please try again.`);
+      // Handle different types of errors with specific messages
+      const errorStatus = (error as any)?.status;
+      const errorData = (error as any)?.data;
+      
+      if (errorStatus === 402) {
+        const remainingCredits = errorData?.remaining ?? errorData?.remainingCredits ?? 0;
+        const requiredCredits = errorData?.required ?? errorData?.requiredCredits ?? cost;
+        warning(
+          `Insufficient credits! You need ${requiredCredits} credits but only have ${remainingCredits} remaining.`, 
+          8000, 
+          {
+            clickable: true,
+            linkTo: '/settings/usage'
+          }
+        );
+      } else if (errorStatus === 401) {
+        warning('Please log in to unlock components.');
+      } else if (errorStatus === 403) {
+        warning('Access denied. This feature may not be available for your tier.');
+      } else {
+        info(`Failed to unlock ${component}. Please try again.`);
+      }
+      
       return {
         success: false,
         isExistingSession: false,
         isFreshUnlock: false
       };
+    } finally {
+      // Always reset the locking state
+      setIsUnlocking(prev => ({ ...prev, [component]: false }));
     }
   };
 
@@ -172,6 +216,7 @@ export const useEarningsUnlock = () => {
     unlockedComponents,
     activeSessions,
     isCheckingSessions,
+    isUnlocking,
     currentTier,
     
     // Computed values
