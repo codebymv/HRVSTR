@@ -293,8 +293,8 @@ const AddTickerModal: React.FC<AddTickerModalProps> = ({ isOpen, onClose, onAdd,
                     }}
                     disabled={isAdding}
                     className={`px-3 py-1 ${
-                      isAdding ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'
-                    } text-white rounded flex items-center space-x-1`}
+                      isAdding ? 'bg-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700'
+                    } text-white rounded flex items-center space-x-1 transition-all`}
                   >
                     {isAdding ? (
                       <>

@@ -134,7 +134,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
       {showHeader && (
         <div className="text-center mb-12">
           <div className="flex items-center justify-center mb-4">
-            <Crown className="w-6 h-6 text-blue-500 mr-2" />
+            <Crown className="w-6 h-6 text-purple-600 mr-2" />
             <h2 className={`text-3xl md:text-4xl font-bold ${textColor}`}>
               Choose Your Plan
             </h2>

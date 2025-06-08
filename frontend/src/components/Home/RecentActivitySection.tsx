@@ -257,7 +257,7 @@ const RecentActivitySection: React.FC<RecentActivitySectionProps> = ({
     <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} h-96 ${className}`}>
       <div className="flex items-center justify-between mb-4">
         <h2 className={`text-xl font-semibold ${textColor} flex items-center`}>
-          <Activity className="w-5 h-5 mr-2 text-blue-500" />
+          <Activity className="w-5 h-5 mr-2 text-purple-600" />
           Recent Activity
         </h2>
       </div>

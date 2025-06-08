@@ -156,7 +156,7 @@ export const AuthButton = () => {
   return (
     <button 
       onClick={signIn}
-      className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm transition-colors"
+      className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-3 py-1 rounded text-sm transition-all"
     >
       Log In
     </button>

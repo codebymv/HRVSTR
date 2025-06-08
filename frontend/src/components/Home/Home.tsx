@@ -27,7 +27,7 @@ const Home: React.FC = () => {
   const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-900';
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
   const secondaryTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
-  const buttonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
+  const buttonBgColor = 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700';
   
   // Add logo filter for theme switching (same as in Navbar)
   const logoFilter = isLight ? 'invert(1) brightness(0)' : 'none';
@@ -114,7 +114,7 @@ const Home: React.FC = () => {
           </div>
           <h1 className={`text-4xl md:text-6xl font-bold mb-6 ${textColor}`}>
             Strategic Web Scraping,{" "}
-            <span className="bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
                 Simplified.
             </span>
             </h1>
@@ -140,7 +140,7 @@ const Home: React.FC = () => {
               key={index}
               className={`${cardBgColor} p-6 rounded-lg border ${borderColor} transition-transform hover:scale-105`}
             >
-              <div className={`text-blue-500 mb-4`}>
+              <div className={`text-purple-600 mb-4`}>
                 {feature.icon}
               </div>
               <h3 className={`text-xl font-semibold mb-2 ${textColor}`}>
@@ -157,7 +157,7 @@ const Home: React.FC = () => {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12">
             <div className="flex items-center justify-center mb-4">
-              <Eye className="w-6 h-6 text-blue-500 mr-2" />
+              <Eye className="w-6 h-6 text-purple-600 mr-2" />
               <h2 className={`text-3xl md:text-4xl font-bold ${textColor}`}>
                 Seeing is believing.
               </h2>
@@ -178,7 +178,7 @@ const Home: React.FC = () => {
             {/* Call to Action Card */}
             <div className={`${cardBgColor} rounded-lg p-4 border ${borderColor} shadow-sm hover:shadow-md transition-all duration-200 h-64 flex flex-col items-center justify-center text-center`}>
               <div className="mb-4">
-                <div className="w-16 h-16 bg-gradient-to-r from-teal-400 to-blue-500 rounded-full flex items-center justify-center mb-4 mx-auto">
+                <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mb-4 mx-auto">
                   <ArrowRight className="w-8 h-8 text-white" />
                 </div>
                 <h3 className={`text-lg font-semibold mb-2 ${textColor}`}>
@@ -238,7 +238,7 @@ const Home: React.FC = () => {
         <div className="max-w-7xl mx-auto mt-20">
           <div className="text-center mb-12">
             <div className="flex items-center justify-center mb-4">
-              <Map className="w-6 h-6 text-blue-500 mr-2" />
+              <Map className="w-6 h-6 text-purple-600 mr-2" />
               <h2 className={`text-3xl md:text-4xl font-bold ${textColor}`}>
                 Roadmap to 1.0!
               </h2>
@@ -269,7 +269,7 @@ const Home: React.FC = () => {
                   <span className={`text-lg font-bold ${textColor}`}>v1.0 Stable Release</span>
                 </div>
                 <div className={`w-full bg-gray-300 rounded-full h-3 ${isLight ? 'bg-stone-400' : 'bg-gray-700'}`}>
-                  <div className="bg-gradient-to-r from-teal-400 to-blue-500 h-3 rounded-full transition-all duration-500" style={{ width: '89%' }}></div>
+                  <div className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-500" style={{ width: '89%' }}></div>
                 </div>
               </div>
             </div>

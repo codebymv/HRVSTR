@@ -93,7 +93,7 @@ const WelcomeSection: React.FC<WelcomeSectionProps> = ({
       
       <h1 className={`text-2xl font-bold ${welcomeTextColor} pr-20 sm:pr-16`}>
         Welcome back, <br className="block sm:hidden" />
-        <span className="block sm:inline bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent ml-4">
+        <span className="block sm:inline bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent ml-4">
           {userName}!
         </span>
       </h1>

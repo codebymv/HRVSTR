@@ -123,11 +123,11 @@ const UpcomingEventsSection: React.FC<UpcomingEventsSectionProps> = ({
   const getEventIcon = (eventType: string) => {
     switch (eventType) {
       case 'Earnings':
-        return <TrendingUp className="w-4 h-4 text-green-500" />;
+        return <TrendingUp className="w-4 h-4 text-purple-600" />;
       case 'Dividend':
-        return <DollarSign className="w-4 h-4 text-blue-500" />;
+        return <DollarSign className="w-4 h-4 text-purple-600" />;
       default:
-        return <Calendar className="w-4 h-4 text-blue-500" />;
+        return <Calendar className="w-4 h-4 text-purple-600" />;
     }
   };
 

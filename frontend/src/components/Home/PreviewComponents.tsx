@@ -341,14 +341,14 @@ export const WatchlistPreview: React.FC = () => {
     <div className={`${cardBgColor} rounded-lg p-4 border ${borderColor} shadow-sm hover:shadow-md transition-all duration-200 h-64 flex flex-col`}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-2">
-          <Star size={20} className="text-blue-500" />
+          <Star size={20} className="text-purple-600" />
           <h3 className={`text-lg font-semibold ${textColor}`}>Watchlist</h3>
         </div>
         <div className="flex items-center space-x-2">
-          <button className={`text-sm ${buttonBgColor} text-white px-3 py-1 rounded transition-colors`}>
+          <button className={`text-sm bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-3 py-1 rounded transition-all`}>
             Add Ticker
           </button>
-          <button className={`p-1.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white transition-colors`}>
+          <button className={`p-1.5 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white transition-all`}>
             <RefreshCw size={14} className="text-white" />
           </button>
         </div>
@@ -432,7 +432,7 @@ export const ActivityPreview: React.FC = () => {
     <div className={`${cardBgColor} rounded-lg p-4 border ${borderColor} shadow-sm hover:shadow-md transition-all duration-200 h-64 flex flex-col`}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-2">
-          <Activity size={20} className="text-blue-500" />
+          <Activity size={20} className="text-purple-600" />
           <h3 className={`text-lg font-semibold ${textColor}`}>Recent Activity</h3>
         </div>
         <span className={`text-sm ${subTextColor}`}>Last 24h</span>

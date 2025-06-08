@@ -53,8 +53,8 @@ const WatchlistSection: React.FC<WatchlistSectionProps> = ({
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-700';
   const textColor = isLight ? 'text-stone-800' : 'text-white';
   const mutedTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
-  const activeButtonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
-  const buttonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
+  const activeButtonBgColor = 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700';
+  const buttonBgColor = 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700';
   
   // Add container styling to match upcoming events
   const itemContainerBg = isLight ? 'bg-stone-200' : 'bg-gray-700';
@@ -141,7 +141,7 @@ const WatchlistSection: React.FC<WatchlistSectionProps> = ({
     <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor} h-[32rem] sm:h-96 ${className}`}>
       <div className="flex items-center justify-between mb-4">
         <h2 className={`text-xl font-semibold ${textColor} flex items-center`}>
-          <Star className="w-5 h-5 mr-2 text-blue-500" />
+          <Star className="w-5 h-5 mr-2 text-purple-600" />
           Watchlist
         </h2>
         <div className="flex items-center space-x-2">
@@ -165,7 +165,7 @@ const WatchlistSection: React.FC<WatchlistSectionProps> = ({
           <button
             onClick={onRefresh}
             disabled={refreshingData || rateLimitActive}
-            className={`p-2 rounded-full ${rateLimitActive ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-blue-600 hover:bg-blue-700'} text-white transition-colors ${(refreshingData || rateLimitActive) ? 'opacity-50' : ''}`}
+            className={`p-2 rounded-full ${rateLimitActive ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700'} text-white transition-all ${(refreshingData || rateLimitActive) ? 'opacity-50' : ''}`}
             title={refreshingData ? 'Refreshing...' : rateLimitActive ? 'Rate Limited...' : 'Refresh Data'}
           >
             {refreshingData ? (
@@ -326,7 +326,7 @@ const WatchlistSection: React.FC<WatchlistSectionProps> = ({
                 ) : (
                   <button
                     onClick={onAddTicker}
-                    className={`text-xs px-3 py-1 ${buttonBgColor} text-white rounded-full transition-colors`}
+                    className={`text-xs px-3 py-1 ${buttonBgColor} text-white rounded-full transition-all`}
                   >
                     Search tickers to add more
                   </button>
@@ -344,7 +344,7 @@ const WatchlistSection: React.FC<WatchlistSectionProps> = ({
           </p>
           <button 
             onClick={onAddTicker}
-            className={`px-4 py-2 ${buttonBgColor} text-white rounded-md transition-colors`}
+            className={`px-4 py-2 ${buttonBgColor} text-white rounded-md transition-all`}
           >
             Add Your First Stock
           </button>
