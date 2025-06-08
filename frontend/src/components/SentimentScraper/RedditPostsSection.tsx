@@ -1,9 +1,10 @@
-import React, { useRef, useCallback, useEffect } from 'react';
+import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, Info, Loader2 } from 'lucide-react';
 import RedditPost from './RedditPost';
 import ProgressBar from '../ProgressBar';
 import { RedditPost as RedditPostType } from '../../types';
 import { useTheme } from '../../contexts/ThemeContext';
+import { getCreditBalance, getCreditCost, type CreditBalance } from '../../services/creditsApi';
 
 interface RedditPostsSectionProps {
   posts: RedditPostType[];
@@ -31,6 +32,50 @@ const RedditPostsSection: React.FC<RedditPostsSectionProps> = ({
   isCheckingAccess = false,
   isFreshUnlock = false
 }) => {
+  // Credit state for all posts
+  const [creditBalance, setCreditBalance] = useState<CreditBalance | null>(null);
+  const [aiCreditCost, setAiCreditCost] = useState<number>(1);
+  const [canAffordAI, setCanAffordAI] = useState<boolean>(false);
+  const [loadingCredits, setLoadingCredits] = useState<boolean>(true);
+
+  // Fetch credit information once for all posts
+  useEffect(() => {
+    const fetchCreditInfo = async () => {
+      try {
+        setLoadingCredits(true);
+        const [balanceResult, costResult] = await Promise.all([
+          getCreditBalance(),
+          getCreditCost('ai_reddit_analysis')
+        ]);
+        
+        if (balanceResult.success && balanceResult.balance) {
+          setCreditBalance(balanceResult.balance);
+        }
+        
+        if (costResult.success && costResult.cost !== undefined) {
+          setAiCreditCost(costResult.cost);
+        }
+        
+        // Check if user can afford AI analysis
+        if (balanceResult.success && balanceResult.balance && costResult.success && costResult.cost !== undefined) {
+          setCanAffordAI(balanceResult.balance.remaining >= costResult.cost);
+        }
+      } catch (error) {
+        console.error('Error fetching credit info:', error);
+      } finally {
+        setLoadingCredits(false);
+      }
+    };
+    
+    fetchCreditInfo();
+  }, []);
+
+  // Handle credit updates from individual posts
+  const handleCreditUpdate = useCallback((newBalance: CreditBalance) => {
+    setCreditBalance(newBalance);
+    setCanAffordAI(newBalance.remaining >= aiCreditCost);
+  }, [aiCreditCost]);
+
   // Theme-specific styling using ThemeContext
   const { theme } = useTheme();
   const isLight = theme === 'light';
@@ -97,7 +142,7 @@ const RedditPostsSection: React.FC<RedditPostsSectionProps> = ({
       
       {/* Show checking access state first */}
       {isCheckingAccess ? (
-        <div className="flex flex-col items-center justify-center p-12 text-center">
+        <div className="flex flex-col items-center justify-center p-10 text-center min-h-[300px]">
           <Loader2 className="text-blue-500 animate-spin mb-4" size={32} />
           <h3 className={`text-lg font-semibold ${textColor} mb-2`}>
             Checking Access...
@@ -113,7 +158,7 @@ const RedditPostsSection: React.FC<RedditPostsSectionProps> = ({
           </div>
         </div>
       ) : isLoading || (posts.length === 0 && !error) ? (
-        <div className="p-4">
+        <div className="p-4 min-h-[300px]">
           {isFreshUnlock ? (
             // Use HarvestLoadingCard for fresh unlocks (import when needed)
             <div className="flex flex-col items-center justify-center p-8 text-center">
@@ -153,7 +198,7 @@ const RedditPostsSection: React.FC<RedditPostsSectionProps> = ({
           )}
         </div>
       ) : error ? (
-        <div className="p-4">
+        <div className="p-4 min-h-[300px]">
           <div className="flex flex-col items-center justify-center p-10 text-center">
             {error.toLowerCase().includes('rate limit') ? (
               <>
@@ -176,27 +221,42 @@ const RedditPostsSection: React.FC<RedditPostsSectionProps> = ({
           </div>
         </div>
       ) : posts.length > 0 ? (
-        <div className="p-4 h-full overflow-auto">
-          <div ref={containerRef} className="grid gap-4 max-h-[600px] overflow-y-auto pr-2">
+        <div className="p-4 h-full overflow-hidden">
+          <div 
+            ref={containerRef} 
+            className="grid gap-4 max-h-[700px] overflow-y-auto pr-2"
+          >
             {posts.map(post => (
-              <RedditPost key={post.id} post={post} />
+              <RedditPost 
+                key={post.id} 
+                post={post}
+                creditBalance={creditBalance}
+                aiCreditCost={aiCreditCost}
+                canAffordAI={canAffordAI}
+                loadingCredits={loadingCredits}
+                onCreditUpdate={handleCreditUpdate}
+              />
             ))}
+            
+            {/* Infinite scroll loading indicator */}
             {onLoadMore && (
               <div 
                 ref={loadingRef}
-                className="w-full h-[120px] flex justify-center items-center"
+                className="w-full h-[80px] flex justify-center items-center"
                 style={{ contain: 'layout size' }}
               >
                 {isLoading && hasMore ? (
                   <div className="flex flex-col items-center">
-                    <Loader2 className="mb-2 text-blue-500 animate-spin" size={24} />
+                    <Loader2 className="mb-2 text-blue-500 animate-spin" size={20} />
                     <p className={`text-sm ${mutedTextColor}`}>Loading more posts...</p>
                   </div>
                 ) : hasMore ? (
-                  <div className="h-[80px] opacity-0" /> // Invisible spacer when not loading
-                ) : (
-                  <div className={`text-sm ${mutedTextColor} fade-in`}>No more posts to show</div>
-                )}
+                  <div className="h-[40px] opacity-0" /> // Smaller invisible spacer
+                ) : posts.length > 10 ? (
+                  <div className={`text-sm ${mutedTextColor} text-center py-2`}>
+                    All {posts.length} posts loaded
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

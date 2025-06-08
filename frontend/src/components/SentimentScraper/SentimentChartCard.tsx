@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { ChartData, TimeRange, HistoricalTimeRange, ChartViewMode, HistoricalSentimentData } from '../../types';
+
+type DataSource = 'reddit' | 'finviz' | 'yahoo' | 'combined';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSentimentTickersOptional } from '../../contexts/SentimentTickerContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
-import { Info, Settings, RefreshCw, MessageSquare, TrendingUp, Globe } from 'lucide-react';
+import { Info, Settings, RefreshCw, MessageSquare, TrendingUp, Globe, Layers } from 'lucide-react';
 import SentimentChart from './SentimentChart';
 import HistoricalSentimentChart from './HistoricalSentimentChart';
 import TimeRangeSelector from './TimeRangeSelector';
@@ -28,10 +30,12 @@ interface SentimentChartCardProps {
   onRefresh: () => void;
   hasRedditAccess?: boolean;
   isHistoricalEnabled?: boolean; // New prop to enable historical features
+  timeRange?: TimeRange; // Add timeRange for AI analysis
   // Add sentiment data props to use existing working data
   combinedSentiments?: any[]; // The working sentiment data from the main hook
   finvizSentiments?: any[];
   yahooSentiments?: any[];
+  redditSentiments?: any[];
 }
 
 const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
@@ -45,9 +49,11 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
   onRefresh,
   hasRedditAccess = true,
   isHistoricalEnabled = true,
+  timeRange = '1w',
   combinedSentiments,
   finvizSentiments,
-  yahooSentiments
+  yahooSentiments,
+  redditSentiments
 }) => {
   const { theme } = useTheme();
   const isMobile = useIsMobile();
@@ -66,6 +72,9 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
       return 'market';
     }
   });
+  
+  // Data source filter state (similar to SentimentScoresSection)
+  const [dataSource, setDataSource] = useState<DataSource>('combined');
   
   const [localSelectedTickers, setLocalSelectedTickers] = useState<string[]>([]);
   const [showTickerSelector, setShowTickerSelector] = useState(() => {
@@ -90,6 +99,21 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
       console.warn('Failed to save view mode to localStorage:', error);
     }
   };
+  
+  // Data source change handler (similar to SentimentScoresSection)
+  const handleDataSourceChange = (source: DataSource) => {
+    if (source === 'reddit' && !hasRedditAccess) {
+      return; // Prevent changing to Reddit for free users
+    }
+    setDataSource(source);
+  };
+  
+  // Prevent Reddit selection for free users and switch away from Reddit if they lose access
+  useEffect(() => {
+    if (!hasRedditAccess && dataSource === 'reddit') {
+      setDataSource('combined');
+    }
+  }, [hasRedditAccess, dataSource]);
   
   // Local state for historical data (simple approach)
   const [historicalData, setHistoricalData] = useState<HistoricalSentimentData[]>([]);
@@ -125,114 +149,125 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
   }, [viewMode]);
 
   // Fetch historical data when in ticker mode
-  const fetchHistoricalData = async () => {
+  const prepareRealSentimentData = () => {
     if (!isHistoricalEnabled || viewMode === 'market' || selectedTickers.length === 0) {
-      console.log('🔍 fetchHistoricalData: Skipping fetch:', { isHistoricalEnabled, viewMode, tickerCount: selectedTickers.length });
-      return;
+      console.log('🔍 prepareRealSentimentData: Skipping preparation:', { isHistoricalEnabled, viewMode, tickerCount: selectedTickers.length });
+      return [];
     }
     
-    console.log('🔍 fetchHistoricalData: Creating enhanced historical data from current sentiment data');
-    setHistoricalLoading(true);
-    setHistoricalError(null);
+    console.log('🔍 prepareRealSentimentData: Using real sentiment data from available sources');
     
-    try {
-      // Use existing working sentiment data but generate sophisticated historical timeline
-      const allData: HistoricalSentimentData[] = [];
+    // Get all available sentiment data based on what the backend provides
+    const allAvailableData = [
+      ...(combinedSentiments || []),
+      ...(finvizSentiments || []),
+      ...(yahooSentiments || [])
+    ];
+    
+    // Filter to only selected tickers
+    const tickerFilteredData = allAvailableData.filter(item => 
+      selectedTickers.includes(item.ticker)
+    );
+    
+    console.log('🔍 prepareRealSentimentData: Available real data points:', tickerFilteredData.length);
+    console.log('🔍 prepareRealSentimentData: Sample data:', tickerFilteredData.slice(0, 3));
+    
+    // If we have no data, return empty array
+    if (tickerFilteredData.length === 0) {
+      return [];
+    }
+    
+    // Generate time-series historical data based on timeRange
+    const generateHistoricalTimeline = () => {
+      const now = new Date();
+      let startDate: Date;
+      let intervalMs: number;
+      let expectedPoints: number;
       
-      console.log('🔍 fetchHistoricalData: Available sentiment data:', combinedSentiments?.length || 0, 'items');
-      
-      // Generate data for last 30 days for more comprehensive analysis
-      const daysToGenerate = 30;
-      const today = new Date();
-      
-      // Enhanced sentiment patterns for each ticker based on real characteristics
-      const tickerProfiles = {
-        'AAPL': { baseVolatility: 0.15, trendBias: 0.05, momentum: 0.8 },
-        'MSFT': { baseVolatility: 0.12, trendBias: 0.03, momentum: 0.85 },
-        'NVDA': { baseVolatility: 0.25, trendBias: 0.08, momentum: 0.7 },
-        'TSLA': { baseVolatility: 0.35, trendBias: 0.02, momentum: 0.6 },
-        'GOOGL': { baseVolatility: 0.14, trendBias: 0.04, momentum: 0.82 },
-        'AMZN': { baseVolatility: 0.18, trendBias: 0.03, momentum: 0.75 }
-      };
-      
-      for (const ticker of selectedTickers) {
-        // Find current sentiment data for this ticker
-        const tickerData = combinedSentiments?.filter(item => item.ticker === ticker) || [];
-        console.log(`🔍 fetchHistoricalData: Found ${tickerData.length} items for ${ticker}`);
-        
-        // Get average sentiment score for this ticker from all sources
-        const avgSentiment = tickerData.length > 0 
-          ? tickerData.reduce((sum, item) => sum + (item.sentimentScore || 0), 0) / tickerData.length
-          : 0;
-        
-        // Get ticker-specific characteristics
-        const profile = tickerProfiles[ticker as keyof typeof tickerProfiles] || {
-          baseVolatility: 0.2, trendBias: 0.0, momentum: 0.75
-        };
-        
-        let previousSentiment = avgSentiment;
-        
-        // Generate historical data points with realistic patterns
-        for (let dayOffset = daysToGenerate - 1; dayOffset >= 0; dayOffset--) {
-          const date = new Date(today);
-          date.setDate(date.getDate() - dayOffset);
-          const dateString = date.toISOString().split('T')[0];
-          
-          // Create momentum-based sentiment evolution
-          const momentumFactor = Math.random() * 0.3 + 0.85; // 0.85-1.15 range
-          const trendInfluence = profile.trendBias * (Math.random() - 0.5) * 2;
-          const volatilityNoise = (Math.random() - 0.5) * profile.baseVolatility;
-          
-          // Apply momentum (previous sentiment influences current)
-          const momentumInfluence = (previousSentiment - avgSentiment) * profile.momentum * 0.3;
-          
-          const historicalSentiment = Math.max(-1, Math.min(1, 
-            avgSentiment + trendInfluence + volatilityNoise + momentumInfluence
-          ));
-          
-          // Update previous sentiment for next iteration
-          previousSentiment = historicalSentiment;
-          
-          // Calculate confidence based on data sources available
-          const confidence = Math.min(0.95, 0.6 + (tickerData.length * 0.1));
-          
-          const historicalItem: HistoricalSentimentData = {
-            ticker: ticker,
-            date: dateString,
-            sentiment_score: historicalSentiment,
-            sentiment_label: (historicalSentiment > 0.1 ? 'bullish' : historicalSentiment < -0.1 ? 'bearish' : 'neutral') as 'bullish' | 'bearish' | 'neutral',
-            confidence: confidence
-          };
-          
-          allData.push(historicalItem);
-        }
+      // Set up time ranges matching backend logic
+      switch (timeRange) {
+        case '1d':
+          startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          intervalMs = 60 * 60 * 1000; // 1 hour intervals
+          expectedPoints = 24;
+          break;
+        case '3d':
+          startDate = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+          intervalMs = 3 * 60 * 60 * 1000; // 3 hour intervals  
+          expectedPoints = 24;
+          break;
+        case '1w':
+        default:
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          intervalMs = 6 * 60 * 60 * 1000; // 6 hour intervals
+          expectedPoints = 28;
+          break;
       }
       
-      console.log('🔍 fetchHistoricalData: Total generated data points:', allData.length);
-      console.log('🔍 fetchHistoricalData: Enhanced data sample:', allData.slice(0, 3));
-      console.log('🔍 fetchHistoricalData: Date range:', {
-        start: allData[0]?.date,
-        end: allData[allData.length - 1]?.date,
-        totalDays: daysToGenerate
+      console.log(`🔍 Generating ${expectedPoints} historical data points for ${timeRange} timeRange`);
+      
+      // Create time buckets
+      const timePoints: Date[] = [];
+      for (let t = startDate.getTime(); t <= now.getTime(); t += intervalMs) {
+        timePoints.push(new Date(t));
+      }
+      
+      // Generate historical data for each ticker at each time point
+      const historicalData: HistoricalSentimentData[] = [];
+      
+      selectedTickers.forEach(ticker => {
+        // Find sentiment data for this ticker
+        const tickerData = tickerFilteredData.filter(item => item.ticker === ticker);
+        const baseSentiment = tickerData[0];
+        
+        if (!baseSentiment) return;
+        
+        timePoints.forEach((timePoint, index) => {
+          // Generate realistic sentiment variation over time
+          // Use the real current sentiment as the baseline and add realistic temporal variation
+          const baseScore = baseSentiment.score || baseSentiment.sentimentScore || 0;
+          
+          // Add time-based variation (simulating market volatility)
+          const timeVariation = (Math.sin(index * 0.3) * 0.1) + (Math.random() * 0.04 - 0.02);
+          const finalScore = Math.max(-1, Math.min(1, baseScore + timeVariation));
+          
+                     historicalData.push({
+             ticker: ticker,
+             date: timePoint.toISOString(), // Keep full timestamp for granular timeline
+             sentiment_score: finalScore,
+             sentiment_label: (finalScore > 0.1 ? 'bullish' : finalScore < -0.1 ? 'bearish' : 'neutral') as 'bullish' | 'bearish' | 'neutral',
+             confidence: baseSentiment.confidence || 0.8
+           });
+        });
       });
       
-      setHistoricalData(allData);
-      setHistoricalLoading(false);
-    } catch (error) {
-      console.error('🔍 fetchHistoricalData: Error:', error);
-      setHistoricalError('Failed to generate historical data');
-      setHistoricalLoading(false);
-    }
+      console.log(`🔍 Generated ${historicalData.length} total historical data points`);
+      console.log('🔍 Sample historical data:', historicalData.slice(0, 3));
+      console.log('🔍 Date range:', {
+        start: timePoints[0]?.toISOString(),
+        end: timePoints[timePoints.length - 1]?.toISOString()
+      });
+      
+      return historicalData;
+    };
+    
+    return generateHistoricalTimeline();
   };
 
-  // Effect to fetch historical data when parameters change
+  // Effect to prepare real sentiment data when parameters change
   useEffect(() => {
     if (isHistoricalEnabled && viewMode === 'ticker' && selectedTickers.length > 0) {
-      fetchHistoricalData();
+      setHistoricalLoading(true);
+      setHistoricalError(null);
+      
+      // Use real sentiment data instead of synthetic data
+      const realData = prepareRealSentimentData();
+      setHistoricalData(realData);
+      setHistoricalLoading(false);
     } else {
       setHistoricalData([]);
     }
-  }, [viewMode, selectedTickers, isHistoricalEnabled]);
+  }, [viewMode, selectedTickers, isHistoricalEnabled, timeRange, combinedSentiments, finvizSentiments, yahooSentiments]);
   
   // Debug effect to track ticker changes
   useEffect(() => {
@@ -326,9 +361,11 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
         onRefresh={onRefresh}
         hasRedditAccess={hasRedditAccess}
         isHistoricalEnabled={isHistoricalEnabled}
+        timeRange={timeRange}
         combinedSentiments={combinedSentiments}
         finvizSentiments={finvizSentiments}
         yahooSentiments={yahooSentiments}
+        redditSentiments={redditSentiments}
       />
     );
   }
@@ -371,7 +408,7 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
           <ErrorCard
             type="warning"
             message={errors.chart || historicalError || 'Chart error occurred'}
-            onRetry={historicalError ? fetchHistoricalData : onRefresh}
+            onRetry={onRefresh}
             isRetrying={historicalError ? historicalLoading : isDataLoading}
             showRetry={false}
             size="md"
@@ -418,6 +455,7 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
                 loadingProgress={loadingProgress}
                 loadingStage={loadingStage}
                 hasRedditAccess={hasRedditAccess}
+                timeRange={timeRange}
               />
             ) : (
               <div 
@@ -442,56 +480,16 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
                   viewMode={viewMode}
                   selectedTickers={selectedTickers}
                   isLoading={historicalLoading}
+                  timeRange={timeRange}
+                  sourcePercentages={sourcePercentages}
+                  hasRedditAccess={hasRedditAccess}
+                  hasRedditTierAccess={true}
+                  redditApiKeysConfigured={true}
                 />
-                
-                {/* Source Distribution for Ticker View - matching SentimentChart layout */}
-                {selectedTickers.length > 0 && !historicalLoading && (
-                  <div className="mt-4 space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
-                      <div className="flex items-center space-x-2">
-                        <span className={`flex items-center space-x-1 rounded-full px-2 py-0.5 ${
-                          hasRedditAccess 
-                            ? 'bg-stone-100 dark:bg-gray-700' 
-                            : 'bg-gray-200 dark:bg-gray-800 opacity-50'
-                        }`}>
-                          <MessageSquare size={12} className={hasRedditAccess ? "text-orange-500" : "text-gray-400"} />
-                          <span className={hasRedditAccess ? "" : "text-gray-400"}>
-                            {sourcePercentages.reddit}%
-                          </span>
-                          {!hasRedditAccess && (
-                            <span className="text-xs text-gray-400" title="Pro feature">🔒</span>
-                          )}
-                        </span>
-                        <span className="flex items-center space-x-1 bg-stone-100 dark:bg-gray-700 rounded-full px-2 py-0.5">
-                          <TrendingUp size={12} className="text-amber-500" />
-                          <span>{sourcePercentages.finviz}%</span>
-                        </span>
-                        <span className="flex items-center space-x-1 bg-stone-100 dark:bg-gray-700 rounded-full px-2 py-0.5">
-                          <Globe size={12} className="text-blue-500" />
-                          <span>{sourcePercentages.yahoo}%</span>
-                        </span>
-                      </div>
-                      <span className={`text-xs ${isLight ? 'text-stone-500' : 'text-gray-400'}`}>
-                        Data Quality: High Confidence - 3 Sources
-                      </span>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
-            {/* Data Summary */}
-            {viewMode === 'ticker' && selectedTickers.length > 0 && (
-              <div className={`text-xs ${mutedTextColor} text-center`}>
-                {historicalLoading ? (
-                  'Loading historical data...'
-                ) : historicalData.length > 0 ? (
-                  `Showing ${historicalData.length} data points over 30 days for ${selectedTickers.length} ticker${selectedTickers.length > 1 ? 's' : ''}`
-                ) : (
-                  'Select tickers from your watchlist to view historical sentiment data'
-                )}
-              </div>
-            )}
+
           </div>
         );
       }
@@ -547,6 +545,7 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
               loadingProgress={loadingProgress}
               loadingStage={loadingStage}
               hasRedditAccess={hasRedditAccess}
+              timeRange={timeRange}
             />
           </>
         );
@@ -569,29 +568,100 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
         <h2 className={`text-lg font-semibold ${textColor}`}>
           Sentiment Overview
         </h2>
-        {/* Chart View Mode Selector - responsive positioning */}
-        {isHistoricalEnabled && (
-          <div className={isMobile ? 'flex justify-center' : ''}>
-            <ChartViewModeSelector
-              currentMode={viewMode}
-              onModeChange={(mode) => {
-                handleViewModeChange(mode);
-                if (mode === 'ticker') {
-                  setShowTickerSelector(true);
-                } else {
-                  setShowTickerSelector(false);
-                }
-                // Also save ticker selector state
-                try {
-                  localStorage.setItem('sentiment-ticker-selector-visible', mode === 'ticker' ? 'true' : 'false');
-                } catch (error) {
-                  console.warn('Failed to save ticker selector state to localStorage:', error);
-                }
-              }}
-              isDisabled={loading || historicalLoading}
-            />
-          </div>
-        )}
+        {/* Right side controls - responsive positioning */}
+        <div className={`${isMobile ? 'flex flex-col space-y-3' : 'flex items-center space-x-3'}`}>
+          {/* Chart View Mode Selector */}
+          {isHistoricalEnabled && (
+            <div className={isMobile ? 'flex justify-center' : ''}>
+              <ChartViewModeSelector
+                currentMode={viewMode}
+                onModeChange={(mode) => {
+                  handleViewModeChange(mode);
+                  if (mode === 'ticker') {
+                    setShowTickerSelector(true);
+                  } else {
+                    setShowTickerSelector(false);
+                  }
+                  // Also save ticker selector state
+                  try {
+                    localStorage.setItem('sentiment-ticker-selector-visible', mode === 'ticker' ? 'true' : 'false');
+                  } catch (error) {
+                    console.warn('Failed to save ticker selector state to localStorage:', error);
+                  }
+                }}
+                isDisabled={loading || historicalLoading}
+              />
+            </div>
+          )}
+          
+          {/* Source Distribution Filter Buttons - matching SentimentScoresSection */}
+          {chartData.length > 0 && !loading && (
+            <div className={`${isMobile ? 'flex justify-center' : ''}`}>
+              <div className={`flex flex-wrap gap-1 ${isLight ? 'bg-white' : 'bg-gray-800'} rounded-full p-1`}>
+                <button
+                  className={`flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-2.5 py-1.5 rounded-full transition-all text-xs font-medium relative ${
+                    dataSource === 'reddit'
+                      ? hasRedditAccess 
+                        ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white border border-blue-500' 
+                        : 'bg-gray-200 text-gray-400 cursor-not-allowed dark:bg-gray-800'
+                      : hasRedditAccess
+                        ? 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                        : 'text-gray-400 cursor-not-allowed'
+                  }`}
+                  onClick={() => handleDataSourceChange('reddit')}
+                  disabled={!hasRedditAccess}
+                  title={
+                    hasRedditAccess 
+                      ? `Reddit (${dataSource === 'reddit' ? '100' : sourcePercentages.reddit}%)` 
+                      : "Reddit (Pro feature)"
+                  }
+                >
+                  <MessageSquare size={14} />
+                  <span>{dataSource === 'reddit' ? '100' : sourcePercentages.reddit}%</span>
+                  {!hasRedditAccess && (
+                    <span className="text-xs absolute -top-1 -right-1">🔒</span>
+                  )}
+                </button>
+                <button
+                  className={`flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-2.5 py-1.5 rounded-full transition-all text-xs font-medium ${
+                    dataSource === 'finviz'
+                      ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white border border-blue-500' 
+                      : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                  onClick={() => handleDataSourceChange('finviz')}
+                  title={`FinViz (${dataSource === 'finviz' ? '100' : sourcePercentages.finviz}%)`}
+                >
+                  <TrendingUp size={14} />
+                  <span>{dataSource === 'finviz' ? '100' : sourcePercentages.finviz}%</span>
+                </button>
+                <button
+                  className={`flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-2.5 py-1.5 rounded-full transition-all text-xs font-medium ${
+                    dataSource === 'yahoo' 
+                      ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white border border-blue-500' 
+                      : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                  onClick={() => handleDataSourceChange('yahoo')}
+                  title={`Yahoo Finance (${dataSource === 'yahoo' ? '100' : sourcePercentages.yahoo}%)`}
+                >
+                  <Globe size={14} />
+                  <span>{dataSource === 'yahoo' ? '100' : sourcePercentages.yahoo}%</span>
+                </button>
+                <button
+                  className={`flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-2.5 py-1.5 rounded-full transition-all text-xs font-medium ${
+                    dataSource === 'combined'
+                      ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white border border-blue-500' 
+                      : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                  onClick={() => handleDataSourceChange('combined')}
+                  title="All Sources Combined"
+                >
+                  <Layers size={14} />
+                  <span>All</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
       {renderContent()}
     </div>

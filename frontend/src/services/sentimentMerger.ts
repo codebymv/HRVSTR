@@ -87,6 +87,46 @@ export function aggregateByTicker(data: SentimentData[]): SentimentData[] {
       combinedConfidence = Math.round(40 + postVolume * 5);
     }
     
+    // Create combined AI explanation from individual sources
+    const aiExplanations = items
+      .map(item => item.aiExplanation)
+      .filter((explanation): explanation is string => 
+        typeof explanation === 'string' && explanation.trim().length > 0
+      );
+    
+    let combinedAiExplanation: string | undefined;
+    if (aiExplanations.length > 0) {
+      // Get the sources that have AI explanations
+      const sourcesWithAI = items
+        .filter(item => item.aiExplanation && item.aiExplanation.trim().length > 0)
+        .map(item => item.source);
+      
+      const sourceNames = sourcesWithAI.map(source => {
+        switch(source) {
+          case 'reddit': return 'Reddit';
+          case 'finviz': return 'FinViz';
+          case 'yahoo': return 'Yahoo Finance';
+          default: return source;
+        }
+      });
+      
+      if (aiExplanations.length === 1) {
+        // Single source - modify to mention it's from that specific source
+        combinedAiExplanation = aiExplanations[0];
+      } else {
+        // Multiple sources - create combined explanation
+        const longestExplanation = aiExplanations.reduce((longest, current) => 
+          current.length > longest.length ? current : longest
+        );
+        
+        const sourceList = sourceNames.length > 1 
+          ? sourceNames.slice(0, -1).join(', ') + ' and ' + sourceNames[sourceNames.length - 1]
+          : sourceNames[0];
+          
+        combinedAiExplanation = `Based on analysis across ${sourceList}: ${longestExplanation}`;
+      }
+    }
+    
     // Return the aggregated data
     return {
       ticker,
@@ -101,6 +141,7 @@ export function aggregateByTicker(data: SentimentData[]): SentimentData[] {
       price,
       changePercent,
       analystRating,
+      aiExplanation: combinedAiExplanation, // Preserve AI explanation
     };
   });
 }

@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
-import { ArrowUpRight, ArrowDownRight, Minus, TrendingUp, TrendingDown, Info, Shield, ChevronDown, ChevronUp } from 'lucide-react';
+import { useTier } from '../../contexts/TierContext';
+import { ArrowUpRight, ArrowDownRight, Minus, TrendingUp, TrendingDown, Info, Shield, ChevronDown, ChevronUp, Brain, Loader2, Key, Lock, Sparkles, CreditCard } from 'lucide-react';
 import { SentimentData } from '../../types';
 import { getSentimentTextColor, getConfidenceColor, calculateSentimentQuality, getQualityGradeColor, calculateUnifiedReliability } from './sentimentUtils';
+import { analyzeTickerSentiment } from '../../services/tickerAnalysisService';
+import { getCreditBalance, getCreditCost, type CreditBalance } from '../../services/creditsApi';
 
 interface SentimentCardProps {
   data: SentimentData;
@@ -179,15 +182,121 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
     momentum = 0,
   } = data;
   
+  // AI analysis state
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [onDemandAnalysis, setOnDemandAnalysis] = useState<string | null>(null);
+  const [showOnDemandAnalysis, setShowOnDemandAnalysis] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  
+  // Credit state
+  const [creditBalance, setCreditBalance] = useState<CreditBalance | null>(null);
+  const [aiCreditCost, setAiCreditCost] = useState<number>(1);
+  const [canAffordAI, setCanAffordAI] = useState<boolean>(false);
+  const [loadingCredits, setLoadingCredits] = useState<boolean>(true);
+  
   // Safely handle score calculation
   const safeScore = isNaN(score) ? 0 : Number(score);
   const safeStrength = strength !== undefined && !isNaN(strength) 
     ? Math.round(Math.abs(strength)) 
     : Math.round(Math.abs(safeScore * 100));
   
-  // Get theme context
+  // Get contexts
   const { theme } = useTheme();
+  const { tierInfo, loading: tierLoading } = useTier();
   const isLight = theme === 'light';
+  
+  // Fetch credit information on component mount
+  useEffect(() => {
+    const fetchCreditInfo = async () => {
+      try {
+        setLoadingCredits(true);
+        const [balanceResult, costResult] = await Promise.all([
+          getCreditBalance(),
+          getCreditCost('ai_ticker_analysis')
+        ]);
+        
+        if (balanceResult.success && balanceResult.balance) {
+          setCreditBalance(balanceResult.balance);
+        }
+        
+        if (costResult.success && costResult.cost !== undefined) {
+          setAiCreditCost(costResult.cost);
+        }
+        
+        // Check if user can afford AI analysis
+        if (balanceResult.success && balanceResult.balance && costResult.success && costResult.cost !== undefined) {
+          setCanAffordAI(balanceResult.balance.remaining >= costResult.cost);
+        }
+      } catch (error) {
+        console.error('Error fetching credit info:', error);
+      } finally {
+        setLoadingCredits(false);
+      }
+    };
+    
+    fetchCreditInfo();
+  }, []);
+  
+  // User tier info - handle loading state properly
+  const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
+  // Determine AI access based on credits instead of tier
+  const hasAIAccess = !loadingCredits && canAffordAI;
+  
+  // Debug logging for tier state
+  if (data?.ticker === 'AAPL') { // Only log for one card to avoid spam
+    console.log('[SENTIMENT CARD TIER]', {
+      ticker: data.ticker,
+      tierLoading,
+      tierInfo: tierInfo ? { tier: tierInfo.tier } : null,
+      currentTier,
+      hasAIAccess
+    });
+  }
+
+  // AI analysis handler
+  const handleAnalyzeTicker = async () => {
+    console.log('🔍 [SENTIMENT CARD] AI button clicked for ticker:', ticker);
+    
+    if (isAnalyzing || onDemandAnalysis) {
+      console.log('🔍 [SENTIMENT CARD] Skipping analysis - already analyzing or done:', { isAnalyzing, onDemandAnalysis });
+      return; // Don't re-analyze if already done
+    }
+    
+    console.log('🔍 [SENTIMENT CARD] Starting analysis for:', ticker);
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+    
+    try {
+      const result = await analyzeTickerSentiment(data);
+      
+      if (result.success && result.data) {
+        setOnDemandAnalysis(result.data.analysis);
+        setShowOnDemandAnalysis(true);
+        
+        // Update credit balance after successful analysis
+        if (result.creditInfo) {
+          setCreditBalance(prev => prev ? {
+            ...prev,
+            remaining: result.creditInfo!.remaining,
+            used: prev.used + result.creditInfo!.used
+          } : null);
+          setCanAffordAI(result.creditInfo!.remaining >= aiCreditCost);
+        }
+      } else {
+        setAnalysisError(result.message || 'Analysis failed');
+        if (result.error === 'INSUFFICIENT_CREDITS') {
+          setAnalysisError(`Insufficient credits. Need ${aiCreditCost} credits but only have ${creditBalance?.remaining || 0}.`);
+        } else if (result.upgradeRequired) {
+          setAnalysisError('AI analysis feature is not available in your tier');
+        }
+      }
+    } catch (err) {
+      setAnalysisError('Failed to analyze ticker');
+      console.error('Ticker analysis error:', err);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
   
   // Theme-specific styling
   const cardBgColor = isLight ? 'bg-white' : 'bg-gray-800';
@@ -195,6 +304,10 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
   const headingTextColor = isLight ? 'text-gray-900' : 'text-white';
   const subTextColor = isLight ? 'text-gray-600' : 'text-gray-400';
   const badgeBgColor = isLight ? 'bg-gray-100' : 'bg-gray-700';
+  
+  // AI button styling - consistent theme like other unlock buttons
+  const aiButtonColor = 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white';
+  const aiButtonBorderColor = 'border-blue-500';
   
   const sentimentDescription = getSentimentDescription(safeScore);
   const sentimentColor = getSentimentColor(safeScore);
@@ -210,6 +323,10 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
         <div className="flex items-center space-x-3">
           <h3 className={`text-2xl font-bold ${headingTextColor}`}>{ticker}</h3>
           {getSentimentIcon(safeScore)}
+          {/* Sentiment description badge - on same row for desktop */}
+          <div className={`hidden md:inline-flex items-center px-3 py-2 rounded-full text-sm font-semibold ${badgeBgColor}`}>
+            <span className={sentimentColor}>{sentimentDescription}</span>
+          </div>
         </div>
         <div className="text-right">
           <div className={`text-sm font-medium ${subTextColor} mb-1`}>Market Sentiment</div>
@@ -219,8 +336,8 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
         </div>
       </div>
 
-      {/* Sentiment description - prominent display */}
-      <div className="mb-4">
+      {/* Sentiment description - mobile only (below ticker) */}
+      <div className="mb-4 md:hidden">
         <div className={`inline-flex items-center px-3 py-2 rounded-full text-sm font-semibold ${badgeBgColor}`}>
           <span className={sentimentColor}>{sentimentDescription}</span>
         </div>
@@ -297,6 +414,92 @@ const SentimentCard: React.FC<SentimentCardProps> = ({ data }) => {
           )}
         </div>
       )}
+
+      {/* On-Demand AI Analysis Section */}
+      <div className="mt-3 pt-3 border-t border-gray-300/50 dark:border-gray-600/50">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center space-x-2">
+            <Sparkles size={16} className="text-blue-500" />
+            <span className={`text-sm font-medium ${headingTextColor}`}>
+              On-Demand Analysis
+            </span>
+          </div>
+          
+          <button
+            onClick={handleAnalyzeTicker}
+            disabled={isAnalyzing || !!onDemandAnalysis || loadingCredits}
+            className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${aiButtonColor} ${aiButtonBorderColor} border disabled:opacity-50 disabled:cursor-not-allowed relative z-10 cursor-pointer`}
+          >
+            {isAnalyzing ? (
+              <>
+                <Loader2 size={14} className="animate-spin" />
+                <span>Analyzing...</span>
+              </>
+            ) : onDemandAnalysis ? (
+              <>
+                <Brain size={14} />
+                <span>Analysis Complete</span>
+              </>
+            ) : (
+              <>
+                <Brain size={14} />
+                <span>
+                  {loadingCredits 
+                    ? 'Loading...' 
+                    : `Get AI insights for ${aiCreditCost} credit${aiCreditCost !== 1 ? 's' : ''}`
+                  }
+                </span>
+              </>
+            )}
+          </button>
+        </div>
+        
+        {onDemandAnalysis && (
+          <div className="flex items-center justify-between mb-2">
+            <span className={`text-xs ${subTextColor}`}>
+              Fresh analysis generated on-demand
+            </span>
+            <button
+              onClick={() => setShowOnDemandAnalysis(!showOnDemandAnalysis)}
+              className={`text-xs ${subTextColor} hover:${headingTextColor} transition-colors`}
+            >
+              {showOnDemandAnalysis ? 'Hide' : 'Show'} Analysis
+            </button>
+          </div>
+        )}
+        
+        {/* Error Display */}
+        {analysisError && (
+          <div className="mt-2 p-2 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded text-xs text-red-700 dark:text-red-300">
+            <div className="flex items-center space-x-2">
+              {!hasAIAccess && <Lock size={12} />}
+              <span>{analysisError}</span>
+            </div>
+          </div>
+        )}
+        
+        {/* On-Demand Analysis Display */}
+        {onDemandAnalysis && showOnDemandAnalysis && (
+          <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg">
+            <div className="flex items-center space-x-2 mb-2">
+              <Brain size={14} className="text-green-500" />
+              <span className="text-xs font-semibold text-green-700 dark:text-green-300">Fresh AI Analysis</span>
+            </div>
+            <p className="text-xs text-green-800 dark:text-green-200 leading-relaxed">
+              {onDemandAnalysis}
+            </p>
+            <div className="mt-2 pt-2 border-t border-green-200/50 dark:border-green-700/50 flex justify-between items-center">
+              <span className="text-xs text-green-600 dark:text-green-400 opacity-75">
+                Gemini 1.5 Flash
+              </span>
+              <div className="flex items-center space-x-1">
+                <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+                <span className="text-xs text-green-600 dark:text-green-400">Just now</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

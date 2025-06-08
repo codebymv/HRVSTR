@@ -10,7 +10,7 @@ import {
   getSessionTimeRemainingFormatted 
 } from '../../utils/sessionStorage';
 import { TimeRange } from '../../types';
-import { RefreshCw, Loader2, Crown, Lock, Settings, Key, TrendingUp, Zap, BarChart2 } from 'lucide-react';
+import { RefreshCw, Loader2, Key, Lock, Settings, TrendingUp, Zap, BarChart2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // Custom hooks
@@ -42,9 +42,11 @@ const SentimentDashboard: React.FC = () => {
   const [redditApiKeysConfigured, setRedditApiKeysConfigured] = useState<boolean>(false);
   const [checkingApiKeys, setCheckingApiKeys] = useState<boolean>(true);
   
-  // Get tier info
+  // Get tier info - handle loading state properly to avoid showing locks during initialization
   const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
-  const hasRedditTierAccess = currentTier !== 'free';
+  const isLoadingTier = tierInfo === null;
+  // During tier loading, assume tier access to avoid showing locks prematurely
+  const hasRedditTierAccess = isLoadingTier ? true : currentTier !== 'free';
   
   // Combined access: needs both tier access AND API keys configured
   const hasFullRedditAccess = hasRedditTierAccess && redditApiKeysConfigured;
@@ -236,33 +238,12 @@ const SentimentDashboard: React.FC = () => {
   }, [currentTier]); // 🔧 Added currentTier dependency to trigger refresh on tier changes
 
 
-  // Custom handleLoadMorePosts with tier limit checking
+  // Simple handleLoadMorePosts without tier limits for now
   const handleLoadMorePosts = () => {
-    // Check if tier limit would be exceeded and dialog hasn't been shown yet
-    if (redditPostLimit !== -1 && redditPosts.length >= redditPostLimit && !tierLimitDialogShown) {
-      // Show tier limit dialog with Reddit context
-      showTierLimitDialog(
-        'Reddit Posts',
-        `You've reached the Reddit posts limit for the ${currentTier === 'free' ? 'Free' : currentTier} tier (${redditPosts.length}/${redditPostLimit} posts). Upgrade for unlimited access to social sentiment data.`,
-        'Upgrade to Pro for unlimited Reddit posts, advanced sentiment analysis, and real-time social media monitoring across all platforms.',
-        'reddit'
-      );
-      setTierLimitDialogShown(true);
-      return;
-    }
-    
-    // If under limit, proceed with normal loading
-    if (redditPostLimit === -1 || redditPosts.length < redditPostLimit) {
-      originalHandleLoadMorePosts();
-    }
+    originalHandleLoadMorePosts();
   };
 
-  // Credit costs for each component
-  const COMPONENT_COSTS = {
-    sentimentChart: 8,    // Market sentiment timeline
-    sentimentScores: 12,  // Individual ticker sentiment analysis
-    redditPosts: 5,       // Reddit posts access
-  };
+  // Use COMPONENT_COSTS from the hook instead of declaring locally
 
   // Handlers for unlocking individual components
   const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
@@ -403,7 +384,7 @@ const SentimentDashboard: React.FC = () => {
           onClick={() => handleUnlockComponent(componentKey, cost)}
           className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-6 py-3 rounded-lg font-medium transition-all flex items-center justify-center mx-auto gap-2"
         >
-          <Crown className="w-4 h-4" />
+          <Key className="w-4 h-4" />
           Unlock for {cost} Credits
         </button>
       </div>
@@ -524,7 +505,7 @@ const SentimentDashboard: React.FC = () => {
                 className={`transition-colors rounded-full p-2 ${
                   // Show different styling based on unlock state
                   (unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)
-                    ? `${isLight ? 'bg-blue-500' : 'bg-blue-600'} hover:${isLight ? 'bg-blue-600' : 'bg-blue-700'} text-white` // Unlocked: normal blue
+                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white' // Unlocked: gradient purple
                     : 'bg-gray-400 cursor-not-allowed text-gray-200' // Locked: grayed out
                 } ${(isDataLoading || loading.chart || loading.scores || loading.reddit) ? 'opacity-50' : ''}`}
                 onClick={refreshData}
@@ -589,7 +570,6 @@ const SentimentDashboard: React.FC = () => {
             <SentimentChartCard
               chartData={chartData}
               timeRange={timeRange}
-                  onTimeRangeChange={handleTimeRangeChange}
               loading={loading.chart}
               isTransitioning={isTransitioning}
               loadingProgress={loadingProgress}

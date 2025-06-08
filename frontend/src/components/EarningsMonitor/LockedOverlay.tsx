@@ -1,5 +1,5 @@
 import React from 'react';
-import { Crown, Zap } from 'lucide-react';
+import { Key, Zap } from 'lucide-react';
 
 interface LockedOverlayProps {
   title: string;
@@ -56,7 +56,7 @@ const LockedOverlay: React.FC<LockedOverlayProps> = ({
           onClick={() => onUnlock(componentKey, cost)}
           className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-medium transition-all flex items-center justify-center mx-auto gap-2"
         >
-          <Crown className="w-4 h-4" />
+          <Key className="w-4 h-4" />
           Unlock for {cost} Credits
         </button>
       </div>

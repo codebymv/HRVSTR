@@ -879,4 +879,53 @@ router.get('/debug-sessions', authenticateToken, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/credits/recent-expirations
+ * Get recent session expirations for the current user (last 5 minutes)
+ */
+router.get('/recent-expirations', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Get activities for session expirations in the last 5 minutes
+    const recentExpirations = await pool.query(`
+      SELECT 
+        activity_type,
+        title,
+        description,
+        created_at
+      FROM activities 
+      WHERE user_id = $1 
+        AND activity_type = 'research_expired'
+        AND created_at > (NOW() AT TIME ZONE 'UTC') - INTERVAL '5 minutes'
+      ORDER BY created_at DESC
+    `, [userId]);
+    
+    // Parse component names from descriptions
+    const expirations = recentExpirations.rows.map(activity => {
+      // Extract component name from description like "Earnings Analysis Research expired after 2 hours time limit"
+      const match = activity.description.match(/^(.+?) expired after/);
+      const componentDisplayName = match ? match[1] : 'Research';
+      
+      return {
+        component: componentDisplayName,
+        description: activity.description,
+        expiredAt: activity.created_at
+      };
+    });
+    
+    res.json({
+      success: true,
+      expirations,
+      count: expirations.length
+    });
+  } catch (error) {
+    console.error('Error getting recent expirations:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get recent expirations'
+    });
+  }
+});
+
 module.exports = router; 

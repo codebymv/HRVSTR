@@ -121,6 +121,45 @@ router.get('/cache/status', authenticateToken, sentimentController.getUserSentim
  */
 router.delete('/cache', authenticateToken, sentimentController.clearUserSentimentCache);
 
+// ===== AI ANALYSIS ROUTES =====
+
+/**
+ * @route POST /api/sentiment-unified/reddit/analyze-post
+ * @desc Analyze a Reddit post with AI to explain its sentiment contribution
+ * @access Private (requires authentication, Pro+ tier)
+ * @body {object} post - Reddit post object with title, content, upvotes, etc.
+ */
+router.post('/reddit/analyze-post', authenticateToken, sentimentController.analyzeRedditPost);
+
+/**
+ * @route POST /api/sentiment-unified/ticker/analyze
+ * @desc Analyze a ticker's sentiment data with AI on-demand
+ * @access Private (requires authentication, Pro+ tier)
+ * @body {object} sentimentData - Ticker sentiment data object
+ */
+router.post('/ticker/analyze', authenticateToken, sentimentController.analyzeTickerSentiment);
+
+/**
+ * @route POST /api/sentiment-unified/chart/market/analyze
+ * @desc Analyze market sentiment chart data with AI for a given time period
+ * @access Private (requires authentication, Pro+ tier)
+ * @body {array} chartData - Chart data points array
+ * @body {string} timeRange - Time range (1d, 3d, 1w)
+ * @body {object} sentimentContext - Additional context for analysis
+ */
+router.post('/chart/market/analyze', authenticateToken, sentimentController.analyzeMarketSentimentChart);
+
+/**
+ * @route POST /api/sentiment-unified/chart/ticker/analyze
+ * @desc Analyze ticker sentiment chart data with AI for selected tickers over time period
+ * @access Private (requires authentication, Pro+ tier)
+ * @body {array} chartData - Chart data points array
+ * @body {array} selectedTickers - Array of selected ticker symbols
+ * @body {string} timeRange - Time range (1d, 3d, 1w)
+ * @body {object} sentimentContext - Additional context for analysis
+ */
+router.post('/chart/ticker/analyze', authenticateToken, sentimentController.analyzeTickerSentimentChart);
+
 // ===== LEGACY COMPATIBILITY ROUTES =====
 // These routes provide backward compatibility with the old sentiment API
 // while internally using the new unified caching system

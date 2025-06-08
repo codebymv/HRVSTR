@@ -6,7 +6,7 @@ import { useSentimentUnlock } from '../../hooks/useSentimentUnlock';
 import { useSentimentLoading } from '../../hooks/useSentimentLoading';
 import { useSentimentData } from '../../hooks/useSentimentData';
 import { TimeRange } from '../../types';
-import { RefreshCw, Loader2, Crown, Lock, Settings, Key, TrendingUp, Zap, BarChart2 } from 'lucide-react';
+import { RefreshCw, Loader2, Key, Lock, Settings, TrendingUp, Zap, BarChart2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // Components
@@ -244,7 +244,7 @@ const SentimentDashboard: React.FC = () => {
           onClick={() => handleUnlockComponent(componentKey, cost)}
           className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-lg font-medium transition-all hover:from-blue-600 hover:to-purple-700 flex items-center justify-center mx-auto"
         >
-          <Crown className="w-4 h-4 mr-2" />
+          <Key className="w-4 h-4 mr-2" />
           Unlock for {cost} Credits
         </button>
       </div>

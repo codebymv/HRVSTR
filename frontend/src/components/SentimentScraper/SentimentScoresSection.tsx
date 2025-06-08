@@ -285,113 +285,24 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
   };
 
   const distribution = getSourceDistribution();
+  
+  // Debug logging for tier state during loading
+  if (isLoading || isCheckingAccess) {
+    console.log('[SENTIMENT SCORES DEBUG]', {
+      isLoading,
+      isCheckingAccess,
+      hasRedditAccess,
+      hasRedditTierAccess,
+      redditApiKeysConfigured,
+      timestamp: Date.now()
+    });
+  }
 
   return (
     <div className={`${cardBgColor} rounded-lg p-4 lg:p-5 border ${borderColor} ${className} flex flex-col`}>
-      <div className="flex justify-between items-center mb-4">
-        <h3 className={`text-lg font-medium ${textColor}`}>Sentiment Scores</h3>
-        <div className="flex items-center space-x-2">
-        <div className={`flex space-x-1 ${cardBgColor} rounded-full p-1`}>
-            <button
-              className={`p-1.5 rounded-full transition-all relative ${
-                dataSource === 'reddit' 
-                  ? hasRedditAccess 
-                    ? 'bg-orange-100 text-orange-500' 
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : hasRedditAccess
-                    ? 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
-                    : hasRedditTierAccess
-                      ? 'text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20'
-                      : 'text-gray-400 cursor-not-allowed'
-              }`}
-              onClick={() => handleDataSourceChange('reddit')}
-              disabled={!hasRedditAccess}
-              title={
-                hasRedditAccess 
-                  ? "Reddit" 
-                  : hasRedditTierAccess
-                    ? "Reddit (API keys required)"
-                    : "Reddit (Pro feature)"
-              }
-            >
-              <MessageSquare size={18} />
-              {!hasRedditTierAccess ? (
-                <span className="text-xs absolute -top-1 -right-1">🔒</span>
-              ) : !redditApiKeysConfigured ? (
-                <span className="text-xs absolute -top-1 -right-1">⚙️</span>
-              ) : null}
-            </button>
-            <button
-              className={`p-1.5 rounded-full transition-all ${dataSource === 'finviz' ? 'bg-amber-100 text-amber-600' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-              onClick={() => handleDataSourceChange('finviz')}
-              title="FinViz"
-            >
-              <TrendingUp size={18} />
-            </button>
-            <button
-              className={`p-1.5 rounded-full transition-all ${dataSource === 'yahoo' ? 'bg-blue-100 text-blue-500' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-              onClick={() => handleDataSourceChange('yahoo')}
-              title="Yahoo Finance"
-            >
-              <Globe size={18} />
-            </button>
-            <button
-              className={`p-1.5 rounded-full transition-all ${dataSource === 'combined' ? 'bg-gray-100 text-gray-900 dark:bg-gray-700 dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-              onClick={() => handleDataSourceChange('combined')}
-              title="All Sources"
-            >
-              <Layers size={18} />
-            </button>
-          </div>
-        </div>
-      </div>
-      
-      {!isLoading && !isRateLimited && !error && (
-        <div className="flex items-center mb-3 px-1 text-xs">
-          <span className={mutedTextColor}>Data sources:</span>
-          <div className="flex ml-2 space-x-2">
-            {dataSource === 'reddit' || dataSource === 'combined' ? (
-              <span className={`flex items-center space-x-1 rounded-full px-2 py-0.5 ${
-                hasRedditAccess 
-                  ? 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                  : hasRedditTierAccess
-                    ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800'
-                    : 'bg-gray-200 dark:bg-gray-800 text-gray-400 opacity-60'
-              }`}>
-                <MessageSquare size={12} className={
-                  hasRedditAccess 
-                    ? "text-orange-500" 
-                    : hasRedditTierAccess 
-                      ? "text-yellow-600" 
-                      : "text-gray-400"
-                } />
-                <span>{dataSource === 'reddit' ? '100%' : `${Math.round(distribution.reddit)}%`}</span>
-                {!hasRedditTierAccess ? (
-                  <span className="text-xs">🔒</span>
-                ) : !redditApiKeysConfigured ? (
-                  <span className="text-xs">⚙️</span>
-                ) : null}
-              </span>
-            ) : null}
-            {dataSource === 'finviz' || dataSource === 'combined' ? (
-              <span className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-full px-2 py-0.5 text-gray-700 dark:text-gray-300">
-                <TrendingUp size={12} className="text-amber-500" />
-                <span>{dataSource === 'finviz' ? '100%' : `${Math.round(distribution.finviz)}%`}</span>
-              </span>
-            ) : null}
-            {dataSource === 'yahoo' || dataSource === 'combined' ? (
-              <span className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-full px-2 py-0.5 text-gray-700 dark:text-gray-300">
-                <Globe size={12} className="text-blue-500" />
-                <span>{dataSource === 'yahoo' ? '100%' : `${Math.round(distribution.yahoo)}%`}</span>
-              </span>
-            ) : null}
-          </div>
-        </div>
-      )}
-      
-      {/* Show checking access state first */}
+      {/* Show checking access state first - before any UI elements */}
       {isCheckingAccess ? (
-        <div className="flex flex-col items-center justify-center p-10 text-center">
+        <div className="flex flex-col items-center justify-center p-10 text-center min-h-[300px]">
           <Loader2 className="text-blue-500 animate-spin mb-4" size={32} />
           <h3 className={`text-lg font-semibold ${textColor} mb-2`}>
             Checking Access...
@@ -407,7 +318,7 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
           </div>
         </div>
       ) : isLoading ? (
-        <div className="flex flex-col items-center justify-center p-10 text-center">
+        <div className="flex flex-col items-center justify-center p-10 text-center min-h-[300px]">
           {isFreshUnlock ? (
             // Fresh unlock with harvest loading
             <>
@@ -447,10 +358,86 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
           )}
         </div>
       ) : currentSentiments?.length > 0 ? (
-        <div 
-          ref={containerRef}
-          className="flex flex-col space-y-4 max-h-[700px] overflow-y-auto pr-2"
-        >
+        <>
+          {/* Header with data source badges - only show after access is verified */}
+          <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center mb-4 space-y-3 lg:space-y-0">
+            <h3 className={`text-lg font-medium ${textColor}`}>Sentiment Scores</h3>
+            <div className="flex items-center space-x-2">
+            <div className={`flex flex-wrap gap-1 ${cardBgColor} rounded-full p-1`}>
+                <button
+                  className={`flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-2.5 py-1.5 rounded-full transition-all text-xs font-medium relative ${
+                    dataSource === 'reddit' 
+                      ? hasRedditAccess 
+                        ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white border border-blue-500' 
+                        : 'bg-gray-200 text-gray-400 cursor-not-allowed dark:bg-gray-800'
+                      : hasRedditAccess
+                        ? 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                        : hasRedditTierAccess
+                          ? 'text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20'
+                          : 'text-gray-400 cursor-not-allowed'
+                  }`}
+                  onClick={() => handleDataSourceChange('reddit')}
+                  disabled={!hasRedditAccess}
+                  title={
+                    hasRedditAccess 
+                      ? `Reddit (${dataSource === 'reddit' ? '100' : Math.round(distribution.reddit)}%)` 
+                      : hasRedditTierAccess
+                        ? "Reddit (API keys required)"
+                        : "Reddit (Pro feature)"
+                  }
+                >
+                  <MessageSquare size={14} />
+                  <span>{dataSource === 'reddit' ? '100' : Math.round(distribution.reddit)}%</span>
+                  {!hasRedditTierAccess ? (
+                    <span className="text-xs absolute -top-1 -right-1">🔒</span>
+                  ) : !redditApiKeysConfigured ? (
+                    <span className="text-xs absolute -top-1 -right-1">⚙️</span>
+                  ) : null}
+                </button>
+                <button
+                  className={`flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-2.5 py-1.5 rounded-full transition-all text-xs font-medium ${
+                    dataSource === 'finviz' 
+                      ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white border border-blue-500' 
+                      : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                  onClick={() => handleDataSourceChange('finviz')}
+                  title={`FinViz (${dataSource === 'finviz' ? '100' : Math.round(distribution.finviz)}%)`}
+                >
+                  <TrendingUp size={14} />
+                  <span>{dataSource === 'finviz' ? '100' : Math.round(distribution.finviz)}%</span>
+                </button>
+                <button
+                  className={`flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-2.5 py-1.5 rounded-full transition-all text-xs font-medium ${
+                    dataSource === 'yahoo' 
+                      ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white border border-blue-500' 
+                      : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                  onClick={() => handleDataSourceChange('yahoo')}
+                  title={`Yahoo Finance (${dataSource === 'yahoo' ? '100' : Math.round(distribution.yahoo)}%)`}
+                >
+                  <Globe size={14} />
+                  <span>{dataSource === 'yahoo' ? '100' : Math.round(distribution.yahoo)}%</span>
+                </button>
+                <button
+                  className={`flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-2.5 py-1.5 rounded-full transition-all text-xs font-medium ${
+                    dataSource === 'combined' 
+                      ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white border border-blue-500' 
+                      : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                  onClick={() => handleDataSourceChange('combined')}
+                  title="All Sources Combined"
+                >
+                  <Layers size={14} />
+                  <span>All</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <div 
+            ref={containerRef}
+            className="flex flex-col space-y-4 max-h-[700px] overflow-y-auto pr-2"
+          >
           {(() => {
             console.log('[CARD RENDER] About to render', displayedItems.length, 'cards');
             
@@ -504,6 +491,7 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
           </div>
           
         </div>
+        </>
       ) : isRateLimited ? (
         <div className="flex flex-col items-center justify-center p-10 text-center">
           <AlertTriangle className="mb-2 text-red-500" size={32} />

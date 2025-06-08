@@ -527,6 +527,7 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
         const sourcesToMerge: SentimentData[][] = [];
         if (tickerSentimentData.length > 0) {
           const diverseSentiments = ensureTickerDiversity(tickerSentimentData, 10);
+          setTopSentiments(diverseSentiments); // Set Reddit data for individual source filtering
           sourcesToMerge.push(diverseSentiments);
         }
         if (finvizData.length > 0) sourcesToMerge.push(finvizData);

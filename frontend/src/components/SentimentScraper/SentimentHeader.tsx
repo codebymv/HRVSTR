@@ -27,7 +27,7 @@ const SentimentHeader: React.FC<SentimentHeaderProps> = ({
       
       <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
         <button 
-          className={`${isLight ? 'bg-blue-500' : 'bg-blue-600'} hover:${isLight ? 'bg-blue-600' : 'bg-blue-700'} rounded-full p-2 transition-colors ${isDataLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+          className={`bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 rounded-full p-2 transition-colors ${isDataLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
           onClick={onRefresh}
           disabled={isDataLoading}
           title="Refresh Data"

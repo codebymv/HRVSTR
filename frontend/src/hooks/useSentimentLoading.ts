@@ -31,7 +31,9 @@ export const useSentimentLoading = (
   hasChartAccess: boolean,
   hasScoresAccess: boolean,
   hasRedditAccess: boolean,
-  onLoadingProgressChange?: (progress: number, stage: string) => void
+  onLoadingProgressChange?: (progress: number, stage: string) => void,
+  isFreshUnlockFromUnlockHook?: FreshUnlockState,
+  setFreshUnlockStateFromUnlockHook?: (component: keyof FreshUnlockState, value: boolean) => void
 ) => {
   // Loading state for each component - Start with loading = true to prevent empty state flash
   const [loadingState, setLoadingState] = useState<SentimentLoadingState>({
@@ -44,12 +46,15 @@ export const useSentimentLoading = (
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingStage, setLoadingStage] = useState('');
 
-  // Fresh unlock state (for showing harvest loading)
+  // Fresh unlock state (for showing harvest loading) - use from unlock hook if provided
   const [isFreshUnlock, setIsFreshUnlock] = useState<FreshUnlockState>({
     chart: false,
     scores: false,
     reddit: false
   });
+
+  // Use fresh unlock state from unlock hook if provided
+  const effectiveIsFreshUnlock = isFreshUnlockFromUnlockHook || isFreshUnlock;
 
   // Refresh state
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -182,12 +187,46 @@ export const useSentimentLoading = (
     }
   }, [isRefreshing, loadingState.chart.isLoading, loadingState.scores.isLoading, loadingState.reddit.isLoading, hasChartAccess, hasScoresAccess, hasRedditAccess]);
 
+  // Clear fresh unlock flags when loading completes (matching SEC filings pattern)
+  useEffect(() => {
+    if (!loadingState.chart.isLoading && effectiveIsFreshUnlock.chart) {
+      console.log('🔄 SENTIMENT DASHBOARD - Clearing chart fresh unlock flag after loading');
+      if (setFreshUnlockStateFromUnlockHook) {
+        setFreshUnlockStateFromUnlockHook('chart', false);
+      } else {
+        setFreshUnlockState('chart', false);
+      }
+    }
+  }, [loadingState.chart.isLoading, effectiveIsFreshUnlock.chart, setFreshUnlockStateFromUnlockHook]);
+
+  useEffect(() => {
+    if (!loadingState.scores.isLoading && effectiveIsFreshUnlock.scores) {
+      console.log('🔄 SENTIMENT DASHBOARD - Clearing scores fresh unlock flag after loading');
+      if (setFreshUnlockStateFromUnlockHook) {
+        setFreshUnlockStateFromUnlockHook('scores', false);
+      } else {
+        setFreshUnlockState('scores', false);
+      }
+    }
+  }, [loadingState.scores.isLoading, effectiveIsFreshUnlock.scores, setFreshUnlockStateFromUnlockHook]);
+
+  useEffect(() => {
+    if (!loadingState.reddit.isLoading && effectiveIsFreshUnlock.reddit) {
+      console.log('🔄 SENTIMENT DASHBOARD - Clearing reddit fresh unlock flag after loading');
+      if (setFreshUnlockStateFromUnlockHook) {
+        setFreshUnlockStateFromUnlockHook('reddit', false);
+      } else {
+        setFreshUnlockState('reddit', false);
+      }
+    }
+  }, [loadingState.reddit.isLoading, effectiveIsFreshUnlock.reddit, setFreshUnlockStateFromUnlockHook]);
+
   return {
     // State
     loadingState,
     loadingProgress,
     loadingStage,
-    isFreshUnlock,
+    isFreshUnlock: effectiveIsFreshUnlock,
     isRefreshing,
     errors,
     

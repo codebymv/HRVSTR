@@ -1,7 +1,7 @@
 import React from 'react';
 import { ChartViewMode } from '../../types';
 import { useTheme } from '../../contexts/ThemeContext';
-import { TrendingUp, BarChart2 } from 'lucide-react';
+import { TrendingUp, DollarSign } from 'lucide-react';
 
 interface ChartViewModeSelectorProps {
   currentMode: ChartViewMode;
@@ -19,11 +19,9 @@ const ChartViewModeSelector: React.FC<ChartViewModeSelectorProps> = ({
   const { theme } = useTheme();
   const isLight = theme === 'light';
   
-  // Theme-specific styling
-  const buttonBase = `px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2`;
-  const activeButton = isLight 
-    ? 'bg-blue-500 text-white' 
-    : 'bg-blue-600 text-white';
+  // Theme-specific styling - matching AI insights button gradient
+  const buttonBase = `px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2`;
+  const activeButton = 'bg-gradient-to-r from-blue-500 to-purple-600 text-white border border-blue-500';
   const inactiveButton = isLight 
     ? 'bg-stone-200 text-stone-700 hover:bg-stone-300' 
     : 'bg-gray-700 text-gray-300 hover:bg-gray-600';
@@ -38,7 +36,7 @@ const ChartViewModeSelector: React.FC<ChartViewModeSelectorProps> = ({
     {
       value: 'ticker' as ChartViewMode,
       label: 'Tickers',
-      icon: BarChart2,
+      icon: DollarSign,
       description: 'Watchlist ticker analysis'
     }
   ];
@@ -68,4 +66,4 @@ const ChartViewModeSelector: React.FC<ChartViewModeSelectorProps> = ({
   );
 };
 
-export default ChartViewModeSelector; 
+export default ChartViewModeSelector;

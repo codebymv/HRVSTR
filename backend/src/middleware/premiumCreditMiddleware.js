@@ -9,6 +9,12 @@ const CREDIT_COSTS = {
   deep_analysis: 8,
   historical_data: 4,
   
+  // AI Features
+  ai_ticker_analysis: 1,        // AI insights for ticker sentiment
+  ai_reddit_analysis: 1,        // AI insights for Reddit posts
+  ai_market_analysis: 1,        // AI insights for market sentiment charts
+  ai_ticker_chart_analysis: 1,  // AI insights for ticker sentiment charts
+  
   // Special actions
   refresh_data: 0,      // Free refresh/reload
   page_load: 0,         // Free page loads
@@ -24,28 +30,28 @@ const CREDIT_COSTS = {
 const TIER_LIMITS = {
   free: {
     monthly_credits: 0,
-    can_purchase: false,
+    can_purchase: true,
     max_sessions: 0,
-    features: []
+    features: ['ai_ticker_analysis', 'ai_reddit_analysis', 'ai_market_analysis', 'ai_ticker_chart_analysis'] // Make AI features available to free users with credits
   },
   pro: {
     monthly_credits: 500,
     can_purchase: true,
     max_sessions: 3,
-    features: ['reddit_sentiment', 'finviz_sentiment', 'yahoo_sentiment', 'research_bundle']
+    features: ['reddit_sentiment', 'finviz_sentiment', 'yahoo_sentiment', 'research_bundle', 'ai_ticker_analysis', 'ai_reddit_analysis', 'ai_market_analysis', 'ai_ticker_chart_analysis']
   },
   elite: {
     monthly_credits: 2000,
     can_purchase: true,
     max_sessions: 10,
-    features: ['reddit_sentiment', 'finviz_sentiment', 'yahoo_sentiment', 'elite_research_bundle', 'deep_analysis'],
+    features: ['reddit_sentiment', 'finviz_sentiment', 'yahoo_sentiment', 'elite_research_bundle', 'deep_analysis', 'ai_ticker_analysis', 'ai_reddit_analysis', 'ai_market_analysis', 'ai_ticker_chart_analysis'],
     discount_rate: 0.2 // 20% discount on all credit costs
   },
   institutional: {
     monthly_credits: 10000,
     can_purchase: true,
     max_sessions: -1, // unlimited
-    features: ['reddit_sentiment', 'finviz_sentiment', 'yahoo_sentiment', 'institutional_bundle', 'deep_analysis', 'historical_data'],
+    features: ['reddit_sentiment', 'finviz_sentiment', 'yahoo_sentiment', 'institutional_bundle', 'deep_analysis', 'historical_data', 'ai_ticker_analysis', 'ai_reddit_analysis', 'ai_market_analysis', 'ai_ticker_chart_analysis'],
     discount_rate: 0.33 // 33% discount on all credit costs
   }
 };

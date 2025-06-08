@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, Loader2, Lock, Crown, TrendingUp, Zap, ListChecks } from 'lucide-react';
+import { RefreshCw, Loader2, Lock, Crown, Key, TrendingUp, Zap, ListChecks } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTier } from '../../contexts/TierContext';
@@ -200,7 +200,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
           onClick={() => hookHandleUnlockComponent(componentKey, cost)}
           className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-6 py-3 rounded-lg font-medium transition-all flex items-center justify-center mx-auto gap-2"
         >
-          <Crown className="w-4 h-4" />
+          <Key className="w-4 h-4" />
           Unlock for {cost} Credits
         </button>
       </div>
@@ -255,7 +255,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
               className={`transition-colors rounded-full p-2 ${
                 // Show different styling based on unlock state
                 (unlockedComponents.insiderTrading || unlockedComponents.institutionalHoldings)
-                  ? `${isLight ? 'bg-blue-500' : 'bg-blue-600'} hover:${isLight ? 'bg-blue-600' : 'bg-blue-700'} text-white` // Unlocked: normal blue
+                  ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white' // Unlocked: gradient purple
                   : 'bg-gray-400 cursor-not-allowed text-gray-200' // Locked: grayed out
               } ${(isRefreshing || loadingState.insiderTrades.isLoading || loadingState.institutionalHoldings.isLoading) ? 'opacity-50' : ''}`}
               onClick={handleRefresh}

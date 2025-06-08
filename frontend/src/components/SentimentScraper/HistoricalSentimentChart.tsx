@@ -1,8 +1,9 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
-import { HistoricalSentimentData, ChartViewMode, ChartData } from '../../types';
+import { HistoricalSentimentData, ChartViewMode, ChartData, TimeRange } from '../../types';
 import { Line, Bar } from 'react-chartjs-2';
-import { Plus, Minus, RotateCcw } from 'lucide-react';
+import { Plus, Minus, RotateCcw, MessageSquare, TrendingUp, Globe, Layers } from 'lucide-react';
+import ChartAIAnalysisButton from './ChartAIAnalysisButton';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -29,6 +30,8 @@ ChartJS.register(
   TimeScale
 );
 
+type DataSource = 'reddit' | 'finviz' | 'yahoo' | 'combined';
+
 interface HistoricalSentimentChartProps {
   data: HistoricalSentimentData[] | ChartData[];
   viewMode: ChartViewMode;
@@ -36,7 +39,36 @@ interface HistoricalSentimentChartProps {
   isLoading?: boolean;
   showTrendLines?: boolean;
   className?: string;
+  timeRange?: TimeRange;
+  sourcePercentages?: {
+    reddit: number;
+    finviz: number;
+    yahoo: number;
+  };
+  hasRedditAccess?: boolean;
+  hasRedditTierAccess?: boolean;
+  redditApiKeysConfigured?: boolean;
 }
+
+// Hook to detect mobile devices
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  React.useEffect(() => {
+    const checkMobile = () => {
+      const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+      const isMobileUA = /android|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
+      const isMobileScreen = window.innerWidth <= 768;
+      setIsMobile(isMobileUA || isMobileScreen);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+};
 
 const HistoricalSentimentChart: React.FC<HistoricalSentimentChartProps> = ({
   data,
@@ -44,13 +76,47 @@ const HistoricalSentimentChart: React.FC<HistoricalSentimentChartProps> = ({
   selectedTickers = [],
   isLoading = false,
   showTrendLines = true,
-  className = ''
+  className = '',
+  timeRange = '1w',
+  sourcePercentages,
+  hasRedditAccess = true,
+  hasRedditTierAccess,
+  redditApiKeysConfigured
 }) => {
   const { theme } = useTheme();
   const isLight = theme === 'light';
+  const isMobile = useIsMobile();
   
-  // Zoom state
+  // Zoom state - disabled on mobile
   const [zoomLevel, setZoomLevel] = useState(0); // 0 = auto, positive = zoomed in, negative = zoomed out
+  
+  // Source filter state - default to 'combined' to show all sources
+  const [dataSource, setDataSource] = useState<DataSource>('combined');
+  
+  // Handle data source filtering
+  const handleDataSourceChange = (source: DataSource) => {
+    if (source === 'reddit' && !hasRedditAccess) {
+      return; // Prevent changing to Reddit for free users
+    }
+    setDataSource(source);
+  };
+  
+  // Get source distribution percentages
+  const getSourceDistribution = () => {
+    if (!sourcePercentages) {
+      return { reddit: 33, finviz: 33, yahoo: 34 }; // Fallback
+    }
+    
+    // For individual sources, return 100% for the selected source
+    if (dataSource === 'reddit') return { reddit: hasRedditAccess ? 100 : 0, finviz: 0, yahoo: 0 };
+    if (dataSource === 'finviz') return { reddit: 0, finviz: 100, yahoo: 0 };
+    if (dataSource === 'yahoo') return { reddit: 0, finviz: 0, yahoo: 100 };
+    
+    // For combined view, use actual percentages
+    return sourcePercentages;
+  };
+  
+  const distribution = getSourceDistribution();
 
   // Convert sentiment score to percentage for better visualization
   const normalizeScore = (score: number): number => {
@@ -126,12 +192,13 @@ const HistoricalSentimentChart: React.FC<HistoricalSentimentChartProps> = ({
     };
   }, [viewMode, zoomLevel]);
 
-  // Process data based on view mode
+  // Process data based on view mode and apply source filtering
   const chartData = useMemo(() => {
     console.log('🔍 HISTORICAL CHART DEBUG: Processing data', { 
       dataLength: data?.length || 0, 
       viewMode, 
       selectedTickers,
+      dataSource,
       firstDataItem: data?.[0]
     });
     
@@ -140,8 +207,23 @@ const HistoricalSentimentChart: React.FC<HistoricalSentimentChartProps> = ({
       return null;
     }
 
+    // Apply source filtering to the data first
+    let filteredData: HistoricalSentimentData[] | ChartData[] = data;
+    if (dataSource !== 'combined' && data.length > 0 && 'source' in data[0]) {
+      filteredData = data.filter((item: any) => {
+        if (dataSource === 'reddit' && !hasRedditAccess) return false;
+        return item.source === dataSource;
+      }) as HistoricalSentimentData[] | ChartData[];
+      console.log('🔍 HISTORICAL CHART DEBUG: Filtered data by source', dataSource, 'from', data.length, 'to', filteredData.length);
+    }
+
+    if (filteredData.length === 0) {
+      console.log('🔍 HISTORICAL CHART DEBUG: No data after filtering');
+      return null;
+    }
+
     // Check if data is historical sentiment data or chart data
-    const isHistoricalData = 'sentiment_score' in data[0];
+    const isHistoricalData = 'sentiment_score' in filteredData[0];
     console.log('🔍 HISTORICAL CHART DEBUG: Is historical data:', isHistoricalData);
 
     if (viewMode === 'market' && !isHistoricalData) {
@@ -185,7 +267,7 @@ const HistoricalSentimentChart: React.FC<HistoricalSentimentChartProps> = ({
     }
 
     if (isHistoricalData) {
-      const historicalData = data as HistoricalSentimentData[];
+      const historicalData = filteredData as HistoricalSentimentData[];
       console.log('🔍 HISTORICAL CHART DEBUG: Processing historical data with', historicalData.length, 'items');
       console.log('🔍 HISTORICAL CHART DEBUG: Raw historical data sample:', historicalData.slice(0, 2));
       
@@ -204,13 +286,23 @@ const HistoricalSentimentChart: React.FC<HistoricalSentimentChartProps> = ({
           tickerGroups[ticker].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         });
 
-        // Get all unique dates and sort them
-        const allDates = [...new Set(historicalData.map(item => item.date))].sort();
-        console.log('🔍 HISTORICAL CHART DEBUG: All dates:', allDates);
+        // Get all unique timestamps and sort them (preserve full temporal granularity)
+        const allTimestamps = [...new Set(historicalData.map(item => item.date))].sort();
+        console.log('🔍 HISTORICAL CHART DEBUG: All timestamps:', allTimestamps);
         
-        const labels = allDates.map(date => 
-          new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-        );
+        const labels = allTimestamps.map(timestamp => {
+          const date = new Date(timestamp);
+          // For granular timelines (more than 10 points), show time, otherwise just date
+          if (allTimestamps.length > 10) {
+            return date.toLocaleDateString('en-US', { 
+              month: 'short', 
+              day: 'numeric',
+              hour: timeRange === '1d' ? 'numeric' : undefined
+            });
+          } else {
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          }
+        });
 
         // Color palette for different tickers
         const colors = [
@@ -223,10 +315,10 @@ const HistoricalSentimentChart: React.FC<HistoricalSentimentChartProps> = ({
 
         const datasets = Object.keys(tickerGroups).map((ticker, index) => {
           const tickerData = tickerGroups[ticker];
-          const dataPoints = allDates.map(date => {
-            const item = tickerData.find(d => d.date === date);
+          const dataPoints = allTimestamps.map((timestamp: string) => {
+            const item = tickerData.find(d => d.date === timestamp);
             if (item) {
-              console.log(`🔍 CHART DEBUG: ${ticker} on ${date} - Raw score: ${item.sentiment_score}, Normalized: ${normalizeScore(item.sentiment_score)}`);
+              console.log(`🔍 CHART DEBUG: ${ticker} on ${timestamp} - Raw score: ${item.sentiment_score}, Normalized: ${normalizeScore(item.sentiment_score)}`);
               return normalizeScore(item.sentiment_score);
             }
             return null;
@@ -254,7 +346,7 @@ const HistoricalSentimentChart: React.FC<HistoricalSentimentChartProps> = ({
 
     console.log('🔍 HISTORICAL CHART DEBUG: No matching condition, returning null');
     return null;
-  }, [data, viewMode]);
+  }, [data, viewMode, dataSource, hasRedditAccess]);
 
   // Calculate Y-axis range based on current data
   const yAxisRange = useMemo(() => {
@@ -275,8 +367,29 @@ const HistoricalSentimentChart: React.FC<HistoricalSentimentChartProps> = ({
           labels: {
             color: isLight ? '#374151' : '#D1D5DB',
             usePointStyle: true,
-            padding: 20,
+            padding: isMobile ? 15 : 20,
+            boxWidth: isMobile ? 12 : 16,
+            font: {
+              size: isMobile ? 11 : 12,
+            },
+            // Better text wrapping for many tickers
+            generateLabels: function(chart: any) {
+              const originalLabels = ChartJS.defaults.plugins.legend.labels.generateLabels!(chart);
+              return originalLabels.map((label: any) => {
+                // Truncate very long ticker names on mobile
+                if (isMobile && label.text && label.text.length > 8) {
+                  label.text = label.text.substring(0, 6) + '...';
+                }
+                return label;
+              });
+            },
           },
+          // Add more space between legend and chart
+          onClick: function() {
+            // Disable legend click to prevent dataset toggling on mobile for better UX
+            return !isMobile;
+          },
+          maxHeight: isMobile ? 80 : 100, // Limit legend height
         },
         tooltip: {
           mode: 'index' as const,
@@ -423,56 +536,56 @@ const HistoricalSentimentChart: React.FC<HistoricalSentimentChartProps> = ({
 
   return (
     <div className={`relative ${className}`}>
-      {/* Zoom Controls - Only show for ticker view */}
-      {viewMode === 'ticker' && chartData && chartData.datasets.length > 0 && (
-        <div className="absolute top-2 right-2 z-10 flex gap-1">
+      {/* Zoom Controls - Only show for ticker view on desktop */}
+      {!isMobile && viewMode === 'ticker' && chartData && chartData.datasets.length > 0 && (
+        <div className="absolute top-4 right-4 z-20 flex flex-col gap-1 bg-white/10 backdrop-blur-sm rounded-lg p-1">
           <button
             onClick={() => setZoomLevel(prev => Math.min(prev + 1, 5))}
             disabled={zoomLevel >= 5}
-            className={`p-1.5 rounded-md text-xs font-medium transition-colors ${
+            className={`p-2 rounded-md text-xs font-medium transition-colors ${
               isLight
-                ? 'bg-white/90 hover:bg-white text-stone-600 border border-stone-200 hover:border-stone-300'
-                : 'bg-gray-800/90 hover:bg-gray-800 text-gray-300 border border-gray-600 hover:border-gray-500'
+                ? 'bg-white/95 hover:bg-white text-stone-600 border border-stone-200 hover:border-stone-300'
+                : 'bg-gray-800/95 hover:bg-gray-800 text-gray-300 border border-gray-600 hover:border-gray-500'
             } ${
               zoomLevel >= 5 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer shadow-sm'
             }`}
             title="Zoom In"
           >
-            <Plus className="h-3 w-3" />
+            <Plus className="h-4 w-4" />
           </button>
           <button
             onClick={() => setZoomLevel(prev => Math.max(prev - 1, -2))}
             disabled={zoomLevel <= -2}
-            className={`p-1.5 rounded-md text-xs font-medium transition-colors ${
+            className={`p-2 rounded-md text-xs font-medium transition-colors ${
               isLight
-                ? 'bg-white/90 hover:bg-white text-stone-600 border border-stone-200 hover:border-stone-300'
-                : 'bg-gray-800/90 hover:bg-gray-800 text-gray-300 border border-gray-600 hover:border-gray-500'
+                ? 'bg-white/95 hover:bg-white text-stone-600 border border-stone-200 hover:border-stone-300'
+                : 'bg-gray-800/95 hover:bg-gray-800 text-gray-300 border border-gray-600 hover:border-gray-500'
             } ${
               zoomLevel <= -2 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer shadow-sm'
             }`}
             title="Zoom Out"
           >
-            <Minus className="h-3 w-3" />
+            <Minus className="h-4 w-4" />
           </button>
           <button
             onClick={() => setZoomLevel(0)}
             disabled={zoomLevel === 0}
-            className={`p-1.5 rounded-md text-xs font-medium transition-colors ${
+            className={`p-2 rounded-md text-xs font-medium transition-colors ${
               isLight
-                ? 'bg-white/90 hover:bg-white text-stone-600 border border-stone-200 hover:border-stone-300'
-                : 'bg-gray-800/90 hover:bg-gray-800 text-gray-300 border border-gray-600 hover:border-gray-500'
+                ? 'bg-white/95 hover:bg-white text-stone-600 border border-stone-200 hover:border-stone-300'
+                : 'bg-gray-800/95 hover:bg-gray-800 text-gray-300 border border-gray-600 hover:border-gray-500'
             } ${
               zoomLevel === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer shadow-sm'
             }`}
             title="Reset Zoom (Auto Scale)"
           >
-            <RotateCcw className="h-3 w-3" />
+            <RotateCcw className="h-4 w-4" />
           </button>
         </div>
       )}
       
       {/* Chart Container */}
-      <div className="h-64">
+      <div className={`h-64 touch-pan-x touch-pan-y ${selectedTickers.length > 0 ? 'pt-3' : ''}`}>
         <ChartComponent
           key={`${viewMode}-${selectedTickers.join('-')}-${zoomLevel}`}
           data={chartData}
@@ -480,12 +593,57 @@ const HistoricalSentimentChart: React.FC<HistoricalSentimentChartProps> = ({
         />
       </div>
       
-      {/* Range Indicator - Only show for ticker view when zoomed */}
-      {viewMode === 'ticker' && zoomLevel !== 0 && (
+      {/* Mobile zoom instruction - moved below chart */}
+      {isMobile && viewMode === 'ticker' && chartData && chartData.datasets.length > 0 && (
+        <div className={`flex items-center justify-center gap-2 mt-2 py-2 px-3 rounded-md text-xs ${
+          isLight ? 'bg-stone-100 text-stone-600' : 'bg-gray-700 text-gray-300'
+        } border ${isLight ? 'border-stone-200' : 'border-gray-600'}`}>
+          <span>📱</span>
+          <span>Pinch to zoom and pan around the chart</span>
+        </div>
+      )}
+      
+      {/* Range Indicator - Only show for ticker view when zoomed (desktop only) */}
+      {!isMobile && viewMode === 'ticker' && zoomLevel !== 0 && (
         <div className={`text-xs text-center mt-1 ${isLight ? 'text-stone-500' : 'text-gray-400'}`}>
           Showing {yAxisRange.min}% - {yAxisRange.max}% 
           {zoomLevel > 0 && ` (Zoomed In +${zoomLevel})`}
           {zoomLevel < 0 && ` (Zoomed Out ${zoomLevel})`}
+        </div>
+      )}
+
+      {/* Chart Footer Info - Only show for ticker view with selected tickers */}
+      {viewMode === 'ticker' && selectedTickers && selectedTickers.length > 0 && data && data.length > 0 && !isLoading && (
+        <div className="mt-4 space-y-3">
+          {/* Single Row Info */}
+          <div className={`flex flex-wrap items-center justify-between gap-3 text-xs ${isLight ? 'text-stone-500' : 'text-gray-400'}`}>
+            <div>
+              {data.length > 0 ? (
+                `Showing ${data.length} data points over ${
+                  timeRange === '1d' ? '1 day' : 
+                  timeRange === '3d' ? '3 days' : 
+                  timeRange === '1w' ? '1 week' : 
+                  timeRange
+                } for ${selectedTickers.length} ticker${selectedTickers.length > 1 ? 's' : ''}`
+              ) : (
+                'Data Quality: High Confidence - 3 Sources'
+              )}
+            </div>
+            <div>
+              Updated: {new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+            </div>
+          </div>
+
+
+
+          {/* AI Analysis Button */}
+          <ChartAIAnalysisButton
+            chartData={data as ChartData[]}
+            analysisType="ticker"
+            timeRange={timeRange}
+            selectedTickers={selectedTickers}
+            disabled={isLoading}
+          />
         </div>
       )}
     </div>

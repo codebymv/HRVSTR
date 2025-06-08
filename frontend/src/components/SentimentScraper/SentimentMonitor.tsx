@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { TimeRange } from '../../types';
-import { RefreshCw, Loader2, Crown, TrendingUp, BarChart2, MessageSquare, Zap } from 'lucide-react';
+import { RefreshCw, Loader2, Key, TrendingUp, BarChart2, MessageSquare, Zap } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useTier } from '../../contexts/TierContext';
 import { useTierLimits } from '../../hooks/useTierLimits';
 import { useToast } from '../../contexts/ToastContext';
 import { useSentimentUnlock } from '../../hooks/useSentimentUnlock';
@@ -22,6 +23,7 @@ interface SentimentMonitorProps {
 
 const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressChange }) => {
   const { theme } = useTheme();
+  const { tierInfo } = useTier();
   const { showTierLimitDialog, tierLimitDialog, closeTierLimitDialog } = useTierLimits();
   const { info } = useToast();
   
@@ -41,10 +43,12 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
     hasScoresAccess,
     hasRedditAccess,
     handleUnlockComponent: hookHandleUnlockComponent,
+    isFreshUnlock: isFreshUnlockFromUnlockHook,
+    setFreshUnlockState: setFreshUnlockStateFromUnlockHook,
     COMPONENT_COSTS
   } = useSentimentUnlock();
   
-  // Use the sentiment loading hook
+  // Use the sentiment loading hook with fresh unlock integration
   const {
     loadingState,
     loadingProgress,
@@ -61,7 +65,14 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
     clearData,
     setNeedsRefresh,
     handleRefresh,
-  } = useSentimentLoading(hasChartAccess, hasScoresAccess, hasRedditAccess, onLoadingProgressChange);
+  } = useSentimentLoading(
+    hasChartAccess, 
+    hasScoresAccess, 
+    hasRedditAccess, 
+    onLoadingProgressChange,
+    isFreshUnlockFromUnlockHook, // Pass fresh unlock state from unlock hook
+    setFreshUnlockStateFromUnlockHook // Pass fresh unlock state setter
+  );
   
   const isLight = theme === 'light';
   
@@ -73,7 +84,9 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
   const subTextColor = isLight ? 'text-gray-600' : 'text-gray-400';
   
   // Reddit access management (stable to prevent hook cycling)
-  const hasRedditTierAccess = currentTier !== 'free';
+  // Handle tier loading state properly - during loading, assume tier access to avoid showing locks prematurely
+  const isLoadingTier = currentTier === 'free' && !tierInfo; // tier loading check
+  const hasRedditTierAccess = isLoadingTier ? true : currentTier !== 'free';
   const hasFullRedditAccess = hasRedditTierAccess && redditApiKeysConfigured;
   const [stableRedditAccess, setStableRedditAccess] = useState<boolean>(false);
   
@@ -233,7 +246,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
           onClick={() => handleUnlockComponent(componentKey, cost)}
           className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-lg font-medium transition-all hover:from-blue-600 hover:to-purple-700 flex items-center justify-center mx-auto"
         >
-          <Crown className="w-4 h-4 mr-2" />
+          <Key className="w-4 h-4 mr-2" />
           Unlock for {cost} Credits
         </button>
       </div>
@@ -290,7 +303,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
               className={`transition-colors rounded-full p-2 ${
                 // Show different styling based on unlock state
                 (hasChartAccess || hasScoresAccess || hasRedditAccess)
-                  ? `${isLight ? 'bg-blue-500' : 'bg-blue-600'} hover:${isLight ? 'bg-blue-600' : 'bg-blue-700'} text-white` // Unlocked: normal blue
+                  ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white' // Unlocked: gradient purple
                   : 'bg-gray-400 cursor-not-allowed text-gray-200' // Locked: grayed out
               } ${isRefreshing ? 'opacity-50' : ''}`}
               onClick={handleRefresh}
@@ -346,7 +359,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                 </div>
               ) : hasChartAccess ? (
                 <>
-                  {loading.chart || (chartData.length === 0 && !dataErrors.chart) ? (
+                  {loadingState.chart.isLoading || (chartData.length === 0 && !dataErrors.chart) ? (
                     <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden h-96`}>
                       <div className={`${headerBg} p-4`}>
                         <h2 className={`text-lg font-semibold ${textColor}`}>Market Sentiment Chart</h2>
@@ -390,6 +403,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                       onRefresh={handleRefresh}
                       hasRedditAccess={stableRedditAccess}
                       isHistoricalEnabled={true}
+                      timeRange={timeRange}
                       combinedSentiments={combinedSentiments}
                       finvizSentiments={finvizSentiments}
                       yahooSentiments={yahooSentiments}
@@ -422,10 +436,12 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                   error={null}
                   isCheckingAccess={true}
                   hasRedditAccess={stableRedditAccess}
+                  hasRedditTierAccess={hasRedditTierAccess}
+                  redditApiKeysConfigured={redditApiKeysConfigured}
                 />
               ) : hasScoresAccess ? (
                 <>
-                  {loading.sentiment ? (
+                  {loadingState.scores.isLoading ? (
                     <SentimentScoresSection
                       redditSentiments={[]}
                       finvizSentiments={[]}
@@ -437,6 +453,8 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                       error={null}
                       isFreshUnlock={isFreshUnlock.scores}
                       hasRedditAccess={stableRedditAccess}
+                      hasRedditTierAccess={hasRedditTierAccess}
+                      redditApiKeysConfigured={redditApiKeysConfigured}
                     />
                   ) : (
                     <SentimentScoresSection
@@ -444,12 +462,14 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                       finvizSentiments={finvizSentiments}
                       yahooSentiments={yahooSentiments}
                       combinedSentiments={combinedSentiments}
-                      isLoading={loading.sentiment}
+                      isLoading={loadingState.scores.isLoading}
                       loadingProgress={loadingProgress}
                       loadingStage={loadingStage}
                       error={dataErrors.sentiment}
                       isRateLimited={false}
                       hasRedditAccess={stableRedditAccess}
+                      hasRedditTierAccess={hasRedditTierAccess}
+                      redditApiKeysConfigured={redditApiKeysConfigured}
                     />
                   )}
                 </>
@@ -518,7 +538,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                 </div>
               ) : hasRedditAccess ? (
                 <>
-                  {loading.posts || (redditPosts.length === 0 && !dataErrors.posts) ? (
+                  {loadingState.reddit.isLoading || (redditPosts.length === 0 && !dataErrors.posts) ? (
                     <RedditPostsSection
                       posts={[]}
                       isLoading={true}
@@ -530,7 +550,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                   ) : (
                     <RedditPostsSection
                       posts={redditPosts}
-                      isLoading={loading.posts}
+                      isLoading={loadingState.reddit.isLoading}
                       loadingProgress={loadingProgress}
                       loadingStage={loadingStage}
                       error={dataErrors.posts}

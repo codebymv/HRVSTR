@@ -1,5 +1,5 @@
 import React from 'react';
-import { Crown, Zap } from 'lucide-react';
+import { Key, Zap } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 
 interface LockedOverlayProps {
@@ -70,7 +70,7 @@ const LockedOverlay: React.FC<LockedOverlayProps> = ({
             </>
           ) : (
             <>
-              <Crown className="w-4 h-4" />
+              <Key className="w-4 h-4" />
               Unlock for {cost} Credits
             </>
           )}

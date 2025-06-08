@@ -26,6 +26,7 @@ interface TickerSelectorProps {
   isDisabled?: boolean;
   mode?: 'watchlist' | 'manual'; // New prop to determine behavior
   suppressLoadingState?: boolean; // Add prop to suppress internal loading state
+  showSearchBar?: boolean; // Add prop to control search bar visibility
 }
 
 const TickerSelector: React.FC<TickerSelectorProps> = ({
@@ -34,7 +35,8 @@ const TickerSelector: React.FC<TickerSelectorProps> = ({
   className = '',
   isDisabled = false,
   mode = 'watchlist', // Default to watchlist mode
-  suppressLoadingState = false // Default to not suppressing loading state
+  suppressLoadingState = false, // Default to not suppressing loading state
+  showSearchBar = true // Default to showing search bar
 }) => {
   const { theme } = useTheme();
   const { user } = useAuth();
@@ -49,16 +51,16 @@ const TickerSelector: React.FC<TickerSelectorProps> = ({
   const hasAutoSelectedWatchlist = useRef(false);
   const isInitialLoad = useRef(true);
   
-  // Theme-specific styling
+  // Theme-specific styling - unified gradient to match AI insights button
   const inputBg = isLight ? 'bg-stone-200' : 'bg-gray-700';
   const inputBorder = isLight ? 'border-stone-300' : 'border-gray-600';
   const inputText = isLight ? 'text-stone-800' : 'text-white';
-  const watchlistTagBg = isLight ? 'bg-blue-100' : 'bg-blue-900';
-  const watchlistTagText = isLight ? 'text-blue-800' : 'text-blue-200';
-  const watchlistTagBorder = isLight ? 'border-blue-200' : 'border-blue-700';
-  const searchedTagBg = isLight ? 'bg-green-100' : 'bg-green-900';
-  const searchedTagText = isLight ? 'text-green-800' : 'text-green-200';
-  const searchedTagBorder = isLight ? 'border-green-200' : 'border-green-700';
+  const selectedTagBg = 'bg-gradient-to-r from-blue-500 to-purple-600';
+  const selectedTagText = 'text-white';
+  const selectedTagBorder = 'border-blue-500';
+  const unselectedTagBg = isLight ? 'bg-gray-100' : 'bg-gray-700';
+  const unselectedTagText = isLight ? 'text-gray-600' : 'text-gray-400';
+  const unselectedTagBorder = isLight ? 'border-gray-300' : 'border-gray-600';
 
   // Popular tickers for suggestions
   const popularTickers = [
@@ -183,6 +185,11 @@ const TickerSelector: React.FC<TickerSelectorProps> = ({
   };
 
   const getSuggestions = () => {
+    // Don't show popular ticker suggestions until watchlist is fully loaded
+    if (mode === 'watchlist' && isLoadingWatchlist) {
+      return [];
+    }
+    
     if (!inputValue) return popularTickers.slice(0, 6);
     
     return popularTickers.filter(ticker => 
@@ -192,7 +199,12 @@ const TickerSelector: React.FC<TickerSelectorProps> = ({
   };
 
   const getAllTickers = (): TickerItem[] => {
-    // Get popular tickers as default options
+    // Don't show popular tickers until watchlist is fully loaded to prevent color flashing
+    if (mode === 'watchlist' && isLoadingWatchlist) {
+      return [...watchlistTickers, ...searchedTickers];
+    }
+    
+    // Get popular tickers as default options only after watchlist is loaded
     const popularAsSearched: SearchedTicker[] = popularTickers.map(symbol => ({
       symbol,
       isFromWatchlist: false
@@ -252,24 +264,34 @@ const TickerSelector: React.FC<TickerSelectorProps> = ({
         </div>
       )}
 
-      {/* All Available Tickers (toggleable) */}
-      {getAllTickers().length > 0 && (
-        <div>
-
+      {/* All Available Tickers (always show container to prevent layout shift) */}
+      <div>
+        {mode === 'watchlist' && isLoadingWatchlist && !suppressLoadingState && getAllTickers().length === 0 ? (
+          /* Loading state for ticker options */
+          <div className={`flex items-center justify-center p-6 rounded-lg border-2 border-dashed ${
+            isLight ? 'border-stone-300 bg-stone-50' : 'border-gray-600 bg-gray-800'
+          }`}>
+            <div className="text-center">
+              <Loader2 className={`h-5 w-5 animate-spin mx-auto mb-2 ${isLight ? 'text-stone-600' : 'text-gray-400'}`} />
+              <p className={`text-sm ${isLight ? 'text-stone-600' : 'text-gray-400'}`}>
+                Loading ticker options...
+              </p>
+              <p className={`text-xs mt-1 ${isLight ? 'text-stone-500' : 'text-gray-500'}`}>
+                Syncing with your watchlist
+              </p>
+            </div>
+          </div>
+        ) : getAllTickers().length > 0 ? (
+          /* Ticker badges */
           <div className="flex flex-wrap gap-2">
             {getAllTickers().map(ticker => {
               const isWatchlist = ticker.isFromWatchlist;
               const isSelected = selectedTickers.includes(ticker.symbol);
               
-              // Base colors for ticker type
-              const baseTagBg = isWatchlist ? watchlistTagBg : searchedTagBg;
-              const baseTagText = isWatchlist ? watchlistTagText : searchedTagText;
-              const baseTagBorder = isWatchlist ? watchlistTagBorder : searchedTagBorder;
-              
-              // Apply selection styling
-              const tagBg = isSelected ? baseTagBg : (isLight ? 'bg-gray-100' : 'bg-gray-700');
-              const tagText = isSelected ? baseTagText : (isLight ? 'text-gray-600' : 'text-gray-400');
-              const tagBorder = isSelected ? baseTagBorder : (isLight ? 'border-gray-300' : 'border-gray-600');
+              // Unified color scheme - no green to prevent flashing
+              const tagBg = isSelected ? selectedTagBg : unselectedTagBg;
+              const tagText = isSelected ? selectedTagText : unselectedTagText;
+              const tagBorder = isSelected ? selectedTagBorder : unselectedTagBorder;
               
               return (
                 <button
@@ -292,11 +314,11 @@ const TickerSelector: React.FC<TickerSelectorProps> = ({
               );
             })}
           </div>
-        </div>
-      )}
+        ) : null}
+      </div>
 
-      {/* Add Ticker Input - hide during coordinated loading */}
-      {!suppressLoadingState && (
+      {/* Add Ticker Input - hide during coordinated loading or if showSearchBar is false */}
+      {!suppressLoadingState && showSearchBar && (
         <div className="space-y-2">
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -339,7 +361,7 @@ const TickerSelector: React.FC<TickerSelectorProps> = ({
             <span>Watchlist tickers</span>
           </div>
           <div className="flex items-center gap-1">
-            <Search className="h-3 w-3 text-green-500" />
+            <Search className="h-3 w-3 text-blue-500" />
             <span>Searched tickers</span>
           </div>
         </div>

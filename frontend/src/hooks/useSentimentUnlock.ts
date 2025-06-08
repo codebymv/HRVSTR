@@ -46,29 +46,56 @@ export const useSentimentUnlock = () => {
   const [isCheckingSessions, setIsCheckingSessions] = useState(true);
 
   // Track fresh unlocks vs cache loads for appropriate loading UI
-  const [isFreshUnlock, setIsFreshUnlock] = useState<FreshUnlockState>({
-    success: false,
-    isExistingSession: false,
-    isFreshUnlock: false
+  const [isFreshUnlock, setIsFreshUnlock] = useState<{
+    chart: boolean;
+    scores: boolean;
+    reddit: boolean;
+  }>({
+    chart: false,
+    scores: false,
+    reddit: false
   });
 
   // Track recently unlocked components to prevent session checker from overriding them
   const [recentlyUnlocked, setRecentlyUnlocked] = useState<Set<string>>(new Set());
 
-  // Get tier info
+  // Get tier info - handle loading state properly
   const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
+  const isLoadingTier = tierInfo === null;
 
   // Check existing sessions for all users
   useEffect(() => {
     if (!tierInfo) return;
     
     const checkExistingSessions = async () => {
+      const timeoutId = setTimeout(() => {
+        console.warn('⚠️ Session check timeout - forcing completion');
+        setIsCheckingSessions(false);
+      }, 10000); // 10 second timeout
+      
       setIsCheckingSessions(true);
       try {
         const currentTierValue = tierInfo?.tier?.toLowerCase() || 'free';
-        const chartSession = await checkComponentAccess('chart', currentTierValue);
-        const scoresSession = await checkComponentAccess('scores', currentTierValue);
-        const redditSession = await checkComponentAccess('reddit', currentTierValue);
+        
+        // Run session checks with individual timeouts and fallbacks
+        const sessionPromises = [
+          checkComponentAccess('chart', currentTierValue).catch(() => null),
+          checkComponentAccess('scores', currentTierValue).catch(() => null),
+          checkComponentAccess('reddit', currentTierValue).catch(() => null)
+        ];
+        
+        // Race against timeout
+        const sessionResults = await Promise.race([
+          Promise.all(sessionPromises),
+          new Promise<null[]>((resolve) => 
+            setTimeout(() => {
+              console.warn('⚠️ Individual session checks timed out');
+              resolve([null, null, null]);
+            }, 8000)
+          )
+        ]);
+        
+        const [chartSession, scoresSession, redditSession] = sessionResults;
 
         const newUnlockedState = {
           chart: !!chartSession || recentlyUnlocked.has('chart'),
@@ -89,8 +116,23 @@ export const useSentimentUnlock = () => {
         setUnlockedComponents(newUnlockedState);
         console.log('🔍 SENTIMENT - Updated unlockedComponents state:', newUnlockedState);
 
-        const sessions = await getAllUnlockSessions(currentTierValue);
-        setActiveSessions(sessions);
+        // Get all sessions with timeout protection
+        try {
+          const sessions = await Promise.race([
+            getAllUnlockSessions(currentTierValue),
+            new Promise<[]>((resolve) => 
+              setTimeout(() => {
+                console.warn('⚠️ getAllUnlockSessions timed out, using empty array');
+                resolve([]);
+              }, 5000)
+            )
+          ]);
+          setActiveSessions(sessions);
+        } catch (error) {
+          console.warn('Failed to get all sessions:', error);
+          setActiveSessions([]);
+        }
+        
       } catch (error) {
         console.warn('Database session check failed:', error);
         // Don't override recently unlocked components even on error
@@ -101,14 +143,31 @@ export const useSentimentUnlock = () => {
         }));
         setActiveSessions([]);
       } finally {
+        clearTimeout(timeoutId);
         setIsCheckingSessions(false);
       }
     };
 
-    checkExistingSessions();
-    const interval = setInterval(checkExistingSessions, 120000); // Cut frequency in half: was 60s, now 120s
-    return () => clearInterval(interval);
-  }, [tierInfo, recentlyUnlocked]);
+    // Initial check with delay to prevent race with tier loading
+    const initialDelay = setTimeout(() => {
+      checkExistingSessions();
+    }, 500);
+
+    // Reduced frequency and added cleanup protection
+    const interval = setInterval(() => {
+      // Don't run if already checking to prevent overlap
+      if (!isCheckingSessions) {
+        checkExistingSessions();
+      }
+    }, 180000); // Increased to 3 minutes to reduce load
+    
+    return () => {
+      clearTimeout(initialDelay);
+      clearInterval(interval);
+      // Force complete any hanging checks
+      setIsCheckingSessions(false);
+    };
+  }, [tierInfo?.tier, recentlyUnlocked]); // Changed dependency to be more specific
 
   // Handlers for unlocking individual components
   const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number): Promise<FreshUnlockState> => {
@@ -171,8 +230,11 @@ export const useSentimentUnlock = () => {
         
         // Set fresh unlock flag for harvest loading (when credits are actually spent)
         if (!data.existingSession) {
-          setFreshUnlockState(component, true);
           console.log(`🌟 SENTIMENT DASHBOARD - Set fresh unlock flag for ${component} (credits spent)`);
+          setIsFreshUnlock(prev => ({
+            ...prev,
+            [component]: true
+          }));
         }
         
         // Store session in localStorage for backward compatibility only

@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
-import { ChartData } from '../../types';
+import { ChartData, TimeRange } from '../../types';
 import { BarChart2, Loader2, MessageSquare, TrendingUp, Globe, Activity, Shield, AlertTriangle, TrendingDown, CheckCircle2, Database, Zap, ArrowUp, ArrowDown, Minus } from 'lucide-react';
 import { Bar } from 'react-chartjs-2';
 import ProgressBar from '../ProgressBar';
+import ChartAIAnalysisButton from './ChartAIAnalysisButton';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -24,6 +25,7 @@ interface SentimentChartProps {
   loadingProgress?: number;
   loadingStage?: string;
   hasRedditAccess?: boolean;
+  timeRange?: TimeRange;
 }
 
 const SentimentChart: React.FC<SentimentChartProps> = ({ 
@@ -31,7 +33,8 @@ const SentimentChart: React.FC<SentimentChartProps> = ({
   isLoading = false, 
   loadingProgress = 0,
   loadingStage = 'Generating chart...',
-  hasRedditAccess = true
+  hasRedditAccess = true,
+  timeRange = '1w'
 }) => {
   // Get theme context
   const { theme } = useTheme();
@@ -601,56 +604,26 @@ const SentimentChart: React.FC<SentimentChartProps> = ({
         )}
       </div>
 
-      {/* Enhanced Footer with Source Distribution and Key Metrics */}
+      {/* Enhanced Footer with Key Metrics */}
       <div className="mt-4 space-y-3">
-        {/* Source Distribution */}
-        <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center space-x-2">
-            <span className={`flex items-center space-x-1 rounded-full px-2 py-0.5 ${
-              hasRedditAccess 
-                ? 'bg-stone-100 dark:bg-gray-700' 
-                : 'bg-gray-200 dark:bg-gray-800 opacity-50'
-            }`}>
-              <MessageSquare size={12} className={hasRedditAccess ? "text-orange-500" : "text-gray-400"} />
-              <span className={hasRedditAccess ? "" : "text-gray-400"}>
-                {sourcePercentages.reddit}%
-              </span>
-              {!hasRedditAccess && (
-                <span className="text-xs text-gray-400" title="Pro feature">🔒</span>
-              )}
-            </span>
-            <span className="flex items-center space-x-1 bg-stone-100 dark:bg-gray-700 rounded-full px-2 py-0.5">
-              <TrendingUp size={12} className="text-amber-500" />
-              <span>{sourcePercentages.finviz}%</span>
-            </span>
-            <span className="flex items-center space-x-1 bg-stone-100 dark:bg-gray-700 rounded-full px-2 py-0.5">
-              <Globe size={12} className="text-blue-500" />
-              <span>{sourcePercentages.yahoo}%</span>
-            </span>
+        {/* Market Info - Single Row */}
+        <div className={`flex flex-wrap items-center justify-between gap-3 text-xs ${isLight ? 'text-stone-500' : 'text-gray-400'}`}>
+          <div>
+            {marketInsights.totalDataPoints.toLocaleString()} total data points • Current: {marketInsights.avgBullish}% Bullish, {marketInsights.avgBearish}% Bearish
           </div>
-          <span className={`text-xs ${isLight ? 'text-stone-500' : 'text-gray-400'}`}>
-            {marketInsights.totalDataPoints.toLocaleString()} total data points
-          </span>
+          <div>
+            Updated: {new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+          </div>
         </div>
 
-        {/* Key Insights Summary */}
-        {!showNoDataMessage && !isLoading && (
-          <div className={`text-xs ${isLight ? 'text-stone-600' : 'text-gray-400'} bg-stone-50 dark:bg-gray-800/50 rounded-lg p-3`}>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <div>
-                <span className="font-medium">Current: </span>
-                <span>{marketInsights.avgBullish}% Bullish, {marketInsights.avgBearish}% Bearish</span>
-              </div>
-              <div>
-                <span className="font-medium">Volatility: </span>
-                <span>{marketInsights.volatility}% (Last Period)</span>
-              </div>
-              <div>
-                <span className="font-medium">Updated: </span>
-                <span>{new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
-              </div>
-            </div>
-          </div>
+        {/* AI Analysis Button */}
+        {!showNoDataMessage && !isLoading && data && data.length > 0 && (
+          <ChartAIAnalysisButton
+            chartData={data}
+            analysisType="market"
+            timeRange={timeRange}
+            disabled={isLoading}
+          />
         )}
       </div>
     </div>

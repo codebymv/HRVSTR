@@ -52,7 +52,7 @@ const EarningsMonitorHeader: React.FC<EarningsMonitorHeaderProps> = ({
         <button 
           className={`transition-colors rounded-full p-2 ${
             hasUnlockedComponents
-              ? `${isLight ? 'bg-blue-500' : 'bg-blue-600'} hover:${isLight ? 'bg-blue-600' : 'bg-blue-700'} text-white`
+              ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white'
               : 'bg-gray-400 cursor-not-allowed text-gray-200'
           } ${isLoading ? 'opacity-50' : ''}`}
           onClick={onRefresh}

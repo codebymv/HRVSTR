@@ -22,6 +22,7 @@ import ProfilePage from './Settings/tabs/ProfilePage';
 import PreferencesPage from './Settings/tabs/PreferencesPage';
 import BillingPage from './Settings/tabs/BillingPage';
 import { useAuth } from '../contexts/AuthContext';
+import { useSessionExpirationNotifications } from '../hooks/useSessionExpirationNotifications';
 
 // Component for unauthorized access
 const UnauthorizedPage = () => (
@@ -42,6 +43,12 @@ const AppContent = () => {
   // Get the theme for conditional styling
   const { theme } = useTheme();
   const { isAuthenticated, loading } = useAuth();
+  
+  // Enable session expiration notifications for authenticated users
+  useSessionExpirationNotifications({ 
+    enabled: isAuthenticated && !loading,
+    pollingInterval: 30000 // Check every 30 seconds
+  });
   
   // Apply theme-specific classes
   const bgColor = theme === 'dark' ? 'bg-gray-950' : 'bg-stone-200';
