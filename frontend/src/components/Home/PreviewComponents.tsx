@@ -50,63 +50,66 @@ export const SentimentPreview: React.FC = () => {
   const scoreValue = Math.round(Math.abs(mockSentiment.score) * 100);
 
   return (
-    <div className={`${cardBgColor} rounded-lg p-4 border ${borderColor} shadow-sm hover:shadow-md transition-all duration-200 h-64 flex flex-col`}>
-      {/* Header with ticker and sentiment */}
-      <div className="flex items-center justify-between mb-3">
+    <div className={`${cardBgColor} rounded-lg border ${borderColor} shadow-sm hover:shadow-md transition-all duration-200 h-64 flex flex-col`}>
+      <div className="flex items-center justify-between p-4 border-b ${borderColor}">
         <div className="flex items-center space-x-2">
-          <h3 className={`text-xl font-bold ${headingTextColor}`}>{mockSentiment.ticker}</h3>
-          {getSentimentIcon(mockSentiment.score)}
+          <Activity size={20} className="text-purple-600" />
+          <h3 className={`text-lg font-semibold ${headingTextColor}`}>Sentiment Score</h3>
         </div>
-        <div className="text-right">
-          <div className={`text-xs font-medium ${subTextColor} mb-1`}>Sentiment Score</div>
-          <div className={`text-2xl font-bold ${sentimentColor}`}>
-            {scoreValue}%
+        <span className={`text-sm ${subTextColor}`}>Bullish • 78% confidence</span>
+      </div>
+
+      <div className="p-4 flex-1 flex flex-col">
+        {/* Header with ticker, sentiment badge, and score */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-3">
+            <h3 className={`text-xl font-bold ${headingTextColor}`}>{mockSentiment.ticker}</h3>
+            <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${badgeBgColor}`}>
+              <span className={sentimentColor}>{getSentimentDescription(mockSentiment.score)}</span>
+            </div>
           </div>
-        </div>
-      </div>
-
-      {/* Sentiment description */}
-      <div className="mb-3">
-        <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${badgeBgColor}`}>
-          <span className={sentimentColor}>{getSentimentDescription(mockSentiment.score)}</span>
-          <span className={`ml-2 ${subTextColor}`}>• {mockSentiment.confidence}% confidence</span>
-        </div>
-      </div>
-
-      {/* Price information */}
-      <div className="mb-3 p-2 rounded-lg bg-opacity-50 flex-1" style={{backgroundColor: isLight ? '#f8f9fa' : '#374151'}}>
-        <div className="flex items-center justify-between">
-          <span className={`text-xs ${subTextColor}`}>Current Price</span>
           <div className="text-right">
-            <span className={`text-sm font-semibold ${headingTextColor}`}>
-              ${mockSentiment.price.toFixed(2)}
-            </span>
-            <div className="flex items-center justify-end mt-1">
-              <ArrowUpRight size={12} className="text-green-500" />
-              <span className={`text-xs font-medium ml-1 text-green-500`}>
-                {mockSentiment.changePercent}%
-              </span>
+            <div className={`text-2xl font-bold ${sentimentColor}`}>
+              {scoreValue}%
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Data source and summary */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <div className="h-2 w-2 rounded-full bg-green-500"></div>
-          <span className={`text-xs ${subTextColor}`}>Live • {mockSentiment.postCount + mockSentiment.commentCount} discussions</span>
+        {/* Price information */}
+        <div className="mb-4 p-3 rounded-lg bg-opacity-50" style={{backgroundColor: isLight ? '#f8f9fa' : '#374151'}}>
+          <div className="flex items-center justify-between">
+            <span className={`text-xs ${subTextColor}`}>Current Price</span>
+            <div className="text-right">
+              <span className={`text-sm font-semibold ${headingTextColor}`}>
+                ${mockSentiment.price.toFixed(2)}
+              </span>
+              <div className="flex items-center justify-end mt-1">
+                <ArrowUpRight size={12} className="text-green-500" />
+                <span className={`text-xs font-medium ml-1 text-green-500`}>
+                  {mockSentiment.changePercent}%
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
-        <Info size={12} className={`${subTextColor}`} />
-      </div>
 
-      {/* Progress indicator */}
-      <div className="mt-2">
-        <div className={`h-1.5 ${isLight ? 'bg-gray-200' : 'bg-gray-700'} rounded-full overflow-hidden`}>
-          <div 
-            className={`h-full transition-all duration-500 bg-green-500`}
-            style={{ width: `${Math.min(100, Math.max(5, scoreValue))}%` }}
-          ></div>
+        {/* Data source and summary */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center space-x-2">
+            <div className="h-2 w-2 rounded-full bg-green-500"></div>
+            <span className={`text-xs ${subTextColor}`}>Live • {mockSentiment.postCount + mockSentiment.commentCount} discussions</span>
+          </div>
+          <Info size={12} className={`${subTextColor}`} />
+        </div>
+
+        {/* Progress indicator */}
+        <div className="mt-auto">
+          <div className={`h-1.5 ${isLight ? 'bg-gray-200' : 'bg-gray-700'} rounded-full overflow-hidden`}>
+            <div 
+              className={`h-full transition-all duration-500 bg-green-500`}
+              style={{ width: `${Math.min(100, Math.max(5, scoreValue))}%` }}
+            ></div>
+          </div>
         </div>
       </div>
     </div>
@@ -179,7 +182,7 @@ export const EarningsPreview: React.FC = () => {
     <div className={`${cardBgColor} rounded-lg border ${borderColor} shadow-sm hover:shadow-md transition-all duration-200 h-64 flex flex-col`}>
       <div className="flex items-center justify-between p-4 border-b ${borderColor}">
         <div className="flex items-center space-x-2">
-          <TrendingUp size={20} className="text-blue-500" />
+          <TrendingUp size={20} className="text-purple-600" />
           <h3 className={`text-lg font-semibold ${textColor}`}>Earnings Analysis</h3>
         </div>
         <span className={`text-sm ${subTextColor}`}>AI Insights</span>
@@ -277,7 +280,7 @@ export const SECFilingsPreview: React.FC = () => {
     <div className={`${cardBgColor} rounded-lg border ${borderColor} shadow-sm hover:shadow-md transition-all duration-200 h-64 flex flex-col`}>
       <div className="flex items-center justify-between p-4 border-b ${borderColor}">
         <div className="flex items-center space-x-2">
-          <Building2 size={20} className="text-blue-500" />
+          <Building2 size={20} className="text-purple-600" />
           <h3 className={`text-lg font-semibold ${textColor}`}>Institutional Holdings</h3>
         </div>
         <span className={`text-sm ${subTextColor}`}>Latest 13F</span>

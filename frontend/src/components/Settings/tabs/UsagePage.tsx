@@ -50,6 +50,7 @@ const UsagePage: React.FC = () => {
   const bgColor = isLight ? 'bg-stone-200' : 'bg-gray-950';
   const textColor = isLight ? 'text-stone-700' : 'text-white';
   const secondaryTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
+  const buttonBgColor = isLight ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700' : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700';
 
   return (
     <div className={`${bgColor} min-h-screen p-4 lg:p-8`}>

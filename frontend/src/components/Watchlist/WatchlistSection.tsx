@@ -186,7 +186,7 @@ const WatchlistSection: React.FC<WatchlistSectionProps> = ({
               <div className="w-full max-w-sm mt-4 mb-2">
                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                   <div 
-                    className="bg-blue-500 h-2 rounded-full transition-all duration-300" 
+                    className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full transition-all duration-300" 
                     style={{ width: `${loadingProgress}%` }}
                   ></div>
                 </div>
@@ -304,7 +304,7 @@ const WatchlistSection: React.FC<WatchlistSectionProps> = ({
                   <div className="flex flex-col items-center space-y-2 w-full max-w-48">
                     <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                       <div 
-                        className="bg-blue-500 h-2 rounded-full transition-all duration-300" 
+                        className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full transition-all duration-300" 
                         style={{ width: `${Math.min((visibleWatchlist.length / watchlistLimit) * 100, 100)}%` }}
                       ></div>
                     </div>

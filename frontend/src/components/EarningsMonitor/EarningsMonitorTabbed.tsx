@@ -131,7 +131,7 @@ const EarningsMonitorTabbed: React.FC<EarningsMonitorTabbedProps> = ({ onLoading
   const textColor = isLight ? 'text-stone-900' : 'text-white';
   const subTextColor = isLight ? 'text-gray-600' : 'text-gray-400';
   
-  const tabActiveBg = isLight ? 'bg-blue-500' : 'bg-blue-600';
+  const tabActiveBg = 'bg-gradient-to-r from-blue-500 to-purple-600';
   const tabActiveText = 'text-white';
   const tabInactiveBg = isLight ? 'bg-gray-100' : 'bg-gray-800';
   const tabInactiveText = isLight ? 'text-gray-700' : 'text-gray-300';

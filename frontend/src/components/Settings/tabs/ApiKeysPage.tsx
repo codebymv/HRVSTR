@@ -41,7 +41,7 @@ const ApiKeysPage: React.FC = () => {
   const inputBgColor = isLight ? 'bg-white' : 'bg-gray-800';
   const inputTextColor = isLight ? 'text-stone-700' : 'text-gray-200';
   const labelColor = isLight ? 'text-stone-700' : 'text-white';
-  const buttonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
+  const buttonBgColor = isLight ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700' : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700';
 
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([
     { 

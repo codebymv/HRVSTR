@@ -79,7 +79,7 @@ const BillingPage: React.FC = () => {
   const secondaryTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
   const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-900';
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
-  const buttonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
+  const buttonBgColor = isLight ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700' : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700';
   const dangerButtonBg = isLight ? 'bg-red-500 hover:bg-red-600' : 'bg-red-600 hover:bg-red-700';
 
   useEffect(() => {
@@ -490,7 +490,7 @@ const BillingPage: React.FC = () => {
                           </p>
                           <p className={`text-sm ${secondaryTextColor}`}>
                             Expires {method.expMonth}/{method.expYear}
-                            {method.isDefault && <span className="text-blue-500 ml-2">• Default</span>}
+                            {method.isDefault && <span className="text-purple-600 ml-2">• Default</span>}
                           </p>
                         </div>
                       </div>

@@ -20,7 +20,7 @@ const InterfacePage: React.FC = () => {
   const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-900';
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
   const descriptionColor = isLight ? 'text-stone-600' : 'text-gray-400';
-  const buttonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
+  const buttonBgColor = isLight ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700' : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700';
 
   const [selectedTheme, setSelectedTheme] = useState<string>(theme);
   const [showTickers, setShowTickers] = useState<boolean>(true);

@@ -49,7 +49,7 @@ const ProfilePage: React.FC = () => {
   const secondaryTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
   const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-900';
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
-  const accentColor = isLight ? 'text-blue-600' : 'text-blue-400';
+  const accentColor = isLight ? 'text-purple-600' : 'text-purple-400';
 
   // Helper function to get tier icon and color
   const getTierInfo = (tier: string) => {
@@ -203,7 +203,7 @@ const ProfilePage: React.FC = () => {
             </div>
             <div className="flex-1">
               <h1 className="text-2xl font-bold">
-                <span className="bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent">
+                <span className="bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
                   {profileData?.name || 'User Profile'}
                 </span>
               </h1>
@@ -236,7 +236,7 @@ const ProfilePage: React.FC = () => {
             {/* Account Creation */}
             <div className="space-y-2">
               <div className="flex items-center space-x-2">
-                <Calendar className="w-4 h-4 text-blue-500" />
+                <Calendar className="w-4 h-4 text-purple-600" />
                 <h3 className={`font-medium ${textColor}`}>Account Created</h3>
               </div>
               <p className={secondaryTextColor}>

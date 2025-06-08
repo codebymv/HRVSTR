@@ -50,7 +50,7 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
   const inputTextColor = isLight ? 'text-stone-700' : 'text-gray-200';
   const labelColor = isLight ? 'text-stone-700' : 'text-white';
   const descriptionColor = isLight ? 'text-stone-600' : 'text-gray-400';
-  const buttonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
+  const buttonBgColor = isLight ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700' : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700';
 
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([
     { 
@@ -368,7 +368,7 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
                   type="password"
                   value={apiKey.key}
                   onChange={(e) => handleApiKeyChange(index, e.target.value)}
-                  className={`w-full ${inputBgColor} border ${borderColor} rounded px-4 py-2 ${inputTextColor} focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                  className={`w-full ${inputBgColor} border ${borderColor} rounded px-4 py-2 ${inputTextColor} focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent`}
                   placeholder={`Enter your ${apiKey.name.replace(/_/g, ' ')} here...`}
                 />
                 <p className={`text-sm ${secondaryTextColor}`}>{apiKey.description}</p>
@@ -450,7 +450,7 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
                           disabled={source.requiresApiKey && !hasRequiredKey}
                           className="sr-only peer"
                         />
-                        <div className={`relative w-11 h-6 ${source.requiresApiKey && !hasRequiredKey ? 'bg-gray-600' : 'bg-gray-700'} rounded-full peer peer-focus:ring-2 peer-focus:ring-blue-500 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 ${source.requiresApiKey && !hasRequiredKey ? 'opacity-50' : ''}`}></div>
+                        <div className={`relative w-11 h-6 ${isLight ? 'bg-stone-400' : 'bg-gray-700'} rounded-full peer peer-focus:ring-2 peer-focus:ring-purple-500 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600 ${source.requiresApiKey && !hasRequiredKey ? 'opacity-50' : ''}`}></div>
                         <span className={`ml-3 text-sm font-medium ${textColor}`}>
                           {isEnabled ? 'Enabled' : 'Disabled'}
                         </span>
@@ -478,7 +478,7 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
                 Cache Duration
               </label>
               <select
-                className={`${inputBgColor} w-full px-4 py-2 rounded-lg ${inputTextColor} text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-1`}
+                className={`${inputBgColor} w-full px-4 py-2 rounded-lg ${inputTextColor} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 mb-1`}
                 defaultValue="5"
               >
                 <option value="1">1 Minute</option>
@@ -519,7 +519,7 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
                     key={theme.id}
                     className={`border rounded-lg p-3 cursor-pointer transition-colors ${
                       selectedTheme === theme.id 
-                        ? 'border-blue-500 bg-blue-900/30 hover:bg-blue-900/20'
+                        ? 'border-purple-500 bg-purple-900/30 hover:bg-purple-900/20'
                         : isLight 
                           ? 'bg-stone-400 hover:bg-stone-500 border-stone-500'
                           : 'border-gray-700 bg-gray-800 hover:bg-gray-700'
@@ -531,7 +531,7 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
                     }}
                   >
                     <div className="flex items-center mb-2">
-                      <div className={`w-4 h-4 rounded-full ${selectedTheme === theme.id ? 'bg-blue-500' : 'bg-gray-600'}`}></div>
+                      <div className={`w-4 h-4 rounded-full ${selectedTheme === theme.id ? 'bg-purple-500' : 'bg-gray-600'}`}></div>
                       {theme.id === 'dark' ? <Moon size={16} className="ml-2" /> : <Sun size={16} className="ml-2" />}
                       <span className={`ml-2 font-medium ${textColor}`}>{theme.name}</span>
                     </div>
@@ -549,7 +549,7 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
               <select
                 value={defaultTimeRange}
                 onChange={(e) => setDefaultTimeRange(e.target.value)}
-                className={`${inputBgColor} w-full px-4 py-2 rounded-lg ${inputTextColor} text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-1`}
+                className={`${inputBgColor} w-full px-4 py-2 rounded-lg ${inputTextColor} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 mb-1`}
               >
                 {timeRanges.map((range) => (
                   <option key={range.value} value={range.value}>
@@ -575,7 +575,7 @@ const Settings: React.FC<SettingsProps> = ({ onLoadingProgressChange }) => {
                     onChange={() => setShowTickers(!showTickers)}
                     className="sr-only peer"
                   />
-                  <div className={`relative w-11 h-6 ${isLight ? 'bg-stone-400' : 'bg-gray-700'} rounded-full peer peer-focus:ring-2 peer-focus:ring-blue-500 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600`}></div>
+                  <div className={`relative w-11 h-6 ${isLight ? 'bg-stone-400' : 'bg-gray-700'} rounded-full peer peer-focus:ring-2 peer-focus:ring-purple-500 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600`}></div>
                   <span className={`ml-3 text-sm font-medium ${textColor}`}>
                     {showTickers ? 'Visible' : 'Hidden'}
                   </span>

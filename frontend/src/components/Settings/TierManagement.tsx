@@ -30,7 +30,7 @@ const TierManagement: React.FC = () => {
   const secondaryTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
   const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-900';
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
-  const buttonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
+  const buttonBgColor = isLight ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700' : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700';
 
   const handleAddCredits = async (amount: number) => {
     setAddingCredits(true);
@@ -104,7 +104,7 @@ const TierManagement: React.FC = () => {
     return (
       <div className={`${cardBgColor} rounded-lg p-6 mb-8 border ${borderColor}`}>
         <div className="flex items-center justify-center py-8">
-          <RefreshCw className="w-6 h-6 animate-spin text-blue-500 mr-2" />
+          <RefreshCw className="w-6 h-6 animate-spin text-purple-600 mr-2" />
           <span className={textColor}>Loading tier information...</span>
         </div>
       </div>
@@ -164,7 +164,7 @@ const TierManagement: React.FC = () => {
           </Link>
           <button
             onClick={() => navigate('/help')}
-            className="ml-3 text-sm text-blue-500 hover:text-blue-600 flex items-center"
+            className="ml-3 text-sm text-blue-500 hover:text-blue-700 flex items-center"
           >
             See Pricing & Credits help
             <ArrowRight className="w-4 h-4 ml-1" />
@@ -213,7 +213,7 @@ const TierManagement: React.FC = () => {
           </div>
           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-1">
             <div 
-              className={`h-2 rounded-full ${getProgressColor(tierInfo.credits.remaining, tierInfo.credits.monthly)}`}
+              className="h-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-600"
               style={{ width: `${Math.min(usagePercentage, 100)}%` }}
             />
           </div>
@@ -231,7 +231,7 @@ const TierManagement: React.FC = () => {
             {tierInfo.usage.watchlist.limit !== -1 && (
               <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-1">
                 <div 
-                  className="bg-blue-500 h-2 rounded-full"
+                  className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full"
                   style={{ width: `${(tierInfo.usage.watchlist.current / tierInfo.usage.watchlist.limit) * 100}%` }}
                 />
               </div>

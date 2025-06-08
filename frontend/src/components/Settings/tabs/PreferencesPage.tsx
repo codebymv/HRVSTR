@@ -20,7 +20,7 @@ const PreferencesPage: React.FC = () => {
   const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-900';
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
   const descriptionColor = isLight ? 'text-stone-600' : 'text-gray-400';
-  const buttonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
+  const buttonBgColor = isLight ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700' : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700';
 
   const [selectedTheme, setSelectedTheme] = useState<string>(theme);
   const [showTickers, setShowTickers] = useState<boolean>(true);
@@ -89,7 +89,7 @@ const PreferencesPage: React.FC = () => {
       <div className="max-w-6xl mx-auto">
         <div className="mb-6 lg:mb-8">
           <h1 className={`text-2xl lg:text-3xl font-bold ${textColor} mb-2 flex items-center`}>
-            <Settings className="w-6 h-6 mr-3" />
+            <Settings className="w-6 h-6 mr-3 text-purple-600" />
             Preferences
           </h1>
           <p className={secondaryTextColor}>Customize your application preferences and behavior</p>
@@ -99,7 +99,7 @@ const PreferencesPage: React.FC = () => {
         <div className={`${cardBgColor} rounded-lg p-6 mb-8 border ${borderColor}`}>
           <div className={`p-4 border-b ${borderColor}`}>
             <h2 className={`text-lg font-semibold ${textColor} flex items-center`}>
-              <Monitor className="w-5 h-5 mr-2" />
+              <Monitor className="w-5 h-5 mr-2 text-purple-600" />
               Display & Interface
               <Link to="/help/Implementations/Settings/user-preferences" className="ml-2 text-blue-500 hover:text-blue-700">
                 <HelpCircle size={18} />
@@ -121,7 +121,7 @@ const PreferencesPage: React.FC = () => {
                     key={themeOption.id}
                     className={`border rounded-lg p-4 cursor-pointer transition-colors ${
                       selectedTheme === themeOption.id 
-                        ? 'border-blue-500 bg-blue-900/30 hover:bg-blue-900/20'
+                        ? 'border-purple-500 bg-purple-900/30 hover:bg-purple-900/20'
                         : isLight 
                           ? 'bg-stone-400 hover:bg-stone-500 border-stone-500'
                           : 'border-gray-700 bg-gray-800 hover:bg-gray-700'
@@ -133,7 +133,7 @@ const PreferencesPage: React.FC = () => {
                     }}
                   >
                     <div className="flex items-center mb-2">
-                      <div className={`w-4 h-4 rounded-full ${selectedTheme === themeOption.id ? 'bg-blue-500' : 'bg-gray-600'}`}></div>
+                      <div className={`w-4 h-4 rounded-full ${selectedTheme === themeOption.id ? 'bg-purple-500' : 'bg-gray-600'}`}></div>
                       {themeOption.id === 'dark' ? <Moon size={16} className="ml-2" /> : <Sun size={16} className="ml-2" />}
                       <span className={`ml-2 font-medium ${textColor}`}>{themeOption.name}</span>
                     </div>
@@ -151,7 +151,7 @@ const PreferencesPage: React.FC = () => {
               <select
                 value={defaultTimeRange}
                 onChange={(e) => setDefaultTimeRange(e.target.value)}
-                className={`${cardBgColor} w-full px-4 py-2 rounded-lg ${textColor} text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 border ${borderColor}`}
+                className={`${cardBgColor} w-full px-4 py-2 rounded-lg ${textColor} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 border ${borderColor}`}
               >
                 {timeRanges.map((range) => (
                   <option key={range.value} value={range.value}>
@@ -177,7 +177,7 @@ const PreferencesPage: React.FC = () => {
                     onChange={() => setShowTickers(!showTickers)}
                     className="sr-only peer"
                   />
-                  <div className={`relative w-11 h-6 ${isLight ? 'bg-stone-400' : 'bg-gray-700'} rounded-full peer peer-focus:ring-2 peer-focus:ring-blue-500 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600`}></div>
+                  <div className={`relative w-11 h-6 ${isLight ? 'bg-stone-400' : 'bg-gray-700'} rounded-full peer peer-focus:ring-2 peer-focus:ring-purple-500 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600`}></div>
                   <span className={`ml-3 text-sm font-medium ${textColor}`}>
                     {showTickers ? 'Visible' : 'Hidden'}
                   </span>

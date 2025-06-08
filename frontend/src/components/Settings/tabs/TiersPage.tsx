@@ -24,7 +24,7 @@ const TiersPage: React.FC = () => {
   const secondaryTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
   const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-900';
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
-  const buttonBgColor = isLight ? 'bg-blue-500 hover:bg-blue-600' : 'bg-blue-600 hover:bg-blue-700';
+  const buttonBgColor = isLight ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700' : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700';
 
   const handlePurchaseClick = async (tierName: string, isYearly: boolean = false) => {
     if (!token) {
@@ -169,7 +169,7 @@ const TiersPage: React.FC = () => {
               ? 'bg-green-800/30 border-green-700 text-green-400' 
               : upgradeMessage.includes('failed') || upgradeMessage.includes('error')
                 ? 'bg-red-800/30 border-red-700 text-red-400'
-                : 'bg-blue-800/30 border-blue-700 text-blue-400'
+                : 'bg-purple-800/30 border-purple-700 text-purple-400'
           }`}>
             <div className="flex items-center">
               {upgradeMessage.includes('Successfully') ? (

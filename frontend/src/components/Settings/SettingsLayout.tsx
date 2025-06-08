@@ -26,7 +26,7 @@ const SettingsLayout: React.FC = () => {
   const sidebarBgColor = isLight ? 'bg-stone-300' : 'bg-gray-900';
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
   const hoverBgColor = isLight ? 'hover:bg-stone-400' : 'hover:bg-gray-800';
-  const activeBgColor = isLight ? 'bg-blue-500' : 'bg-blue-600';
+  const activeBgColor = isLight ? 'bg-gradient-to-r from-blue-500 to-purple-600' : 'bg-gradient-to-r from-blue-500 to-purple-600';
 
   const tabs = [
     {
@@ -95,7 +95,7 @@ const SettingsLayout: React.FC = () => {
                           <Icon className="w-4 h-4 mr-3" />
                           {item.label}
                           {item.label === 'Notifications' && (
-                            <span className="ml-auto bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                            <span className="ml-auto bg-purple-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                               1
                             </span>
                           )}
