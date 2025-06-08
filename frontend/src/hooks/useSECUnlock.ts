@@ -100,7 +100,7 @@ export const useSECUnlock = () => {
     checkExistingSessions();
     
     // Check for expired sessions every minute
-    const interval = setInterval(checkExistingSessions, 60000);
+    const interval = setInterval(checkExistingSessions, 120000); // Cut frequency in half: was 60s, now 120s
     return () => clearInterval(interval);
   }, [tierInfo]);
 

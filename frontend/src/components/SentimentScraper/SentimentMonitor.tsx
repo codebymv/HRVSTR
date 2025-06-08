@@ -140,7 +140,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
     };
 
     checkApiKeyStatus();
-    const interval = setInterval(checkApiKeyStatus, 5 * 60 * 1000); // Every 5 minutes
+    const interval = setInterval(checkApiKeyStatus, 10 * 60 * 1000); // Cut frequency in half: was 5 minutes, now 10 minutes
     return () => clearInterval(interval);
   }, [currentTier]);
 
@@ -234,7 +234,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
           className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-lg font-medium transition-all hover:from-blue-600 hover:to-purple-700 flex items-center justify-center mx-auto"
         >
           <Crown className="w-4 h-4 mr-2" />
-          Unlock Component
+          Unlock for {cost} Credits
         </button>
       </div>
     </div>
@@ -281,9 +281,8 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
               }
             >
               <option value="1d">1 Day</option>
+              <option value="3d">3 Days</option>
               <option value="1w">1 Week</option>
-              <option value="1m">1 Month</option>
-              <option value="3m">3 Months</option>
             </select>
             
             {/* Refresh button */}

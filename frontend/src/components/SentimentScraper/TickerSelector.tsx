@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { X, Plus, Search, Star, StarOff, Loader2 } from 'lucide-react';
+import { Plus, Search, Star, StarOff, Loader2 } from 'lucide-react';
 import axios from 'axios';
 
 interface WatchlistTicker {
@@ -25,6 +25,7 @@ interface TickerSelectorProps {
   className?: string;
   isDisabled?: boolean;
   mode?: 'watchlist' | 'manual'; // New prop to determine behavior
+  suppressLoadingState?: boolean; // Add prop to suppress internal loading state
 }
 
 const TickerSelector: React.FC<TickerSelectorProps> = ({
@@ -32,7 +33,8 @@ const TickerSelector: React.FC<TickerSelectorProps> = ({
   onTickersChange,
   className = '',
   isDisabled = false,
-  mode = 'watchlist' // Default to watchlist mode
+  mode = 'watchlist', // Default to watchlist mode
+  suppressLoadingState = false // Default to not suppressing loading state
 }) => {
   const { theme } = useTheme();
   const { user } = useAuth();
@@ -162,14 +164,14 @@ const TickerSelector: React.FC<TickerSelectorProps> = ({
     }
   };
 
-  const handleRemoveTicker = (ticker: string) => {
-    const newSelectedTickers = selectedTickers.filter(t => t !== ticker);
-    onTickersChange(newSelectedTickers);
-    
-    // Remove from searched tickers if it's not a watchlist ticker
-    const isInWatchlist = watchlistTickers.some(w => w.symbol === ticker);
-    if (!isInWatchlist) {
-      setSearchedTickers(prev => prev.filter(t => t.symbol !== ticker));
+  const handleToggleTicker = (ticker: string) => {
+    if (selectedTickers.includes(ticker)) {
+      // Remove from selection
+      const newSelectedTickers = selectedTickers.filter(t => t !== ticker);
+      onTickersChange(newSelectedTickers);
+    } else {
+      // Add to selection
+      onTickersChange([...selectedTickers, ticker]);
     }
   };
 
@@ -190,10 +192,33 @@ const TickerSelector: React.FC<TickerSelectorProps> = ({
   };
 
   const getAllTickers = (): TickerItem[] => {
-    return [...watchlistTickers, ...searchedTickers];
+    // Get popular tickers as default options
+    const popularAsSearched: SearchedTicker[] = popularTickers.map(symbol => ({
+      symbol,
+      isFromWatchlist: false
+    }));
+    
+    // Combine all sources, removing duplicates (watchlist takes priority)
+    const allTickers: TickerItem[] = [...watchlistTickers];
+    
+    // Add popular tickers that aren't in watchlist
+    popularAsSearched.forEach(popular => {
+      if (!allTickers.some(ticker => ticker.symbol === popular.symbol)) {
+        allTickers.push(popular);
+      }
+    });
+    
+    // Add searched tickers that aren't already included
+    searchedTickers.forEach(searched => {
+      if (!allTickers.some(ticker => ticker.symbol === searched.symbol)) {
+        allTickers.push(searched);
+      }
+    });
+    
+    return allTickers;
   };
 
-  if (mode === 'watchlist' && isLoadingWatchlist) {
+  if (mode === 'watchlist' && isLoadingWatchlist && !suppressLoadingState) {
     return (
       <div className={`flex items-center justify-center p-4 ${className}`}>
         <Loader2 className="h-5 w-5 animate-spin mr-2" />
@@ -214,8 +239,8 @@ const TickerSelector: React.FC<TickerSelectorProps> = ({
 
   return (
     <div className={`space-y-3 ${className}`}>
-      {/* Mode indicator and stats */}
-      {mode === 'watchlist' && (
+      {/* Mode indicator and stats - hide during coordinated loading */}
+      {mode === 'watchlist' && !suppressLoadingState && (
         <div className={`text-xs ${isLight ? 'text-stone-500' : 'text-gray-400'} mb-2`}>
           <div className="flex items-center gap-2 mb-1">
             <Star className="h-3 w-3" />
@@ -227,21 +252,35 @@ const TickerSelector: React.FC<TickerSelectorProps> = ({
         </div>
       )}
 
-      {/* Selected Tickers */}
-      {selectedTickers.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {getAllTickers()
-            .filter(ticker => selectedTickers.includes(ticker.symbol))
-            .map(ticker => {
+      {/* All Available Tickers (toggleable) */}
+      {getAllTickers().length > 0 && (
+        <div>
+
+          <div className="flex flex-wrap gap-2">
+            {getAllTickers().map(ticker => {
               const isWatchlist = ticker.isFromWatchlist;
-              const tagBg = isWatchlist ? watchlistTagBg : searchedTagBg;
-              const tagText = isWatchlist ? watchlistTagText : searchedTagText;
-              const tagBorder = isWatchlist ? watchlistTagBorder : searchedTagBorder;
+              const isSelected = selectedTickers.includes(ticker.symbol);
+              
+              // Base colors for ticker type
+              const baseTagBg = isWatchlist ? watchlistTagBg : searchedTagBg;
+              const baseTagText = isWatchlist ? watchlistTagText : searchedTagText;
+              const baseTagBorder = isWatchlist ? watchlistTagBorder : searchedTagBorder;
+              
+              // Apply selection styling
+              const tagBg = isSelected ? baseTagBg : (isLight ? 'bg-gray-100' : 'bg-gray-700');
+              const tagText = isSelected ? baseTagText : (isLight ? 'text-gray-600' : 'text-gray-400');
+              const tagBorder = isSelected ? baseTagBorder : (isLight ? 'border-gray-300' : 'border-gray-600');
               
               return (
-                <div
+                <button
                   key={ticker.symbol}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-md border ${tagBg} ${tagText} ${tagBorder}`}
+                  onClick={() => !isDisabled && handleToggleTicker(ticker.symbol)}
+                  disabled={isDisabled}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md border transition-all ${tagBg} ${tagText} ${tagBorder} ${
+                    isDisabled 
+                      ? 'opacity-50 cursor-not-allowed' 
+                      : `cursor-pointer hover:scale-105 ${isSelected ? 'hover:bg-opacity-80' : 'hover:bg-blue-100 dark:hover:bg-blue-900'}`
+                  } ${isSelected ? 'ring-1 ring-blue-300 dark:ring-blue-600' : ''}`}
                 >
                   {isWatchlist ? (
                     <Star className="h-3 w-3 fill-current" />
@@ -249,57 +288,51 @@ const TickerSelector: React.FC<TickerSelectorProps> = ({
                     <Search className="h-3 w-3" />
                   )}
                   <span className="text-sm font-medium">{ticker.symbol}</span>
-                  <button
-                    onClick={() => handleRemoveTicker(ticker.symbol)}
-                    disabled={isDisabled}
-                    className={`p-0.5 rounded hover:bg-opacity-50 ${
-                      isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                    }`}
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
+                </button>
               );
             })}
+          </div>
         </div>
       )}
 
-      {/* Add Ticker Input */}
-      <div className="space-y-2">
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className={`h-4 w-4 ${isLight ? 'text-stone-400' : 'text-gray-400'}`} />
-          </div>
-          <input
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
-            disabled={isDisabled}
-            placeholder={mode === 'watchlist' ? "Search for additional tickers (e.g., AAPL)" : "Enter ticker symbol (e.g., AAPL)"}
-            className={`w-full pl-10 pr-10 py-2 rounded-lg border ${inputBorder} ${inputBg} ${inputText} placeholder-gray-400 text-sm ${
-              isDisabled ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
-          />
-          {inputValue && (
-            <button
-              onClick={() => handleAddTicker(inputValue)}
+      {/* Add Ticker Input - hide during coordinated loading */}
+      {!suppressLoadingState && (
+        <div className="space-y-2">
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className={`h-4 w-4 ${isLight ? 'text-stone-400' : 'text-gray-400'}`} />
+            </div>
+            <input
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyPress={handleKeyPress}
               disabled={isDisabled}
-              className={`absolute inset-y-0 right-0 pr-3 flex items-center ${
-                isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+              placeholder={mode === 'watchlist' ? "Search for additional tickers (e.g., AAPL)" : "Enter ticker symbol (e.g., AAPL)"}
+              className={`w-full pl-10 pr-10 py-2 rounded-lg border ${inputBorder} ${inputBg} ${inputText} placeholder-gray-400 text-sm ${
+                isDisabled ? 'opacity-50 cursor-not-allowed' : ''
               }`}
-            >
-              <Plus className={`h-4 w-4 ${isLight ? 'text-blue-500' : 'text-blue-400'}`} />
-            </button>
-          )}
+            />
+            {inputValue && (
+              <button
+                onClick={() => handleAddTicker(inputValue)}
+                disabled={isDisabled}
+                className={`absolute inset-y-0 right-0 pr-3 flex items-center ${
+                  isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                }`}
+              >
+                <Plus className={`h-4 w-4 ${isLight ? 'text-blue-500' : 'text-blue-400'}`} />
+              </button>
+            )}
+          </div>
+
+          {/* Suggestions */}
+
         </div>
+      )}
 
-        {/* Suggestions */}
-
-      </div>
-
-      {/* Legend */}
-      {mode === 'watchlist' && (watchlistTickers.length > 0 || searchedTickers.length > 0) && (
+      {/* Legend - hide during coordinated loading */}
+      {!suppressLoadingState && mode === 'watchlist' && (watchlistTickers.length > 0 || searchedTickers.length > 0) && (
         <div className={`text-xs ${isLight ? 'text-stone-500' : 'text-gray-400'} flex items-center gap-4`}>
           <div className="flex items-center gap-1">
             <Star className="h-3 w-3 text-blue-500 fill-current" />
@@ -312,15 +345,17 @@ const TickerSelector: React.FC<TickerSelectorProps> = ({
         </div>
       )}
 
-      {/* Current status */}
-      <div className={`text-xs ${isLight ? 'text-stone-500' : 'text-gray-400'}`}>
-        {selectedTickers.length} {selectedTickers.length === 1 ? 'ticker' : 'tickers'} selected
-        {mode === 'watchlist' && watchlistTickers.length === 0 && (
-          <span className="ml-2 text-yellow-500">
-            (Add stocks to your watchlist for automatic loading)
-          </span>
-        )}
-      </div>
+      {/* Current status - hide during coordinated loading */}
+      {!suppressLoadingState && (
+        <div className={`text-xs ${isLight ? 'text-stone-500' : 'text-gray-400'}`}>
+          {selectedTickers.length} {selectedTickers.length === 1 ? 'ticker' : 'tickers'} selected
+          {mode === 'watchlist' && watchlistTickers.length === 0 && (
+            <span className="ml-2 text-yellow-500">
+              (Add stocks to your watchlist for automatic loading)
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 };

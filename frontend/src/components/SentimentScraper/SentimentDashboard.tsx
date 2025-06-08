@@ -230,7 +230,7 @@ const SentimentDashboard: React.FC = () => {
     checkApiKeyStatus();
     
     // Also refresh API key status periodically
-    const interval = setInterval(checkApiKeyStatus, 5 * 60 * 1000); // Every 5 minutes
+    const interval = setInterval(checkApiKeyStatus, 10 * 60 * 1000); // Cut frequency in half: was 5 minutes, now 10 minutes
     
     return () => clearInterval(interval);
   }, [currentTier]); // 🔧 Added currentTier dependency to trigger refresh on tier changes

@@ -16,7 +16,7 @@ import RedditPostsSection from './RedditPostsSection';
 import TierLimitDialog from '../UI/TierLimitDialog';
 import HarvestLoadingCard from '../UI/HarvestLoadingCard';
 import ProgressBar from '../ProgressBar';
-import SentimentOverview from './SentimentOverview';
+// import SentimentOverview from './SentimentOverview';
 import { SentimentTickerProvider } from '../../contexts/SentimentTickerContext';
 
 const SentimentDashboard: React.FC = () => {
@@ -31,7 +31,7 @@ const SentimentDashboard: React.FC = () => {
   const mutedTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
   const cardBg = isLight ? 'bg-stone-300' : 'bg-gray-900';
   const cardBorder = isLight ? 'border-stone-400' : 'border-gray-800';
-  const headerBg = isLight ? 'bg-stone-400' : 'bg-gray-800';
+  const subTextColor = isLight ? 'text-gray-600' : 'text-gray-400'; // Added for header description
   
   // Time range state
   const [timeRange, setTimeRange] = useState<TimeRange>('1w');
@@ -150,7 +150,7 @@ const SentimentDashboard: React.FC = () => {
     };
 
     checkApiKeyStatus();
-    const interval = setInterval(checkApiKeyStatus, 5 * 60 * 1000); // Every 5 minutes
+    const interval = setInterval(checkApiKeyStatus, 10 * 60 * 1000); // Cut frequency in half: was 5 minutes, now 10 minutes
     return () => clearInterval(interval);
   }, [currentTier]);
 
@@ -245,7 +245,7 @@ const SentimentDashboard: React.FC = () => {
           className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-lg font-medium transition-all hover:from-blue-600 hover:to-purple-700 flex items-center justify-center mx-auto"
         >
           <Crown className="w-4 h-4 mr-2" />
-          Unlock Component
+          Unlock for {cost} Credits
         </button>
       </div>
     </div>
@@ -267,36 +267,63 @@ const SentimentDashboard: React.FC = () => {
       )}
 
       <div className="flex flex-col h-full">
-        {/* Header */}
-        <div className={`${headerBg} p-4 rounded-t-lg border-b ${cardBorder}`}>
-          <div className="flex items-center justify-between">
-            <h1 className={`text-xl font-bold ${textColor}`}>
-              Sentiment Dashboard
-            </h1>
+        {/* Header - matching SEC filings pattern exactly */}
+        <div className={`flex flex-row justify-between items-center gap-4 mb-4 ${cardBg} rounded-lg p-4 border ${cardBorder}`}>
+          <div className="flex-1">
+            <h1 className={`text-xl font-bold ${textColor}`}>Sentiment Dashboard</h1>
+            <p className={`text-sm ${subTextColor}`}>Track real-time sentiment across social platforms</p>
+          </div>
+          
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Time range selector */}
+            <select
+              value={timeRange}
+              onChange={(e) => handleTimeRangeChange(e.target.value as TimeRange)}
+              className={`py-1 px-2 rounded text-sm ${cardBg} ${textColor} border ${cardBorder} ${
+                !(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)
+                  ? 'opacity-50 cursor-not-allowed'
+                  : ''
+              }`}
+              disabled={isTransitioning || isRefreshing || !(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)}
+              title={
+                (unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)
+                  ? 'Select time range'
+                  : 'Unlock components to change time range'
+              }
+            >
+              <option value="1d">1 Day</option>
+              <option value="3d">3 Days</option>
+              <option value="1w">1 Week</option>
+            </select>
             
-            <div className="flex items-center gap-3">
-              {/* Time Range Selector */}
-              <select
-                value={timeRange}
-                onChange={(e) => handleTimeRangeChange(e.target.value as TimeRange)}
-                className={`px-3 py-2 rounded-lg border ${cardBorder} ${cardBg} ${textColor} text-sm`}
-                disabled={isTransitioning}
-              >
-                <option value="1d">1 Day</option>
-                <option value="3d">3 Days</option>
-                <option value="1w">1 Week</option>
-              </select>
-              
-              {/* Refresh Button */}
-              <button
-                onClick={refreshData}
-                disabled={isRefreshing || isTransitioning}
-                className={`p-2 rounded-lg ${cardBg} border ${cardBorder} ${textColor} hover:bg-opacity-80 transition-colors disabled:opacity-50`}
-                title="Refresh Data"
-              >
-                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
+            {/* Refresh button */}
+            <button
+              className={`transition-colors rounded-full p-2 ${
+                // Show different styling based on unlock state
+                (unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)
+                  ? `${isLight ? 'bg-blue-500' : 'bg-blue-600'} hover:${isLight ? 'bg-blue-600' : 'bg-blue-700'} text-white` // Unlocked: normal blue
+                  : 'bg-gray-400 cursor-not-allowed text-gray-200' // Locked: grayed out
+              } ${(isRefreshing || isTransitioning) ? 'opacity-50' : ''}`}
+              onClick={refreshData}
+              disabled={isRefreshing || isTransitioning || !(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)}
+              title={
+                (unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)
+                  ? 'Refresh sentiment data'
+                  : 'Unlock components to refresh data'
+              }
+            >
+              {/* Only show spinner if components are unlocked AND loading */}
+              {(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit) && (isRefreshing || isTransitioning) ? (
+                <Loader2 size={18} className="text-white animate-spin" />
+              ) : (
+                <RefreshCw size={18} className={
+                  // Gray icon when locked, white when unlocked
+                  !(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)
+                    ? 'text-gray-200' 
+                    : 'text-white'
+                } />
+              )}
+            </button>
           </div>
         </div>
 
@@ -304,8 +331,8 @@ const SentimentDashboard: React.FC = () => {
         <div className={`flex-1 p-4 space-y-6 ${cardBg}`}>
           {/* Wrap sentiment components with shared ticker context */}
           <SentimentTickerProvider>
-            {/* Add the new Sentiment Overview component */}
-            <SentimentOverview />
+            {/* TODO: Add the new Sentiment Overview component */}
+            {/* <SentimentOverview /> */}
             
             {/* Existing content */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -317,7 +344,10 @@ const SentimentDashboard: React.FC = () => {
                 loadingProgress={loadingProgress}
                 loadingStage={loadingStage}
                 isDataLoading={isDataLoading}
-                errors={errors}
+                errors={{
+                  chart: errors.chart,
+                  rateLimited: false
+                }}
                 onRefresh={refreshData}
                 hasRedditAccess={hasRedditAccess}
                 isHistoricalEnabled={true}

@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { ChartData, TimeRange, HistoricalTimeRange, ChartViewMode, HistoricalSentimentData } from '../../types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSentimentTickersOptional } from '../../contexts/SentimentTickerContext';
-import { Info, Settings, RefreshCw } from 'lucide-react';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { Info, Settings, RefreshCw, MessageSquare, TrendingUp, Globe } from 'lucide-react';
 import SentimentChart from './SentimentChart';
 import HistoricalSentimentChart from './HistoricalSentimentChart';
 import TimeRangeSelector from './TimeRangeSelector';
@@ -11,6 +12,7 @@ import TickerSelector from './TickerSelector';
 import LoadingCard from '../UI/LoadingCard';
 import ErrorCard from '../UI/ErrorCard';
 import { historicalSentimentAPI } from '../../api/historicalSentiment';
+import SentimentChartCardMobile from './SentimentChartCardMobile';
 
 interface SentimentChartCardProps {
   chartData: ChartData[];
@@ -48,6 +50,7 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
   yahooSentiments
 }) => {
   const { theme } = useTheme();
+  const isMobile = useIsMobile();
   const isLight = theme === 'light';
   
   // Try to use shared ticker context, fallback to local state if not available
@@ -92,6 +95,34 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
   const [historicalData, setHistoricalData] = useState<HistoricalSentimentData[]>([]);
   const [historicalLoading, setHistoricalLoading] = useState(false);
   const [historicalError, setHistoricalError] = useState<string | null>(null);
+  
+  // Track when ticker interface is ready to show
+  const [showTickerInterface, setShowTickerInterface] = useState(false);
+
+  // Effect to coordinate ticker interface readiness
+  useEffect(() => {
+    if (viewMode === 'market') {
+      // Market mode is always ready immediately
+      setShowTickerInterface(true);
+    } else if (viewMode === 'ticker') {
+      // For ticker mode, always start hidden during loading
+      setShowTickerInterface(false);
+      
+      // Show interface after delay to allow for smooth loading experience
+      const timer = setTimeout(() => {
+        setShowTickerInterface(true);
+      }, 2000); // Allow time for any background loading
+      
+      return () => clearTimeout(timer);
+    }
+  }, [viewMode]);
+
+  // Reset when changing modes
+  useEffect(() => {
+    if (viewMode === 'ticker') {
+      setShowTickerInterface(false);
+    }
+  }, [viewMode]);
 
   // Fetch historical data when in ticker mode
   const fetchHistoricalData = async () => {
@@ -203,13 +234,6 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
     }
   }, [viewMode, selectedTickers, isHistoricalEnabled]);
   
-  // Effect to ensure ticker selector is shown when component mounts with ticker mode
-  useEffect(() => {
-    if (viewMode === 'ticker' && !showTickerSelector) {
-      setShowTickerSelector(true);
-    }
-  }, [viewMode, showTickerSelector]);
-  
   // Debug effect to track ticker changes
   useEffect(() => {
     console.log('🔍 SentimentChartCard: selectedTickers changed to:', selectedTickers);
@@ -238,16 +262,90 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
   const buttonBg = isLight ? 'bg-stone-200 hover:bg-stone-300' : 'bg-gray-700 hover:bg-gray-600';
   const activeBg = isLight ? 'bg-blue-500 text-white' : 'bg-blue-600 text-white';
 
+  // Calculate source distribution percentages
+  const calculateSourcePercentages = (data: ChartData[]) => {
+    if (!data || data.length === 0) {
+      return { reddit: 0, finviz: 0, yahoo: 0 };
+    }
+    
+    // Initialize source counts
+    const sourceCounts = {
+      reddit: 0,
+      finviz: 0,
+      yahoo: 0,
+      other: 0
+    };
+
+    // Sum up source counts from all data points
+    data.forEach(item => {
+      const sources = item.sources || {};
+      
+      Object.entries(sources).forEach(([source, count]) => {
+        const lowerSource = source.toLowerCase();
+        if (lowerSource.includes('reddit')) {
+          sourceCounts.reddit += count;
+        } else if (lowerSource.includes('finviz')) {
+          sourceCounts.finviz += count;
+        } else if (lowerSource.includes('yahoo')) {
+          sourceCounts.yahoo += count;
+        } else {
+          sourceCounts.other += count;
+        }
+      });
+    });
+
+    const total = Object.values(sourceCounts).reduce((sum, count) => sum + count, 0);
+
+    if (total === 0) {
+      return { reddit: 0, finviz: 0, yahoo: 0 };
+    }
+
+    // Calculate percentages
+    const percentages = {
+      reddit: Math.round((sourceCounts.reddit / total) * 100),
+      finviz: Math.round((sourceCounts.finviz / total) * 100),
+      yahoo: Math.round((sourceCounts.yahoo / total) * 100)
+    };
+
+    return percentages;
+  };
+
+  const sourcePercentages = calculateSourcePercentages(chartData);
+
+  // Mobile-first: render mobile component on mobile devices
+  if (isMobile) {
+    return (
+      <SentimentChartCardMobile
+        chartData={chartData}
+        loading={loading}
+        isTransitioning={isTransitioning}
+        loadingProgress={loadingProgress}
+        loadingStage={loadingStage}
+        isDataLoading={isDataLoading}
+        errors={errors}
+        onRefresh={onRefresh}
+        hasRedditAccess={hasRedditAccess}
+        isHistoricalEnabled={isHistoricalEnabled}
+        combinedSentiments={combinedSentiments}
+        finvizSentiments={finvizSentiments}
+        yahooSentiments={yahooSentiments}
+      />
+    );
+  }
+
+  // Desktop rendering continues below...
   const renderContent = () => {
     // Enhanced mode with view mode selector for historical features
     if (isHistoricalEnabled) {
       // Show loading state during chart loading or time range transitions
-      if ((loading || isTransitioning) && !errors.rateLimited && !errors.chart && !historicalError && viewMode === 'market') {
+      // Also show loading if ticker interface is not ready (prevents staggered loading)
+      if (((loading || isTransitioning) && !errors.rateLimited && !errors.chart && !historicalError && viewMode === 'market') || 
+          (viewMode === 'ticker' && !showTickerInterface)) {
         return (
           <LoadingCard
-            stage={loadingStage}
-            subtitle="Processing sentiment data across multiple sources"
-            progress={loadingProgress}
+            stage={viewMode === 'ticker' && !showTickerInterface ? 'Loading ticker interface...' : loadingStage}
+            subtitle={viewMode === 'ticker' && !showTickerInterface ? 'Preparing watchlist and analysis tools' : 'Processing sentiment data across multiple sources'}
+            progress={viewMode === 'ticker' && !showTickerInterface ? 85 : loadingProgress}
             showProgress={true}
             size="md"
           />
@@ -285,38 +383,20 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
       if (chartData.length > 0 || viewMode === 'ticker') {
         return (
           <div className="space-y-4">
-            {/* Chart View Mode Selector */}
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                          <ChartViewModeSelector
-              currentMode={viewMode}
-              onModeChange={(mode) => {
-                handleViewModeChange(mode);
-                if (mode === 'ticker') {
-                  setShowTickerSelector(true);
-                } else {
-                  setShowTickerSelector(false);
-                }
-                // Also save ticker selector state
-                try {
-                  localStorage.setItem('sentiment-ticker-selector-visible', mode === 'ticker' ? 'true' : 'false');
-                } catch (error) {
-                  console.warn('Failed to save ticker selector state to localStorage:', error);
-                }
-              }}
-              isDisabled={loading || historicalLoading}
-            />
-            </div>
 
             {/* Ticker Selector (for ticker mode) */}
             {showTickerSelector && viewMode === 'ticker' && (
-              <div className={`p-4 rounded-lg border ${borderColor} ${cardBgColor}`}>
+              <div 
+                className={`p-4 rounded-lg border ${borderColor} ${cardBgColor} transition-opacity duration-300`}
+                style={{ 
+                  opacity: showTickerInterface ? 1 : 0,
+                  pointerEvents: showTickerInterface ? 'auto' : 'none'
+                }}
+              >
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h3 className={`text-sm font-medium ${textColor}`}>
-                      Select Tickers for Analysis
-                    </h3>
                     <div className={`text-xs ${mutedTextColor}`}>
-                      Multi-ticker watchlist analysis
+                      Tickers For Sentiment Analysis
                     </div>
                   </div>
                   <TickerSelector
@@ -324,6 +404,7 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
                     onTickersChange={setSelectedTickers}
                     mode="watchlist"
                     isDisabled={historicalLoading}
+                    suppressLoadingState={true}
                   />
                 </div>
               </div>
@@ -339,7 +420,13 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
                 hasRedditAccess={hasRedditAccess}
               />
             ) : (
-              <div className="relative">
+              <div 
+                className="relative transition-opacity duration-300"
+                style={{ 
+                  opacity: showTickerInterface ? 1 : 0,
+                  pointerEvents: showTickerInterface ? 'auto' : 'none'
+                }}
+              >
                 {historicalLoading && (
                   <div className="absolute inset-0 bg-gray-900/20 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
                     <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg">
@@ -356,6 +443,40 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
                   selectedTickers={selectedTickers}
                   isLoading={historicalLoading}
                 />
+                
+                {/* Source Distribution for Ticker View - matching SentimentChart layout */}
+                {selectedTickers.length > 0 && !historicalLoading && (
+                  <div className="mt-4 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center space-x-2">
+                        <span className={`flex items-center space-x-1 rounded-full px-2 py-0.5 ${
+                          hasRedditAccess 
+                            ? 'bg-stone-100 dark:bg-gray-700' 
+                            : 'bg-gray-200 dark:bg-gray-800 opacity-50'
+                        }`}>
+                          <MessageSquare size={12} className={hasRedditAccess ? "text-orange-500" : "text-gray-400"} />
+                          <span className={hasRedditAccess ? "" : "text-gray-400"}>
+                            {sourcePercentages.reddit}%
+                          </span>
+                          {!hasRedditAccess && (
+                            <span className="text-xs text-gray-400" title="Pro feature">🔒</span>
+                          )}
+                        </span>
+                        <span className="flex items-center space-x-1 bg-stone-100 dark:bg-gray-700 rounded-full px-2 py-0.5">
+                          <TrendingUp size={12} className="text-amber-500" />
+                          <span>{sourcePercentages.finviz}%</span>
+                        </span>
+                        <span className="flex items-center space-x-1 bg-stone-100 dark:bg-gray-700 rounded-full px-2 py-0.5">
+                          <Globe size={12} className="text-blue-500" />
+                          <span>{sourcePercentages.yahoo}%</span>
+                        </span>
+                      </div>
+                      <span className={`text-xs ${isLight ? 'text-stone-500' : 'text-gray-400'}`}>
+                        Data Quality: High Confidence - 3 Sources
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -443,25 +564,34 @@ const SentimentChartCard: React.FC<SentimentChartCardProps> = ({
 
   return (
     <div className={`${cardBgColor} rounded-lg p-4 lg:p-5 border ${borderColor}`}>
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+      {/* Mobile-first responsive header */}
+      <div className={`mb-4 ${isMobile ? 'space-y-3' : 'flex items-center justify-between'}`}>
         <h2 className={`text-lg font-semibold ${textColor}`}>
           Sentiment Overview
         </h2>
-        
-        {/* Refresh button */}
-        <button
-          onClick={onRefresh}
-          disabled={isDataLoading || historicalLoading}
-          className={`p-2 rounded-lg transition-colors ${buttonBg} ${textColor} ${
-            (isDataLoading || historicalLoading) ? 'opacity-50 cursor-not-allowed' : ''
-          }`}
-          title="Refresh data"
-        >
-          <RefreshCw 
-            size={16} 
-            className={`${(isDataLoading || historicalLoading) ? 'animate-spin' : ''}`}
-          />
-        </button>
+        {/* Chart View Mode Selector - responsive positioning */}
+        {isHistoricalEnabled && (
+          <div className={isMobile ? 'flex justify-center' : ''}>
+            <ChartViewModeSelector
+              currentMode={viewMode}
+              onModeChange={(mode) => {
+                handleViewModeChange(mode);
+                if (mode === 'ticker') {
+                  setShowTickerSelector(true);
+                } else {
+                  setShowTickerSelector(false);
+                }
+                // Also save ticker selector state
+                try {
+                  localStorage.setItem('sentiment-ticker-selector-visible', mode === 'ticker' ? 'true' : 'false');
+                } catch (error) {
+                  console.warn('Failed to save ticker selector state to localStorage:', error);
+                }
+              }}
+              isDisabled={loading || historicalLoading}
+            />
+          </div>
+        )}
       </div>
       {renderContent()}
     </div>
