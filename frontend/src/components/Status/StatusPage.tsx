@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { getProxyUrl } from '../../services/apiService';
 import { 
   Server, 
   Database, 
@@ -74,7 +75,8 @@ const StatusPage: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      const response = await fetch('/api/status');
+      const proxyUrl = getProxyUrl();
+      const response = await fetch(`${proxyUrl}/api/status`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }

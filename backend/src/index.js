@@ -82,10 +82,19 @@ const getAllowedOrigins = () => {
   // Always include these origins for development and backup
   origins.push(
     'https://hrvstr.us',
-    'https://hrvstr.up.railway.app', 
+    'https://hrvstr.up.railway.app',
     'http://localhost:5173', 
     'http://localhost:3000'
   );
+  
+  // Add Railway internal network origins for private communication
+  if (process.env.NODE_ENV === 'production') {
+    origins.push(
+      'http://frontend.railway.internal',
+      'https://frontend.railway.internal'
+    );
+    console.log('🌍 CORS: Added Railway internal network origins for production');
+  }
   
   // Remove duplicates
   const uniqueOrigins = [...new Set(origins)];
