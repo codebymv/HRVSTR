@@ -52,6 +52,7 @@ const WatchlistSection: React.FC<WatchlistSectionProps> = ({
   const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-800';
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-700';
   const textColor = isLight ? 'text-stone-800' : 'text-white';
+  const priceTextColor = isLight ? 'text-stone-600' : 'text-white';
   const mutedTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
   const activeButtonBgColor = 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700';
   const buttonBgColor = 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700';
@@ -239,7 +240,7 @@ const WatchlistSection: React.FC<WatchlistSectionProps> = ({
                     </button>
                   </div>
                   <div className="flex justify-between items-center">
-                    <div className={`text-xl font-bold ${textColor}`}>
+                    <div className={`text-xl font-bold ${priceTextColor}`}>
                       {formatPrice(item.last_price)}
                     </div>
                     <div className={`text-sm font-medium ${priceChangeInfo.isPositive ? 'text-green-500' : 'text-red-500'}`}>
@@ -255,7 +256,7 @@ const WatchlistSection: React.FC<WatchlistSectionProps> = ({
                     <div className={`text-sm ${mutedTextColor} truncate max-w-[200px]`}>{item.company_name || 'N/A'}</div>
                   </div>
                   <div className="flex-1 text-center">
-                    <div className={`text-xl font-bold ${textColor}`}>
+                    <div className={`text-xl font-bold ${priceTextColor}`}>
                       {formatPrice(item.last_price)}
                     </div>
                   </div>
@@ -354,4 +355,4 @@ const WatchlistSection: React.FC<WatchlistSectionProps> = ({
   );
 };
 
-export default WatchlistSection; 
+export default WatchlistSection;

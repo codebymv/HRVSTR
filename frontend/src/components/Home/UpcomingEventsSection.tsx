@@ -127,7 +127,11 @@ const UpcomingEventsSection: React.FC<UpcomingEventsSectionProps> = ({
       case 'Dividend':
         return <DollarSign className="w-4 h-4 text-purple-600" />;
       default:
-        return <Calendar className="w-4 h-4 text-purple-600" />;
+        return (
+          <div className="w-4 h-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-md flex items-center justify-center">
+            <Calendar className="w-3 h-3 text-white" />
+          </div>
+        );
     }
   };
 

@@ -12,8 +12,8 @@ const Sidebar: React.FC = () => {
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
   const textColor = isLight ? 'text-stone-800' : 'text-gray-400';
   const headerColor = isLight ? 'text-stone-600' : 'text-gray-500';
-  const activeItemBg = isLight ? 'bg-stone-400' : 'bg-gray-800';
-  const activeItemText = isLight ? 'text-stone-900' : 'text-white';
+  const activeItemBg = 'bg-gradient-to-r from-blue-500 to-purple-600';
+  const activeItemText = 'text-white';
   const hoverBg = isLight ? 'hover:bg-stone-400' : 'hover:bg-gray-800';
   const hoverText = isLight ? 'hover:text-stone-900' : 'hover:text-white';
   return (
@@ -23,7 +23,7 @@ const Sidebar: React.FC = () => {
           Navigation
         </p>
         
-        <NavLink to="/home" className={({isActive}) => `flex items-center space-x-3 px-3 py-2 rounded-lg ${isActive ? `${activeItemBg} ${activeItemText} font-medium` : `${textColor} ${hoverBg} ${hoverText} transition-colors`}`}>
+        <NavLink to="/user-home" className={({isActive}) => `flex items-center space-x-3 px-3 py-2 rounded-lg ${isActive ? `${activeItemBg} ${activeItemText} font-medium` : `${textColor} ${hoverBg} ${hoverText} transition-colors`}`}>
           <Home size={20} />
           <span>Home</span>
         </NavLink>

@@ -40,6 +40,7 @@ import { useRecentActivityInfiniteScroll } from '../../hooks/useRecentActivityIn
 import { useUpcomingEventsInfiniteScroll } from '../../hooks/useUpcomingEventsInfiniteScroll';
 import UpcomingEventsSection from './UpcomingEventsSection';
 import { useLimitToasts } from '../../utils/limitToasts';
+import BackgroundLeaves from '../UI/BackgroundLeaves';
 
 interface WatchlistItem {
   id: string;
@@ -594,8 +595,26 @@ const UserHome: React.FC = () => {
 
 
   return (
-    <div className={`min-h-screen ${bgColor} p-6`}>
-      <div className="max-w-7xl mx-auto">
+    <div className={`min-h-screen ${bgColor} p-6 relative`}>
+      {/* Left side background leaves - desktop only */}
+      <div className="hidden xl:block fixed left-0 top-0 w-64 h-full pointer-events-none z-0">
+        <BackgroundLeaves 
+          opacity={isLight ? 0.15 : 0.12} 
+          leafCount={8}
+          isLight={isLight}
+        />
+      </div>
+
+      {/* Right side background leaves - desktop only */}
+      <div className="hidden xl:block fixed right-0 top-0 w-64 h-full pointer-events-none z-0">
+        <BackgroundLeaves 
+          opacity={isLight ? 0.15 : 0.12} 
+          leafCount={8}
+          isLight={isLight}
+        />
+      </div>
+
+      <div className="max-w-7xl mx-auto relative z-10">
         {/* Rate Limit Notification */}
         <RateLimitNotification isActive={rateLimitActive} />
         {/* Welcome Section */}

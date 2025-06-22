@@ -198,7 +198,7 @@ const StatusPage: React.FC = () => {
             <button
               onClick={fetchStatus}
               disabled={loading}
-              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              className="flex items-center px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-lg transition-all disabled:opacity-50"
             >
               {loading ? (
                 <Loader className="w-4 h-4 animate-spin mr-2" />
@@ -373,4 +373,4 @@ const StatusPage: React.FC = () => {
   );
 };
 
-export default StatusPage; 
+export default StatusPage;
