@@ -6,8 +6,8 @@
 export const getProxyUrl = (): string => {
   // In production, use Railway's private network URL
   if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.PROD) {
-    // Use Railway's private network for internal communication
-    return 'http://backend.railway.internal:3001';
+    // Use Railway's private network for internal communication with HTTPS
+    return 'https://backend.railway.internal:3001';
   }
   // In development, use the proxy URL from env or default
   if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
