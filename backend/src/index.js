@@ -316,7 +316,11 @@ app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/credits', creditsRoutes);
 
+// Error handling middleware (must be after routes but before static files)
+app.use(errorHandler);
+
 // Serve static files from the frontend build directory in production
+// IMPORTANT: This must come AFTER all API routes to prevent conflicts
 if (process.env.NODE_ENV === 'production') {
   const frontendBuildPath = path.join(__dirname, '../../frontend/dist');
   app.use(express.static(frontendBuildPath));
@@ -326,9 +330,6 @@ if (process.env.NODE_ENV === 'production') {
     res.sendFile(path.join(frontendBuildPath, 'index.html'));
   });
 }
-
-// Error handling middleware (must be after routes)
-app.use(errorHandler);
 
 // Initialize session cleanup scheduler
 const { sessionCleanupScheduler } = require('./utils/sessionCleanupScheduler');

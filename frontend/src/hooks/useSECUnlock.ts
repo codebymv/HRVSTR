@@ -46,9 +46,6 @@ export const useSECUnlock = () => {
   // Get tier info
   const currentTier = tierInfo?.tier?.toLowerCase() || 'free';
 
-  // Track recent unlocks to prevent session check from overriding fresh unlocks
-  const [recentUnlocks, setRecentUnlocks] = useState<Set<string>>(new Set());
-
   // Check existing sessions for all users
   useEffect(() => {
     if (!tierInfo) return;
@@ -72,13 +69,7 @@ export const useSECUnlock = () => {
           }
         }
 
-        // Only update state if no recent unlocks are pending
-        // This prevents the session check from overriding fresh unlock states
-        if (recentUnlocks.size === 0) {
-          setUnlockedComponents(newUnlockedState);
-        } else {
-          console.log('🔄 SEC DASHBOARD - Skipping state update due to recent unlock in progress');
-        }
+        setUnlockedComponents(newUnlockedState);
 
         // Update active sessions for display - NOW QUERIES DATABASE ONLY
         const sessions = await getAllUnlockSessions(currentTierValue);
@@ -91,18 +82,15 @@ export const useSECUnlock = () => {
           institutionalSessionId: institutionalSession?.sessionId,
           currentTier: currentTierValue,
           databaseSessions: sessions.length,
-          recentUnlocks: Array.from(recentUnlocks),
           timestamp: Date.now()
         });
       } catch (error) {
         console.warn('Database session check failed:', error);
-        // Only reset state if no recent unlocks are pending
-        if (recentUnlocks.size === 0) {
-          setUnlockedComponents({
-            insiderTrading: false,
-            institutionalHoldings: false
-          });
-        }
+        // No more localStorage fallback - just set to false if database fails
+        setUnlockedComponents({
+          insiderTrading: false,
+          institutionalHoldings: false
+        });
 
         setActiveSessions([]);
       }
@@ -114,30 +102,16 @@ export const useSECUnlock = () => {
     // Check for expired sessions every minute
     const interval = setInterval(checkExistingSessions, 120000); // Cut frequency in half: was 60s, now 120s
     return () => clearInterval(interval);
-  }, [tierInfo, recentUnlocks]);
+  }, [tierInfo]);
 
   // Handlers for unlocking individual components
   const handleUnlockComponent = async (component: keyof UnlockedComponents, cost: number) => {
-    // Add to recent unlocks to prevent session check interference
-    setRecentUnlocks(prev => {
-      const newSet = new Set(prev);
-      newSet.add(component);
-      console.log(`🔓 SEC UNLOCK - Added ${component} to recent unlocks:`, Array.from(newSet));
-      return newSet;
-    });
-
     try {
       // Check if already unlocked using database-only approach
       const existingSession = await checkComponentAccess(component, currentTier);
       if (existingSession) {
         const timeRemaining = getSessionTimeRemainingFormatted(existingSession);
         info(`${component} already unlocked (${timeRemaining})`);
-        // Remove from recent unlocks since no actual unlock occurred
-        setRecentUnlocks(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(component);
-          return newSet;
-        });
         return;
       }
       
@@ -209,26 +183,6 @@ export const useSECUnlock = () => {
         if (refreshTierInfo) {
           await refreshTierInfo();
         }
-
-        // Remove from recent unlocks after successful unlock
-        setRecentUnlocks(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(component);
-          console.log(`🔓 SEC UNLOCK - Removed ${component} from recent unlocks after success:`, Array.from(newSet));
-          return newSet;
-        });
-
-        // Also set a fallback cleanup timer in case something goes wrong
-        setTimeout(() => {
-          setRecentUnlocks(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(component)) {
-              newSet.delete(component);
-              console.log(`🔓 SEC UNLOCK - Fallback cleanup: removed ${component} from recent unlocks:`, Array.from(newSet));
-            }
-            return newSet;
-          });
-        }, 10000); // 10 second fallback cleanup
       }
       
     } catch (error) {
@@ -256,14 +210,6 @@ export const useSECUnlock = () => {
       } else {
         info(`Failed to unlock ${component}. Please try again.`);
       }
-
-      // Remove from recent unlocks after error
-      setRecentUnlocks(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(component);
-        console.log(`🔓 SEC UNLOCK - Removed ${component} from recent unlocks after error:`, Array.from(newSet));
-        return newSet;
-      });
     }
   };
 
