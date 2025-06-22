@@ -28,22 +28,47 @@ function getQuarterEndDate(filingDateStr) {
  */
 async function parseForm13FData(xmlData, limit) {
   try {
+    console.log(`[form13FParser] Starting to parse Form 13F data with limit: ${limit}`);
+    console.log(`[form13FParser] XML data length: ${xmlData ? xmlData.length : 0} characters`);
+    
+    if (!xmlData || xmlData.length === 0) {
+      console.log('[form13FParser] No XML data provided');
+      return [];
+    }
+    
     // First try to parse with xml2js for more reliable XML parsing
     try {
+      console.log('[form13FParser] Attempting xml2js parsing...');
       const parser = new xml2js.Parser({ explicitArray: false });
       const result = await parser.parseStringPromise(xmlData);
       
+      console.log('[form13FParser] xml2js parsing successful');
+      console.log(`[form13FParser] Result structure: ${JSON.stringify(Object.keys(result || {}), null, 2)}`);
+      
       if (result && result.feed && result.feed.entry) {
         const entries = Array.isArray(result.feed.entry) ? result.feed.entry : [result.feed.entry];
+        console.log(`[form13FParser] Found ${entries.length} entries in feed`);
         return await processXmlEntries(entries, limit);
+      } else {
+        console.log('[form13FParser] No feed.entry found in xml2js result');
       }
     } catch (xmlError) {
-      console.error('XML parsing failed, falling back to cheerio:', xmlError.message);
+      console.error('[form13FParser] XML parsing failed, falling back to cheerio:', xmlError.message);
     }
     
     // Fall back to cheerio if xml2js fails
+    console.log('[form13FParser] Falling back to cheerio parsing...');
     const $ = cheerio.load(xmlData, { xmlMode: true });
     const entries = $('entry');
+    console.log(`[form13FParser] Cheerio found ${entries.length} entries`);
+    
+    if (entries.length === 0) {
+      console.log('[form13FParser] No entries found with cheerio, checking for other XML structures...');
+      // Log some sample XML content for debugging
+      const sampleXml = xmlData.substring(0, 500);
+      console.log(`[form13FParser] Sample XML content: ${sampleXml}`);
+    }
+    
     const institutionalHoldings = [];
     const allSecurityHoldings = [];
 
@@ -55,7 +80,8 @@ async function parseForm13FData(xmlData, limit) {
       const link = entry.find('link').attr('href');
       const summary = entry.find('summary').text();
 
-      console.log(`Processing Form 13F filing #${i+1}: ${title}`);
+      console.log(`[form13FParser] Processing Form 13F filing #${i+1}: ${title}`);
+      console.log(`[form13FParser] Filing URL: ${link}`);
       
       // Extract information about the institutional investor
       let cik = null;
@@ -153,10 +179,17 @@ async function parseForm13FData(xmlData, limit) {
       // Try to fetch actual holding data from the filing
       try {
         // Fetch actual holdings data from the filing content
+        console.log(`[form13FParser] Fetching holdings data for ${institution.institutionName}...`);
         const holdingsData = await fetchFilingContent(link);
         
+        console.log(`[form13FParser] Holdings fetch result for ${institution.institutionName}:`, {
+          success: holdingsData.success,
+          holdingsCount: holdingsData.holdings ? holdingsData.holdings.length : 0,
+          error: holdingsData.error || 'none'
+        });
+        
         if (holdingsData.success && holdingsData.holdings.length > 0) {
-          console.log(`Successfully extracted ${holdingsData.holdings.length} holdings from ${institution.institutionName}`);
+          console.log(`[form13FParser] Successfully extracted ${holdingsData.holdings.length} holdings from ${institution.institutionName}`);
           
           // Process each security holding
           for (const holding of holdingsData.holdings) {
@@ -182,14 +215,20 @@ async function parseForm13FData(xmlData, limit) {
             institution.totalValueHeld += holding.value || 0;
           }
         } else {
-          console.log(`No holdings data found for ${institution.institutionName}, using sample data`);
-          // Fall back to sample data for this institution
-          useSampleHoldings(institution);
+          console.log(`[form13FParser] No holdings data found for ${institution.institutionName}`);
+          console.log(`[form13FParser] Holdings fetch details:`, holdingsData);
+          // Set empty/zero values instead of sample data
+          institution.totalSharesHeld = 0;
+          institution.totalValueHeld = 0;
+          institution.dataUnavailable = true;
         }
       } catch (fetchError) {
-        console.error(`Error fetching holdings for ${institution.institutionName}:`, fetchError.message);
-        // Fall back to sample data if fetch fails
-        useSampleHoldings(institution);
+        console.error(`[form13FParser] Error fetching holdings for ${institution.institutionName}:`, fetchError.message);
+        console.error(`[form13FParser] Full fetch error:`, fetchError);
+        // Set empty/zero values instead of sample data
+        institution.totalSharesHeld = 0;
+        institution.totalValueHeld = 0;
+        institution.dataUnavailable = true;
       }
       
       // Add the institution to our results
@@ -197,6 +236,9 @@ async function parseForm13FData(xmlData, limit) {
     }
     
     // Return the list of institutional investors
+    console.log(`[form13FParser] Returning ${institutionalHoldings.length} institutional holdings`);
+    console.log(`[form13FParser] Sample institution:`, institutionalHoldings[0] || 'none');
+    
     // In the future, we could return both the institutions and their holdings
     // for more detailed analysis
     return institutionalHoldings;
@@ -320,12 +362,16 @@ async function processXmlEntries(entries, limit) {
           institution.totalValueHeld += holding.value || 0;
         }
       } else {
-        // Fall back to sample data for this institution
-        useSampleHoldings(institution);
+        // Set empty/zero values instead of sample data
+        institution.totalSharesHeld = 0;
+        institution.totalValueHeld = 0;
+        institution.dataUnavailable = true;
       }
     } catch (fetchError) {
-      // Fall back to sample data if fetch fails
-      useSampleHoldings(institution);
+      // Set empty/zero values instead of sample data
+      institution.totalSharesHeld = 0;
+      institution.totalValueHeld = 0;
+      institution.dataUnavailable = true;
     }
     
     // Add the institution to our results
@@ -335,142 +381,7 @@ async function processXmlEntries(entries, limit) {
   return institutionalHoldings;
 }
 
-/**
- * Helper function to generate sample holdings data for development/testing
- * @param {Object} institution - Institution object to populate with sample holdings
- */
-function useSampleHoldings(institution) {
-  // Use developer mode for testing with realistic sample values
-  institution.totalSharesHeld = Math.floor(Math.random() * 5000000) + 100000;
-  institution.totalValueHeld = Math.floor(Math.random() * 100000000);
-  
-  // If the institution doesn't have a ticker yet, assign a placeholder that matches
-  // better with the frontend display logic
-  if (!institution.ticker || institution.ticker === '-') {
-    // For known investment managers, try to assign a reasonable ticker
-    const knownManagers = {
-      'Capital': 'CAP',
-      'Advisors': 'ADV',
-      'Wealth': 'WLT',
-      'Management': 'MGT',
-      'Asset': 'AST',
-      'Investment': 'INV',
-      'Partners': 'PTR',
-      'Global': 'GLB',
-      'Funds': 'FND',
-      'Financial': 'FIN',
-      'Securities': 'SEC',
-      'Group': 'GRP',
-      'Strategies': 'STR',
-      'Holdings': 'HLD',
-      'Planners': 'PLN',
-      'Wealth': 'WLT',
-      'Advisers': 'ADV'
-    };
-    
-    // Try to create a ticker from the first letters of major words in the name
-    // or pick a sensible abbreviation based on the business type
-    const nameParts = institution.institutionName.split(/\s+/);
-    
-    if (nameParts.length >= 2) {
-      // First try to find a known manager type in the name
-      for (const [type, code] of Object.entries(knownManagers)) {
-        if (institution.institutionName.includes(type)) {
-          // Use first letter(s) of the name plus the type code
-          const prefix = nameParts[0].substring(0, 2).toUpperCase();
-          institution.ticker = `${prefix}${code}`;
-          console.log(`Generated placeholder ticker ${institution.ticker} for ${institution.institutionName}`);
-          break;
-        }
-      }
-      
-      // If still no ticker, generate one from the firm's initials
-      if (!institution.ticker || institution.ticker === '-') {
-        // Use up to 4 letters from major words
-        let ticker = '';
-        for (let i = 0; i < Math.min(4, nameParts.length); i++) {
-          if (nameParts[i].length > 0 && /^[a-zA-Z]/.test(nameParts[i])) {
-            ticker += nameParts[i][0].toUpperCase();
-          }
-        }
-        
-        if (ticker.length >= 2) {
-          institution.ticker = ticker;
-          console.log(`Generated ticker ${institution.ticker} from initials of ${institution.institutionName}`);
-        }
-      }
-    }
-  }
-  
-  // Generate some sample top holdings for well-known stocks
-  const popularStocks = [
-    { ticker: 'AAPL', name: 'Apple Inc.', cusip: '037833100' },
-    { ticker: 'MSFT', name: 'Microsoft Corp', cusip: '594918104' },
-    { ticker: 'AMZN', name: 'Amazon.com Inc', cusip: '023135106' },
-    { ticker: 'GOOGL', name: 'Alphabet Inc Class A', cusip: '02079K305' },
-    { ticker: 'META', name: 'Meta Platforms Inc', cusip: '30303M102' },
-    { ticker: 'TSLA', name: 'Tesla Inc', cusip: '88160R101' },
-    { ticker: 'NVDA', name: 'NVIDIA Corp', cusip: '67066G104' },
-    { ticker: 'BRK.B', name: 'Berkshire Hathaway Inc Class B', cusip: '084670108' },
-    { ticker: 'JPM', name: 'JPMorgan Chase & Co', cusip: '46625H100' },
-    { ticker: 'V', name: 'Visa Inc Class A', cusip: '92826C839' },
-    { ticker: 'MA', name: 'Mastercard Inc', cusip: '57636Q104' },
-    { ticker: 'GOOG', name: 'Alphabet Inc Class C', cusip: '02079K107' },
-    { ticker: 'NFLX', name: 'Netflix Inc', cusip: '64110L106' },
-    { ticker: 'PYPL', name: 'PayPal Holdings Inc', cusip: '70450Y103' },
-    { ticker: 'INTC', name: 'Intel Corp', cusip: '458140100' },
-    { ticker: 'AMD', name: 'Advanced Micro Devices Inc', cusip: '007903107' },
-    { ticker: 'ADBE', name: 'Adobe Inc', cusip: '00724F101' },
-    { ticker: 'CSCO', name: 'Cisco Systems Inc', cusip: '17275R102' },
-    { ticker: 'CRM', name: 'Salesforce Inc', cusip: '79466L302' },
-    { ticker: 'ORCL', name: 'Oracle Corp', cusip: '68389X105' }
-  ];
-  
-  // Generate 3-7 random holdings for this institution
-  const numHoldings = Math.floor(Math.random() * 5) + 3;
-  const shuffled = [...popularStocks].sort(() => 0.5 - Math.random());
-  const selectedStocks = shuffled.slice(0, numHoldings);
-  
-  // Allocate total shares and value across the holdings
-  let remainingShares = institution.totalSharesHeld;
-  let remainingValue = institution.totalValueHeld;
-  
-  for (let i = 0; i < selectedStocks.length; i++) {
-    const stock = selectedStocks[i];
-    const isLast = i === selectedStocks.length - 1;
-    
-    // For last stock, use all remaining shares/value
-    // For others, use a proportion of what's left
-    const sharesPct = isLast ? 1 : Math.random() * 0.5; // Take up to 50% of remaining
-    const valuePct = isLast ? 1 : Math.random() * 0.5;
-    
-    const shares = isLast ? remainingShares : Math.floor(remainingShares * sharesPct);
-    const value = isLast ? remainingValue : Math.floor(remainingValue * valuePct);
-    
-    // Create the holding
-    const holding = {
-      id: `${institution.id}-${stock.cusip}`,
-      institutionName: institution.institutionName,
-      institutionCik: institution.cik,
-      institutionTicker: institution.ticker,
-      ticker: stock.ticker,
-      nameOfIssuer: stock.name,
-      titleOfClass: 'COM', // Common Stock
-      cusip: stock.cusip,
-      shares: shares,
-      value: value,
-      filingDate: institution.filingDate,
-      quarterEnd: institution.quarterEnd
-    };
-    
-    // Add to institution's holdings
-    institution.holdings.push(holding);
-    
-    // Update remaining totals
-    remainingShares -= shares;
-    remainingValue -= value;
-  }
-}
+// Sample holdings function removed - no fallback data allowed
 
 /**
  * Fetches and parses a 13F filing to extract holdings information.
@@ -481,7 +392,7 @@ function useSampleHoldings(institution) {
  */
 async function fetchFilingContent(url) {
   try {
-    console.log(`Fetching 13F filing content from ${url}`);
+    console.log(`[fetchFilingContent] Fetching 13F filing content from ${url}`);
     
     // First, get the main filing page
     const response = await axios.get(url, {
@@ -489,6 +400,14 @@ async function fetchFilingContent(url) {
         'User-Agent': 'hrvstr-sec-fetcher (Educational Use)'
       }
     });
+    
+    console.log(`[fetchFilingContent] Main page response status: ${response.status}`);
+    console.log(`[fetchFilingContent] Main page content length: ${response.data ? response.data.length : 0}`);
+    
+    if (!response.data) {
+      console.log('[fetchFilingContent] No response data received');
+      return { success: false, error: 'No response data', holdings: [] };
+    }
     
     // Parse the HTML response to find the link to the XML data
     const $ = cheerio.load(response.data);
@@ -511,16 +430,22 @@ async function fetchFilingContent(url) {
     // Method 3: Or just take any XML we can find
     const anyXmlLinks = $('a[href*=".xml"]');
     
+    console.log(`[fetchFilingContent] Found ${xmlLinks.length} info table XML links`);
+    console.log(`[fetchFilingContent] Found ${primaryXmlLinks.length} primary XML links`);
+    console.log(`[fetchFilingContent] Found ${anyXmlLinks.length} total XML links`);
+    
     // Find the data files in order of preference
     if (xmlLinks.length > 0) {
       xmlLink = xmlLinks.first().attr('href');
-      console.log('Found Information Table XML link');
+      console.log(`[fetchFilingContent] Found Information Table XML link: ${xmlLink}`);
     } else if (primaryXmlLinks.length > 0) {
       xmlLink = primaryXmlLinks.first().attr('href');
-      console.log('Found Primary XML link');
+      console.log(`[fetchFilingContent] Found Primary XML link: ${xmlLink}`);
     } else if (anyXmlLinks.length > 0) {
       xmlLink = anyXmlLinks.first().attr('href');
-      console.log('Found XML link');
+      console.log(`[fetchFilingContent] Found XML link: ${xmlLink}`);
+    } else {
+      console.log('[fetchFilingContent] No XML links found, will try HTML parsing');
     }
     
     // Parse any XML content we found
@@ -534,7 +459,7 @@ async function fetchFilingContent(url) {
         xmlLink = baseUrl + '/' + xmlLink.replace(/^\//, '');
       }
       
-      console.log(`Fetching XML data from ${xmlLink}`);
+      console.log(`[fetchFilingContent] Fetching XML data from ${xmlLink}`);
       
       try {
         const xmlResponse = await axios.get(xmlLink, {
@@ -543,19 +468,43 @@ async function fetchFilingContent(url) {
           }
         });
         
+        console.log(`[fetchFilingContent] XML response status: ${xmlResponse.status}`);
+        console.log(`[fetchFilingContent] XML content length: ${xmlResponse.data ? xmlResponse.data.length : 0}`);
+        
         // Parse the XML content
-        return parseXmlHoldings(xmlResponse.data);
+        const xmlResult = parseXmlHoldings(xmlResponse.data);
+        console.log(`[fetchFilingContent] XML parsing result:`, {
+          success: xmlResult.success,
+          holdingsCount: xmlResult.holdings ? xmlResult.holdings.length : 0,
+          format: xmlResult.format
+        });
+        return xmlResult;
       } catch (xmlError) {
-        console.error(`Error fetching XML: ${xmlError.message}`);
+        console.error(`[fetchFilingContent] Error fetching XML: ${xmlError.message}`);
         // If XML fetch fails, try to extract data from the HTML
-        return parseHtmlTable($);
+        console.log('[fetchFilingContent] Falling back to HTML parsing due to XML error');
+        const htmlResult = parseHtmlTable($);
+        console.log(`[fetchFilingContent] HTML parsing result:`, {
+          success: htmlResult.success,
+          holdingsCount: htmlResult.holdings ? htmlResult.holdings.length : 0,
+          format: htmlResult.format
+        });
+        return htmlResult;
       }
     } else {
       // Try to extract data from HTML tables if no XML is found
-      return parseHtmlTable($);
+      console.log('[fetchFilingContent] No XML found, trying HTML table parsing');
+      const htmlResult = parseHtmlTable($);
+      console.log(`[fetchFilingContent] HTML parsing result:`, {
+        success: htmlResult.success,
+        holdingsCount: htmlResult.holdings ? htmlResult.holdings.length : 0,
+        format: htmlResult.format
+      });
+      return htmlResult;
     }
   } catch (error) {
-    console.error(`[form13FParser] Error fetching filing content: ${error.message}`);
+    console.error(`[fetchFilingContent] Error fetching filing content: ${error.message}`);
+    console.error(`[fetchFilingContent] Full error:`, error);
     return {
       success: false,
       error: error.message,
@@ -571,12 +520,22 @@ async function fetchFilingContent(url) {
  */
 function parseXmlHoldings(xmlContent) {
   try {
+    console.log(`[parseXmlHoldings] Starting XML parsing, content length: ${xmlContent ? xmlContent.length : 0}`);
+    
+    if (!xmlContent || xmlContent.length === 0) {
+      console.log('[parseXmlHoldings] No XML content provided');
+      return { success: false, error: 'No XML content', holdings: [] };
+    }
+    
     // Load the XML content
     const $ = cheerio.load(xmlContent, { xmlMode: true });
     const holdings = [];
     
     // Different XML formats to handle
     // Format 1: Modern INFO TABLE format
+    const infoTables = $('infoTable');
+    console.log(`[parseXmlHoldings] Found ${infoTables.length} infoTable elements`);
+    
     $('infoTable').each((i, elem) => {
       try {
         const nameOfIssuer = $(elem).find('nameOfIssuer').text().trim();
@@ -605,6 +564,9 @@ function parseXmlHoldings(xmlContent) {
     
     // Format 2: Older XML formats
     if (holdings.length === 0) {
+      const securities = $('security');
+      console.log(`[parseXmlHoldings] No infoTable found, trying ${securities.length} security elements`);
+      
       $('security').each((i, elem) => {
         try {
           const nameOfIssuer = $(elem).find('company').text().trim() || 
@@ -630,6 +592,11 @@ function parseXmlHoldings(xmlContent) {
       });
     }
     
+    console.log(`[parseXmlHoldings] Parsed ${holdings.length} holdings from XML`);
+    if (holdings.length > 0) {
+      console.log(`[parseXmlHoldings] Sample holding:`, holdings[0]);
+    }
+    
     return {
       success: true,
       holdings: holdings,
@@ -637,7 +604,8 @@ function parseXmlHoldings(xmlContent) {
       count: holdings.length
     };
   } catch (error) {
-    console.error(`Error parsing XML holdings: ${error.message}`);
+    console.error(`[parseXmlHoldings] Error parsing XML holdings: ${error.message}`);
+    console.error(`[parseXmlHoldings] Full error:`, error);
     return {
       success: false,
       error: error.message,
@@ -653,9 +621,13 @@ function parseXmlHoldings(xmlContent) {
  */
 function parseHtmlTable($) {
   try {
+    console.log('[parseHtmlTable] Starting HTML table parsing');
     const holdings = [];
     
     // Find tables that look like they contain holdings data
+    const allTables = $('table');
+    console.log(`[parseHtmlTable] Found ${allTables.length} total tables`);
+    
     const tables = $('table').filter(function() {
       const text = $(this).text().toLowerCase();
       return text.includes('cusip') || 
@@ -663,6 +635,8 @@ function parseHtmlTable($) {
              text.includes('shares') || 
              text.includes('value');
     });
+    
+    console.log(`[parseHtmlTable] Found ${tables.length} tables with holdings-related content`);
     
     if (tables.length > 0) {
       // Get the table most likely to contain holdings
@@ -721,6 +695,11 @@ function parseHtmlTable($) {
       });
     }
     
+    console.log(`[parseHtmlTable] Parsed ${holdings.length} holdings from HTML`);
+    if (holdings.length > 0) {
+      console.log(`[parseHtmlTable] Sample holding:`, holdings[0]);
+    }
+    
     return {
       success: holdings.length > 0,
       holdings: holdings,
@@ -728,7 +707,8 @@ function parseHtmlTable($) {
       count: holdings.length
     };
   } catch (error) {
-    console.error(`Error parsing HTML holdings: ${error.message}`);
+    console.error(`[parseHtmlTable] Error parsing HTML holdings: ${error.message}`);
+    console.error(`[parseHtmlTable] Full error:`, error);
     return {
       success: false,
       error: error.message,

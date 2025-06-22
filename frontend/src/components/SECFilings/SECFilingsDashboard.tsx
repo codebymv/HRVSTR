@@ -312,7 +312,7 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
                       <div className={`${headerBg} p-4`}>
                         <h2 className={`text-lg font-semibold ${textColor}`}>Recent Insider Transactions</h2>
                       </div>
-                      {loadingIsFreshUnlock.insiderTrading ? (
+                      {loadingIsFreshUnlock.insiderTrades ? (
                         <HarvestLoadingCard
                           progress={loadingProgress}
                           stage={loadingStage}
@@ -366,34 +366,16 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
                 <InstitutionalUpgradeCard />
               ) : unlockedComponents.institutionalHoldings ? (
                 <>
-                  {loadingState.institutionalHoldings.isLoading ? (
+                  {loadingIsFreshUnlock.institutionalHoldings && loadingState.institutionalHoldings.isLoading ? (
                     <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden h-full`}>
                       <div className={`${headerBg} p-4`}>
                         <h2 className={`text-lg font-semibold ${textColor}`}>Institutional Holdings</h2>
                       </div>
-                      {loadingIsFreshUnlock.institutionalHoldings ? (
-                        <HarvestLoadingCard
-                          progress={loadingProgress}
-                          stage={loadingStage}
-                          operation="institutional-holdings"
-                        />
-                      ) : (
-                        <div className="flex flex-col items-center justify-center p-12 text-center">
-                          <Loader2 className="text-blue-500 animate-spin mb-4" size={32} />
-                          <h3 className={`text-lg font-semibold ${textColor} mb-2`}>
-                            Loading Institutional Holdings Data
-                          </h3>
-                          <p className={`text-sm ${subTextColor} mb-4`}>
-                            Loading from cache...
-                          </p>
-                          <div className="w-full max-w-md">
-                            <ProgressBar progress={loadingProgress} />
-                            <div className={`text-xs ${subTextColor} mt-2 text-center`}>
-                              {loadingStage} - {loadingProgress}%
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                      <HarvestLoadingCard
+                        progress={loadingProgress}
+                        stage={loadingStage}
+                        operation="institutional-holdings"
+                      />
                     </div>
                   ) : (
                     <InstitutionalHoldingsTab

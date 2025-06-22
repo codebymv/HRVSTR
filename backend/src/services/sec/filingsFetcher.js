@@ -695,16 +695,37 @@ async function fetchInstitutionalHoldings(timeRange = '1m', limit = 100) {
     // The SEC RSS feed URL for the latest Form 13F filings
     const secUrl = `https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=13F&count=${limit}&output=atom`;
     console.log(`[filingsFetcher] Fetching SEC Form 13F filings from: ${secUrl}`);
+    console.log(`[filingsFetcher] Parameters - timeRange: ${timeRange}, limit: ${limit}`);
 
     // Make the API request with retry logic
+    console.log('[filingsFetcher] Making SEC API request...');
     const response = await secApiRequestWithRetry(secUrl);
+    
+    console.log(`[filingsFetcher] SEC API response status: ${response.status}`);
+    console.log(`[filingsFetcher] SEC API response data length: ${response.data ? response.data.length : 0}`);
+    
+    if (!response.data) {
+      console.log('[filingsFetcher] No data received from SEC API');
+      return [];
+    }
+    
+    // Log a sample of the XML data for debugging
+    const sampleData = response.data.substring(0, 500);
+    console.log(`[filingsFetcher] Sample SEC API response: ${sampleData}`);
 
     // Parse the XML data using the form13FParser
+    console.log('[filingsFetcher] Parsing XML data with form13FParser...');
     const institutionalHoldings = await parseSecForm13FData(response.data, limit);
+    
+    console.log(`[filingsFetcher] Parser returned ${institutionalHoldings ? institutionalHoldings.length : 0} holdings`);
     
     // If we got no data from the parser, return empty array
     if (!institutionalHoldings || institutionalHoldings.length === 0) {
       console.log('[filingsFetcher] No institutional holdings found from SEC API');
+      console.log('[filingsFetcher] This could be due to:');
+      console.log('  - No 13F filings available in the RSS feed');
+      console.log('  - XML parsing issues');
+      console.log('  - SEC API returning unexpected format');
       return [];
     }
     
@@ -712,6 +733,7 @@ async function fetchInstitutionalHoldings(timeRange = '1m', limit = 100) {
     return institutionalHoldings;
   } catch (error) {
     console.error('[filingsFetcher] Error fetching SEC institutional holdings:', error.message);
+    console.error('[filingsFetcher] Full error details:', error);
     // Return empty array instead of sample data
     return [];
   }

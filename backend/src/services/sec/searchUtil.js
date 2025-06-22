@@ -65,11 +65,21 @@ async function searchSecFilings(query, options = {}) {
     
     // Handle rate limiting response
     if (response.status === 429) {
-      console.warn(`[searchUtil] Rate limited for query "${query}". Using fallback data.`);
-      const mockResults = generateMockSearchResults(query, category, size);
-      // Cache the mock results for a shorter time
-      cacheUtils.setCachedItem('sec-search', cacheKey, mockResults, 5 * 60 * 1000); // 5 minutes
-      return mockResults;
+      console.warn(`[searchUtil] Rate limited for query "${query}". Returning empty results.`);
+      const emptyResults = {
+        took: 0,
+        timed_out: false,
+        hits: {
+          total: {
+            value: 0,
+            relation: "eq"
+          },
+          max_score: 0,
+          hits: []
+        },
+        error: 'SEC API rate limited - please try again later'
+      };
+      return emptyResults;
     }
     
     // Cache successful results
@@ -88,66 +98,27 @@ async function searchSecFilings(query, options = {}) {
       console.error(`[searchUtil] SEC search error for query "${query}":`, error.message);
     }
   
-    // If the search fails, return mock data as fallback to avoid breaking the system
-    console.log(`[searchUtil] Falling back to mock data due to API error`);
-    const mockResults = generateMockSearchResults(query, category, size);
-  
-    // Cache the mock results for a shorter time
-    cacheUtils.setCachedItem('sec-search', cacheKey, mockResults, 5 * 60 * 1000); // 5 minutes
-  
-    return mockResults;
+    // Return empty results instead of mock data
+    console.log(`[searchUtil] SEC API unavailable - returning empty results`);
+    const emptyResults = {
+      took: 0,
+      timed_out: false,
+      hits: {
+        total: {
+          value: 0,
+          relation: "eq"
+        },
+        max_score: 0,
+        hits: []
+      },
+      error: 'SEC data temporarily unavailable'
+    };
+
+    return emptyResults;
   }
 }
 
-/**
- * Generate mock search results for testing/fallback
- * @param {string} query - Search query
- * @param {string} category - Filing category
- * @param {number} size - Number of results to return
- * @returns {Object} - Mock search results
- */
-function generateMockSearchResults(query, category, size) {
-  // Extract ticker or CIK from query if present
-  const tickerMatch = query.match(/ticker:([A-Z]+)/i);
-  const cikMatch = query.match(/cik:(\d+)/i);
-  const nameMatch = query.match(/name:([^&]+)/i);
-  
-  const ticker = tickerMatch ? tickerMatch[1].toUpperCase() : null;
-  const cik = cikMatch ? cikMatch[1] : null;
-  const name = nameMatch ? nameMatch[1].trim() : null;
-  
-  // Generate mock hits
-  const hits = [];
-  
-  for (let i = 0; i < size; i++) {
-    const mockHit = {
-      _id: `mock-${category}-${i}`,
-      _source: {
-        cik: cik || `000${Math.floor(Math.random() * 9999999)}`.padStart(10, '0'),
-        companyName: name || `Mock Company ${i}`,
-        ticker: ticker || ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'TSLA'][i % 5],
-        filingDate: new Date(Date.now() - i * 86400000).toISOString().split('T')[0],
-        formType: category === 'form-4' ? '4' : '13F',
-        filingDescription: `Mock filing for ${ticker || 'MOCK'}`
-      }
-    };
-    
-    hits.push(mockHit);
-  }
-  
-  return {
-    took: 42,
-    timed_out: false,
-    hits: {
-      total: {
-        value: size,
-        relation: "eq"
-      },
-      max_score: 1.0,
-      hits: hits
-    }
-  };
-}
+// Mock data generation function removed - no fallback data allowed
 
 module.exports = {
   searchSecFilings

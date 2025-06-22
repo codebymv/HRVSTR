@@ -6,7 +6,7 @@ interface LoadingState {
 }
 
 interface FreshUnlockState {
-  insiderTrading: boolean;
+  insiderTrades: boolean;
   institutionalHoldings: boolean;
 }
 
@@ -170,11 +170,11 @@ export const useSECLoading = ({
 
   // Clear fresh unlock flags when loading completes (matching earnings pattern)
   useEffect(() => {
-    if (!loadingState.insiderTrades.isLoading && isFreshUnlock.insiderTrading) {
+    if (!loadingState.insiderTrades.isLoading && isFreshUnlock.insiderTrades) {
       console.log('🔄 SEC DASHBOARD - Clearing insider trading fresh unlock flag after loading');
-      setFreshUnlockState('insiderTrading', false);
+      setFreshUnlockState('insiderTrades', false);
     }
-  }, [loadingState.insiderTrades.isLoading, isFreshUnlock.insiderTrading, setFreshUnlockState]);
+  }, [loadingState.insiderTrades.isLoading, isFreshUnlock.insiderTrades, setFreshUnlockState]);
 
   useEffect(() => {
     if (!loadingState.institutionalHoldings.isLoading && isFreshUnlock.institutionalHoldings) {
@@ -191,11 +191,14 @@ export const useSECLoading = ({
     errors,
     insiderTradesData,
     institutionalHoldingsData,
-    isFreshUnlock,
+    isFreshUnlock: {
+      insiderTrades: isFreshUnlock.insiderTrades,
+      institutionalHoldings: isFreshUnlock.institutionalHoldings
+    },
     handleInsiderTradesLoading,
     handleInstitutionalHoldingsLoading,
     handleRefresh,
     setLoadingState,
     setErrors
   };
-}; 
+};

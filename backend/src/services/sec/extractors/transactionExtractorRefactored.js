@@ -7,7 +7,7 @@
 
 // Import specialized extractors - NOTE: These paths will need to be created
 // For now, we'll use fallback implementations until all components are moved
-let extractFromXmlForm4, extractFromXmlWithRegex, extractFromHtmlTables, extractFromSecIndexPage, extractAllFields, extractActualFilingDate, generateSampleTransactionData, validateExtractionResults;
+let extractFromXmlForm4, extractFromXmlWithRegex, extractFromHtmlTables, extractFromSecIndexPage, extractAllFields, extractActualFilingDate, validateExtractionResults;
 
 try {
   const xmlExtractor = require('./extractors/xmlExtractor');
@@ -45,19 +45,8 @@ try {
   extractActualFilingDate = () => null;
 }
 
-try {
-  const sampleGenerator = require('./generators/sampleDataGenerator');
-  generateSampleTransactionData = sampleGenerator.generateSampleTransactionData;
-} catch (e) {
-  console.warn('[transactionExtractorRefactored] Sample generator not available, using safe fallback');
-  generateSampleTransactionData = () => ({
-    shares: 0,
-    price: 0,
-    value: 0,
-    tradeType: 'UNKNOWN',
-    extractionError: 'Data extraction failed - no reliable data available'
-  });
-}
+// Sample data generator removed - no fallback data allowed
+// Sample data checks removed - only real data is processed
 
 try {
   const utils = require('./utils/extractorUtils');
@@ -243,9 +232,7 @@ function generateTransactionNote(result) {
     return 'Data extraction failed - filing content could not be reliably parsed';
   }
   
-  if (result._isSampleData) {
-    return 'WARNING: This is sample data, not real transaction data';
-  }
+  // Sample data checks removed - only real data is processed
   
   if (result.shares > 0 && (result.price === 0 || result.value === 0)) {
     return 'Non-monetary transaction (stock grant, option, etc.)';
@@ -361,4 +348,4 @@ module.exports = {
   extractShares,
   extractPrice,
   extractValue
-}; 
+};

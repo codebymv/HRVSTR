@@ -166,19 +166,44 @@ const InstitutionalHoldingsTab: React.FC<InstitutionalHoldingsTabProps> = ({
       return [];
     }
     
-    return holdings.filter(holding => {
+    console.log('🔍 FILTER: Starting tradeable securities filter with', holdings.length, 'holdings');
+    
+    const filtered = holdings.filter(holding => {
       const ticker = holding.ticker;
-      if (!ticker || ticker === '-') return false;
+      if (!ticker || ticker === '-') {
+        console.log('🔍 FILTER: Rejected - no ticker or dash:', ticker);
+        return false;
+      }
       
       // Filter out SEC administrative codes
-      if (ticker.match(/^13[A-Z0-9]/)) return false; // 13XXX SEC identifiers
-      if (ticker.match(/^[0-9]{5,}/)) return false; // Long numeric codes (likely CUSIPs)
-      if (ticker.length > 5) return false; // Overly long identifiers
+      if (ticker.match(/^13[A-Z0-9]/)) {
+        console.log('🔍 FILTER: Rejected - SEC identifier:', ticker);
+        return false; // 13XXX SEC identifiers
+      }
+      if (ticker.match(/^[0-9]{5,}/)) {
+        console.log('🔍 FILTER: Rejected - long numeric:', ticker);
+        return false; // Long numeric codes (likely CUSIPs)
+      }
+      if (ticker.length > 5) {
+        console.log('🔍 FILTER: Rejected - too long:', ticker);
+        return false; // Overly long identifiers
+      }
       
       // Keep only valid ticker-like symbols
       const cleaned = ticker.replace(/[)\/]/g, '').trim();
-      return cleaned.match(/^[A-Z]{1,5}$/) || cleaned.match(/^[A-Z]+\.[A-Z]$/) || cleaned.match(/^\d{1,4}$/);
+      const isValid = cleaned.match(/^[A-Z]{1,5}$/) || cleaned.match(/^[A-Z]+\.[A-Z]$/) || cleaned.match(/^\d{1,4}$/);
+      
+      if (!isValid) {
+        console.log('🔍 FILTER: Rejected - invalid pattern:', ticker, 'cleaned:', cleaned);
+      } else {
+        console.log('🔍 FILTER: Accepted:', ticker);
+      }
+      
+      return isValid;
     });
+    
+    console.log('🔍 FILTER: Filtered from', holdings.length, 'to', filtered.length, 'holdings');
+    return filtered;
   };
   
   // Helper function to filter holdings by timeRange
@@ -273,13 +298,27 @@ const InstitutionalHoldingsTab: React.FC<InstitutionalHoldingsTabProps> = ({
         return;
       }
       
+      console.log('🔍 INSTITUTIONAL: Raw holdings from API:', data.length);
+      if (data.length > 0) {
+        console.log('🔍 INSTITUTIONAL: Sample raw holding:', data[0]);
+      }
+      
       updateProgress(50, 'Filtering holdings by time range...');
       
       // Add longer delay for UX during filtering
       await new Promise(resolve => setTimeout(resolve, 600));
       
       const filteredHoldings = filterHoldingsByTimeRange(data, timeRange);
+      console.log('🔍 INSTITUTIONAL: After time filtering:', filteredHoldings.length);
+      
       const tradeableHoldings = filterTradeableSecurities(filteredHoldings);
+      console.log('🔍 INSTITUTIONAL: After tradeable filtering:', tradeableHoldings.length);
+      
+      // Log some examples of what was filtered out
+      if (filteredHoldings.length > tradeableHoldings.length) {
+        const filtered = filteredHoldings.filter(h => !tradeableHoldings.includes(h));
+        console.log('🔍 INSTITUTIONAL: Examples of filtered out holdings:', filtered.slice(0, 5).map(h => ({ ticker: h.ticker, institutionName: h.institutionName })));
+      }
       
       console.log(`🔄 INSTITUTIONAL TAB: Filtered to ${tradeableHoldings.length} holdings for ${timeRange} range`);
       

@@ -129,13 +129,28 @@ export const fetchInstitutionalHoldingsWithUserCache = async (
     
     const data = await response.json();
     
+    console.log('🔍 API: Raw response from institutional holdings API:', {
+      hasData: !!data,
+      dataKeys: data ? Object.keys(data) : [],
+      institutionalHoldingsType: typeof data?.institutionalHoldings,
+      institutionalHoldingsLength: Array.isArray(data?.institutionalHoldings) ? data.institutionalHoldings.length : 'not array',
+      fromCache: data?.fromCache,
+      timeRange: timeRange,
+      refresh: refresh
+    });
+    
     // Handle cached vs fresh data response - ensure we always get an array
     if (data && Array.isArray(data.institutionalHoldings)) {
-      console.log(`Fetched ${data.institutionalHoldings.length} institutional holdings using user cache system`);
-      if (data.fromCache) {
-        console.log('Data served from user-specific cache');
+      console.log(`🔍 API: Fetched ${data.institutionalHoldings.length} institutional holdings using user cache system`);
+      if (data.institutionalHoldings.length > 0) {
+        console.log('🔍 API: Sample holding:', data.institutionalHoldings[0]);
       } else {
-        console.log('Fresh data fetched and cached for user');
+        console.log('🔍 API: ⚠️ API returned empty array for institutional holdings');
+      }
+      if (data.fromCache) {
+        console.log('🔍 API: Data served from user-specific cache');
+      } else {
+        console.log('🔍 API: Fresh data fetched and cached for user');
       }
       return data.institutionalHoldings as InstitutionalHolding[];
     } else if (data && data.institutionalHoldings === null) {
@@ -213,4 +228,4 @@ export const fetchSecDataParallel = async (timeRange: TimeRange = '1w', refresh:
     console.error('Parallel SEC data API error:', error);
     throw new Error(error instanceof Error ? error.message : 'Failed to fetch SEC data');
   }
-}; 
+};

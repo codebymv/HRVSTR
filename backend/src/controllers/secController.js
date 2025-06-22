@@ -789,7 +789,7 @@ async function streamInsiderTrades(req, res) {
         
         // Log sample of data being sent to frontend
         if (data.insiderTrades && data.insiderTrades.length > 0) {
-          console.log(`🔍 SEC CONTROLLER - Sample data being sent:`, {
+          console.log(`🔍 SEC CONTROLLER - Insider trades data being sent:`, {
             firstTrade: {
               ticker: data.insiderTrades[0].ticker,
               filingDate: data.insiderTrades[0].filingDate,

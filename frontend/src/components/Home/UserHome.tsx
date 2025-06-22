@@ -597,7 +597,7 @@ const UserHome: React.FC = () => {
   return (
     <div className={`min-h-screen ${bgColor} p-6 relative`}>
       {/* Left side background leaves - desktop only */}
-      <div className="hidden xl:block fixed left-0 top-0 w-64 h-full pointer-events-none z-0">
+      <div className="hidden xl:block fixed left-64 top-0 w-64 h-full pointer-events-none z-0">
         <BackgroundLeaves 
           opacity={isLight ? 0.15 : 0.12} 
           leafCount={8}

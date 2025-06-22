@@ -390,7 +390,7 @@ async function storeEarningsDataInCache(userId, dataType, timeRange, data, tier,
     
     // Log a sample of the data structure for debugging
     if (Array.isArray(limitedData) && limitedData.length > 0) {
-      console.log(`💾 [CACHE STORE] Sample data item keys:`, Object.keys(limitedData[0] || {}));
+      console.log(`💾 [CACHE STORE] Data item keys:`, Object.keys(limitedData[0] || {}));
       
       // Check for the problematic lastUpdated field
       if (limitedData[0] && limitedData[0].lastUpdated) {
@@ -768,4 +768,4 @@ module.exports = {
   getUserEarningsCacheStatus,
   cleanupExpiredEarningsCache,
   EARNINGS_CACHE_CONFIG
-}; 
+};

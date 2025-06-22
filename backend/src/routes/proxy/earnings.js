@@ -186,13 +186,23 @@ router.get('/upcoming/stream', async (req, res) => {
               source: data.source 
             });
             
+            // Send completion signal with proper data structure
             sendProgress({
               stage: 'Completed!',
               progress: 100,
               total: 100,
               current: 100,
               completed: true,
-              data: data,
+              data: {
+                success: data.success,
+                data: data.data,
+                source: data.source,
+                count: data.count,
+                metadata: data.metadata,
+                timeRange: data.timeRange,
+                tier: data.tier,
+                timestamp: data.timestamp
+              },
               timestamp: new Date().toISOString()
             });
             res.end();
