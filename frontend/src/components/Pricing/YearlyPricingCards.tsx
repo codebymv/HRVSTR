@@ -20,7 +20,7 @@ const YearlyPricingCards: React.FC<YearlyPricingCardsProps> = ({ onPurchaseClick
       monthlyPrice: 12,
       yearlyPrice: 120, // ~10/month (17% savings)
       icon: <Crown className="w-5 h-5" />,
-      gradient: 'from-blue-400 to-blue-600',
+      gradient: 'from-blue-500 to-purple-600',
       popular: true,
       savings: '17%'
     }
@@ -97,7 +97,7 @@ const YearlyPricingCards: React.FC<YearlyPricingCardsProps> = ({ onPurchaseClick
             onClick={() => onPurchaseClick(tier.name, true)}
             className={`w-full py-2 px-4 rounded-lg font-medium transition-colors text-sm lg:text-base ${
               tier.popular 
-                ? 'bg-blue-500 hover:bg-blue-600 text-white' 
+                ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white' 
                 : `bg-gradient-to-r ${tier.gradient} text-white hover:opacity-90`
             }`}
           >
@@ -109,4 +109,4 @@ const YearlyPricingCards: React.FC<YearlyPricingCardsProps> = ({ onPurchaseClick
   );
 };
 
-export default YearlyPricingCards; 
+export default YearlyPricingCards;
