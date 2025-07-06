@@ -2,7 +2,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom'; // Added useLocation
 import { useTheme } from '../contexts/ThemeContext';
-import { Sun, Moon, User } from 'lucide-react';
+import { Sun, Moon, User, BookOpen } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export const AuthButton = () => {
   const { 
@@ -137,6 +138,14 @@ export const AuthButton = () => {
                   </>
                 )}
               </button>
+              
+              {/* Help Link */}
+              <Link
+                to="/help"
+                className={`w-full text-left px-4 py-2 text-sm ${dropdownTextColor} ${hoverBgColor} flex items-center transition-colors`}
+              >
+                <BookOpen size={16} className="mr-2" /> Help
+              </Link>
               
               {/* Sign Out */}
               <button

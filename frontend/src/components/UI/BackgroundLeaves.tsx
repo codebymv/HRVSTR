@@ -33,7 +33,7 @@ const BackgroundLeaves: React.FC<BackgroundLeavesProps> = ({
   }, []);
 
   return (
-    <div className="fixed inset-0 pointer-events-none z-0" style={{ opacity }}>
+    <div className="fixed inset-0 pointer-events-none z-0 hidden md:block" style={{ opacity }}>
       <FallingLeaves3D
         width={dimensions.width}
         height={dimensions.height}
