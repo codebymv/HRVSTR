@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
-import { TrendingUp, TrendingDown, Minus, Calendar, Building2, Star, Activity, RefreshCw, ArrowUpRight, ArrowDownRight, Info } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Building2, Star, Activity, RefreshCw, Info, ArrowUpRight } from 'lucide-react';
 
 // Mock Sentiment Preview (matching SentimentCard design)
 export const SentimentPreview: React.FC = () => {
@@ -10,7 +10,6 @@ export const SentimentPreview: React.FC = () => {
   const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-900';
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
   const headingTextColor = isLight ? 'text-stone-900' : 'text-white';
-  const subTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
   const badgeBgColor = isLight ? 'bg-stone-200' : 'bg-gray-700';
 
   // Mock data
@@ -56,7 +55,7 @@ export const SentimentPreview: React.FC = () => {
           <Activity size={20} className="text-purple-600" />
           <h3 className={`text-lg font-semibold ${headingTextColor}`}>Sentiment Score</h3>
         </div>
-        <span className={`text-sm ${subTextColor}`}>Bullish • 78% confidence</span>
+        <span className={`text-sm ${headingTextColor}`}>Bullish • 78% confidence</span>
       </div>
 
       <div className="p-4 flex-1 flex flex-col">
@@ -78,7 +77,7 @@ export const SentimentPreview: React.FC = () => {
         {/* Price information */}
         <div className="mb-4 p-3 rounded-lg bg-opacity-50" style={{backgroundColor: isLight ? '#f8f9fa' : '#374151'}}>
           <div className="flex items-center justify-between">
-            <span className={`text-xs ${subTextColor}`}>Current Price</span>
+            <span className={`text-xs ${headingTextColor}`}>Current Price</span>
             <div className="text-right">
               <span className={`text-sm font-semibold ${headingTextColor}`}>
                 ${mockSentiment.price.toFixed(2)}
@@ -97,9 +96,9 @@ export const SentimentPreview: React.FC = () => {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center space-x-2">
             <div className="h-2 w-2 rounded-full bg-green-500"></div>
-            <span className={`text-xs ${subTextColor}`}>Live • {mockSentiment.postCount + mockSentiment.commentCount} discussions</span>
+            <span className={`text-xs ${headingTextColor}`}>Live • {mockSentiment.postCount + mockSentiment.commentCount} discussions</span>
           </div>
-          <Info size={12} className={`${subTextColor}`} />
+          <Info size={12} className={`${headingTextColor}`} />
         </div>
 
         {/* Progress indicator */}
@@ -468,4 +467,57 @@ export const ActivityPreview: React.FC = () => {
       </div>
     </div>
   );
-}; 
+};
+
+// AI Insights Preview Component
+export const AIInsightsPreview: React.FC = () => {
+  const { theme } = useTheme();
+  const isLight = theme === 'light';
+  
+  const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-900';
+  const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
+  const headingTextColor = isLight ? 'text-stone-900' : 'text-white';
+  const subTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
+  const buttonBgColor = 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700';
+  
+  const [showAnalysis, setShowAnalysis] = React.useState(false);
+  const [isAnalyzing, setIsAnalyzing] = React.useState(false);
+
+  const handleAnalyzeClick = () => {
+    setIsAnalyzing(true);
+    // Simulate analysis delay
+    setTimeout(() => {
+      setIsAnalyzing(false);
+      setShowAnalysis(true);
+    }, 1500);
+  };
+
+  return (
+    <div className={`${cardBgColor} rounded-lg border ${borderColor} shadow-sm hover:shadow-md transition-all duration-200 w-full`}>
+      <div className="p-6">
+        <div className="flex items-center mb-4">
+          <div className={`p-2 rounded-lg ${isLight ? 'bg-blue-100' : 'bg-blue-900 bg-opacity-50'}`}>
+            <Activity size={24} className="text-blue-600" />
+          </div>
+          <h3 className={`text-xl font-semibold ml-3 ${headingTextColor}`}>AI Insights</h3>
+        </div>
+        
+        {!showAnalysis ? (
+          <div className="space-y-4">
+            <p className={subTextColor}>
+              Get instant AI-powered analysis of any stock, combining technicals, sentiment, and fundamentals.
+            </p>
+            <button
+              onClick={handleAnalyzeClick}
+              disabled={isAnalyzing}
+              className={`${buttonBgColor} text-white px-4 py-2 rounded-md text-sm font-medium w-full flex items-center justify-center transition-colors`}
+            >
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+};
+
+// All components are already exported at their declarations above

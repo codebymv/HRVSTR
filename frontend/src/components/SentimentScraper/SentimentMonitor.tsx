@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { TimeRange } from '../../types';
-import { RefreshCw, Loader2, Key, TrendingUp, BarChart2, MessageSquare, Zap } from 'lucide-react';
+import { RefreshCw, Loader2, Key, TrendingUp, BarChart2, MessageSquare, Zap, Crown } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTier } from '../../contexts/TierContext';
 import { useTierLimits } from '../../hooks/useTierLimits';

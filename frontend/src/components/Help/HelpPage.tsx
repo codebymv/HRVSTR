@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
-import { ChevronRight, Home, Search, FileText, Folder, Menu, X } from 'lucide-react';
+import { ChevronRight, Home, Search, FileText, Folder, Menu, X, ArrowLeft } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -26,15 +26,24 @@ const HelpPage: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Theme classes
-  const bgColor = theme === 'dark' ? 'bg-gray-900' : 'bg-white';
-  const textColor = theme === 'dark' ? 'text-gray-100' : 'text-gray-900';
-  const borderColor = theme === 'dark' ? 'border-gray-700' : 'border-gray-200';
-  const sidebarBg = theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50';
-  const searchBg = theme === 'dark' ? 'bg-gray-700' : 'bg-white';
-  const searchBorder = theme === 'dark' ? 'border-gray-600' : 'border-gray-300';
-  const linkColor = theme === 'dark' ? 'text-blue-400' : 'text-blue-600';
-  const linkHoverColor = theme === 'dark' ? 'text-blue-300' : 'text-blue-800';
-  const mutedTextColor = theme === 'dark' ? 'text-gray-400' : 'text-gray-500';
+  const isLight = theme === 'light';
+  const bgColor = isLight ? 'bg-white' : 'bg-gray-900';
+  const textColor = isLight ? 'text-gray-900' : 'text-gray-100';
+  const borderColor = isLight ? 'border-gray-200' : 'border-gray-700';
+  const sidebarBg = isLight ? 'bg-gray-50' : 'bg-gray-800';
+  const searchBg = isLight ? 'bg-white' : 'bg-gray-700';
+  const searchBorder = isLight ? 'border-gray-300' : 'border-gray-600';
+  const linkColor = isLight ? 'text-blue-600' : 'text-blue-400';
+  const linkHoverColor = isLight ? 'text-blue-800' : 'text-blue-300';
+  const mutedTextColor = isLight ? 'text-gray-500' : 'text-gray-400';
+  const buttonBgColor = 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700';
+
+  const location = useLocation();
+  console.log('Current path:', location.pathname);
+  // Show back button on all pages except the root path
+  const isHomePage = ['/', ''].includes(location.pathname);
+  const showBackButton = !isHomePage;
+  console.log('Show back button:', showBackButton, 'for path:', location.pathname, 'isHomePage:', isHomePage);
 
   // Load document structure on component mount
   useEffect(() => {
@@ -217,8 +226,9 @@ const HelpPage: React.FC = () => {
   const filteredDocs = getFilteredDocs(docStructure, searchTerm);
 
   return (
-    <div className={`min-h-screen ${bgColor} ${textColor}`}>
-      <div className="flex h-screen">
+    <div className={`min-h-screen ${bgColor} ${textColor} transition-colors duration-200`} style={{ WebkitTapHighlightColor: 'transparent' }}>
+
+      <div className="flex min-h-screen w-full">
         {/* Sidebar */}
         <div
           id="docs-sidebar"
@@ -280,23 +290,54 @@ const HelpPage: React.FC = () => {
 
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto">
-            <div className="p-4 lg:p-8 max-w-4xl mx-auto">
-              {/* Mobile Docs Menu Button - positioned in content area */}
-              <div className="lg:hidden mb-4">
-                <button
-                  id="mobile-menu-button"
-                  onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                  className={`flex items-center px-3 py-2 rounded-md border shadow-sm hover:shadow-md transition-shadow ${
-                    theme === 'dark' 
-                      ? 'bg-gray-800 text-white border-gray-600 hover:bg-gray-700' 
-                      : 'bg-white text-gray-900 border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  <Menu className="h-5 w-5 mr-2" />
-                  <span className="text-sm font-medium">Documentation Menu</span>
-                </button>
+          {/* Desktop: Back button aligned with content */}
+          <div className="hidden lg:block py-4">
+            <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex items-center">
+                <div className="w-64">
+                  {showBackButton && (
+                    <button 
+                      onClick={() => navigate(-1)}
+                      className={`flex items-center ${buttonBgColor} text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm hover:shadow-md transition-colors`}
+                    >
+                      <ArrowLeft className="w-4 h-4 mr-1" />
+                      Back
+                    </button>
+                  )}
+                </div>
               </div>
+            </div>
+          </div>
+
+          {/* Mobile/Tablet: Back and Menu in same row */}
+          <div className="lg:hidden px-4 sm:px-6 py-4">
+            <div className="flex items-center gap-3">
+              {showBackButton && (
+                <button 
+                  onClick={() => navigate(-1)}
+                  className={`flex items-center justify-center ${buttonBgColor} text-white px-4 py-2.5 rounded-md text-sm font-medium shadow-sm hover:shadow-md transition-colors whitespace-nowrap`}
+                >
+                  <ArrowLeft className="w-4 h-4 mr-1.5 flex-shrink-0" />
+                  <span>Back</span>
+                </button>
+              )}
+              <button
+                onClick={() => setIsSidebarOpen(true)}
+                className={`flex-1 flex items-center justify-center px-4 py-2.5 rounded-md border shadow-sm hover:shadow-md transition-colors ${
+                  theme === 'dark' 
+                    ? 'bg-gray-800 text-white border-gray-600 hover:bg-gray-700' 
+                    : 'bg-white text-gray-900 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                <Menu className="h-5 w-5 mr-2 flex-shrink-0" />
+                <span className="text-sm font-medium truncate">Documentation Menu</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Main content area */}
+          <div className="flex-1 overflow-y-auto w-full">
+            <div className="px-4 sm:px-6 py-6 max-w-4xl mx-auto w-full">
               
               {/* Breadcrumbs */}
               <nav className="flex mb-6 lg:mb-8" aria-label="Breadcrumb">

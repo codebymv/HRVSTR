@@ -11,6 +11,10 @@ const cors = require('cors');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
+const helmet = require('helmet');
+const mongoSanitize = require('express-mongo-sanitize');
+const xss = require('xss-clean');
+const hpp = require('hpp');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -45,8 +49,53 @@ const creditsRoutes = require('./routes/credits');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Security Middleware
+app.use(helmet()); // Set security HTTP headers
+app.use(mongoSanitize()); // Data sanitization against NoSQL query injection
+app.use(xss()); // Data sanitization against XSS
+app.use(hpp()); // Prevent parameter pollution
+
 // Trust proxy for Railway deployment
 app.set('trust proxy', 1);
+
+// Disable x-powered-by header
+app.disable('x-powered-by');
+
+// Limit request body size
+app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+
+// Rate limiting configuration
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const RATE_LIMIT_MAX = process.env.NODE_ENV === 'development' ? 1000 : 100; // More lenient in development
+
+const apiLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: RATE_LIMIT_MAX,
+  message: JSON.stringify({
+    error: 'rate_limit_exceeded',
+    message: `Too many requests, please try again after ${RATE_LIMIT_WINDOW_MS/60000} minutes`,
+    status: 429
+  }),
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for preflight requests
+    return req.method === 'OPTIONS';
+  },
+  handler: (req, res, next, options) => {
+    console.warn(`Rate limit exceeded for IP: ${req.ip}, Path: ${req.path}, Method: ${req.method}`);
+    res.status(options.statusCode).send(options.message);
+  }
+});
+
+// Apply rate limiting to all API routes except OPTIONS (preflight)
+app.use('/api/', (req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    return next();
+  }
+  return apiLimiter(req, res, next);
+});
 
 // Register global rate limits
 cacheManager.registerRateLimit('api-global', 100, 15 * 60); // 100 requests per 15 minutes
@@ -103,10 +152,34 @@ const getAllowedOrigins = () => {
 };
 
 const corsOptions = {
-  origin: getAllowedOrigins(), // Dynamic origins based on environment
+  origin: (origin, callback) => {
+    const allowedOrigins = getAllowedOrigins();
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin) || 
+        allowedOrigins.some(allowedOrigin => 
+          origin.startsWith('http://localhost:') || 
+          origin.startsWith('https://localhost:'))) {
+      callback(null, true);
+    } else {
+      console.warn('CORS: Blocked request from origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  credentials: true,
+  optionsSuccessStatus: 200, // Some legacy browsers choke on 204
   allowedHeaders: [
-    'Content-Type', 
+    'Content-Type',
+    'Authorization',
+    'x-api-key',
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'Access-Control-Allow-Headers',
+    'Access-Control-Request-Headers',
+    'Access-Control-Request-Method', 
     'Authorization', 
     'X-Requested-With', 
     'Accept', 

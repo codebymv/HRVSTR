@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { BarChart2, ListChecks, TrendingUp, ArrowRight, Eye, Star, Map, MoreHorizontal } from 'lucide-react';
+import { BarChart2, ListChecks, TrendingUp, ArrowRight, Eye, Star, Map, MoreHorizontal, Activity, Brain, Check, Sparkle } from 'lucide-react';
 import BackgroundLeaves from '../UI/BackgroundLeaves';
 import { 
   SentimentPreview, 
   EarningsPreview, 
   SECFilingsPreview, 
   WatchlistPreview, 
-  ActivityPreview 
+  ActivityPreview
 } from './PreviewComponents';
 import PricingSection from '../Pricing/PricingSection';
 import YearlyPricingCards from '../Pricing/YearlyPricingCards';
@@ -199,7 +199,41 @@ const Home: React.FC = () => {
             </div>
           </div>
 
-
+          {/* AI Insights Preview - Full Width */}
+          <div className="mt-8">
+            <div className={`${cardBgColor} rounded-lg border ${borderColor} shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden`}>
+              <div className="p-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+                  <div>
+                    <h3 className={`text-2xl font-bold ${textColor} mb-2 flex items-center`}>
+                      <Sparkle className="w-5 h-5 mr-2 text-purple-500" />
+                      AI-Powered Market Intelligence
+                    </h3>
+                    <p className={`${secondaryTextColor} max-w-3xl`}>
+                      Get exclusive AI insights into custom datasets. Our advanced algorithms analyze market trends, sentiment, and technical indicators to deliver actionable intelligence.
+                    </p>
+                  </div>
+                  <div 
+                    className="mt-4 md:mt-0 bg-gradient-to-r from-blue-600/80 to-purple-700/80 text-white/70 px-6 py-2.5 rounded-lg font-medium flex items-center justify-center cursor-default shadow-inner border border-white/5"
+                  >
+                    <Brain className="w-5 h-5 mr-2" />
+                    <span>Analysis Complete</span>
+                  </div>
+                </div>
+                
+                <div className={`border-t ${borderColor} pt-6`}>
+                  <div className="grid grid-cols-1 gap-6">
+                    <div className={`p-4 rounded-lg ${isLight ? 'bg-blue-50' : 'bg-blue-900 bg-opacity-30'} border border-blue-200`}>
+                      <h4 className="font-medium text-blue-700 dark:text-blue-300 mb-2">Deep Market Analysis</h4>
+                      <p className="text-sm text-blue-600 dark:text-blue-400">
+                        AI contextualizes unique and exclusive datasets to identify patterns and opportunities that traditional analysis might miss.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Pricing Section */}

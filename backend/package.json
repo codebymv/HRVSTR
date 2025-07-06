@@ -15,7 +15,10 @@
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
+    "express-mongo-sanitize": "^2.2.0",
     "express-rate-limit": "^7.1.0",
+    "helmet": "^8.1.0",
+    "hpp": "^0.2.3",
     "jsonwebtoken": "^9.0.2",
     "node-cache": "^5.1.2",
     "node-cron": "^3.0.3",
@@ -25,6 +28,7 @@
     "stripe": "^18.2.0",
     "uuid": "^11.1.0",
     "xml2js": "^0.6.2",
+    "xss-clean": "^0.1.4",
     "yahoo-finance2": "^2.13.3"
   },
   "devDependencies": {
