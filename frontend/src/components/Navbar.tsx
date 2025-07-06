@@ -166,10 +166,12 @@ const Navbar: React.FC = () => {
       },
       pro: {
         name: 'HRVSTR Pro',
-        icon: <Crown className="w-4 h-4" />,
-        iconColor: isLight ? 'text-blue-600' : 'text-blue-400',
-        textColor: isLight ? 'text-blue-600' : 'text-blue-400',
-        bgColor: isLight ? 'bg-blue-200' : 'bg-blue-900'
+        icon: <div className="w-4 h-4 lg:w-5 lg:h-5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+          <Crown className="w-2.5 h-2.5 text-white" />
+        </div>,
+        iconColor: 'text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-purple-600',
+        textColor: 'text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-purple-600',
+        bgColor: 'bg-gradient-to-r from-blue-500/10 to-purple-600/10 border border-blue-400/20'
       },
       elite: {
         name: 'HRVSTR Elite',

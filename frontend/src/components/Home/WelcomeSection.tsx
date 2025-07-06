@@ -44,9 +44,9 @@ const WelcomeSection: React.FC<WelcomeSectionProps> = ({
       pro: {
         name: 'HRVSTR Pro',
         icon: <Crown className="w-5 h-5" />,
-        iconColor: isLight ? 'text-blue-600' : 'text-blue-400',
-        textColor: isLight ? 'text-blue-600' : 'text-blue-400',
-        bgColor: isLight ? 'bg-blue-200' : 'bg-blue-900'
+        iconColor: 'text-white',
+        textColor: 'text-white',
+        bgColor: 'bg-gradient-to-r from-blue-500 to-purple-600'
       },
       elite: {
         name: 'HRVSTR Elite',

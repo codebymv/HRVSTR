@@ -50,7 +50,7 @@ const TierLimitDialog: React.FC<TierLimitDialogProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full">
+            <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
               <Crown className="w-5 h-5 text-white" />
             </div>
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">

@@ -72,7 +72,9 @@ const TierManagement: React.FC = () => {
   const getTierIcon = (tier: string) => {
     switch (tier) {
       case 'free': return <Star className="w-5 h-5" />;
-      case 'pro': return <Crown className="w-5 h-5" />;
+      case 'pro': return <div className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gradient-to-r from-blue-500 to-purple-600">
+        <Crown className="w-3 h-3 text-white" />
+      </div>;
       case 'elite': return <Zap className="w-5 h-5" />;
       case 'institutional': return <Building className="w-5 h-5" />;
       default: return <Star className="w-5 h-5" />;
@@ -117,7 +119,7 @@ const TierManagement: React.FC = () => {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center">
             <h2 className={`text-xl font-semibold ${textColor} flex items-center`}>
-              <Coins className="w-6 h-6 mr-2 text-yellow-500" />
+              <Coins className="w-5 h-5 mr-2" />
               Tier & Usage
             </h2>
             <Link to="/help/getting-started" className="ml-2 text-blue-500 hover:text-blue-700">
@@ -156,7 +158,7 @@ const TierManagement: React.FC = () => {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center">
           <h2 className={`text-xl font-semibold ${textColor} flex items-center`}>
-            <Coins className="w-6 h-6 mr-2 text-yellow-500" />
+            <Coins className="w-5 h-5 mr-2" />
             Tier & Usage
           </h2>
           <Link to="/help/getting-started" className="ml-2 text-blue-500 hover:text-blue-700">

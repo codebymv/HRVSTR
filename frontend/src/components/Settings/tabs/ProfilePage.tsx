@@ -1,19 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  User, 
   Calendar, 
-  CreditCard, 
   Shield, 
-  Mail,
-  Clock,
   Star,
   Crown,
   Zap,
   Building,
-  RefreshCw,
   Loader2,
-  AlertCircle,
-  CheckCircle
+  AlertCircle
 } from 'lucide-react';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -49,34 +43,53 @@ const ProfilePage: React.FC = () => {
   const secondaryTextColor = isLight ? 'text-stone-600' : 'text-gray-400';
   const cardBgColor = isLight ? 'bg-stone-300' : 'bg-gray-900';
   const borderColor = isLight ? 'border-stone-400' : 'border-gray-800';
-  const accentColor = isLight ? 'text-purple-600' : 'text-purple-400';
 
   // Helper function to get tier icon and color
-  const getTierInfo = (tier: string) => {
-    const tierData = {
+  type TierType = 'free' | 'pro' | 'elite' | 'institutional';
+  
+  interface TierInfo {
+    name: string;
+    icon: JSX.Element;
+    iconColor: string;
+    textColor: string;
+    bgColor: string;
+  }
+
+  const getTierInfo = (tier?: string): TierInfo => {
+    const tierKey = (tier?.toLowerCase() as TierType) || 'free';
+    
+    const tierData: Record<TierType, TierInfo> = {
       free: {
-        icon: <Star className="w-5 h-5" />,
-        color: 'text-gray-300',
-        bgColor: 'bg-gray-100 dark:bg-gray-800'
+        name: 'HRVSTR Free',
+        icon: <Star className="w-4 h-4" />,
+        iconColor: isLight ? 'text-gray-600' : 'text-gray-300',
+        textColor: isLight ? 'text-gray-600' : 'text-gray-300',
+        bgColor: isLight ? 'bg-gray-200' : 'bg-gray-800'
       },
       pro: {
-        icon: <Crown className="w-5 h-5" />,
-        color: 'text-blue-400',
-        bgColor: 'bg-blue-100 dark:bg-blue-900'
+        name: 'HRVSTR Pro',
+        icon: <Crown className="w-4 h-4 text-white" />,
+        iconColor: 'text-white',
+        textColor: 'text-white',
+        bgColor: 'bg-gradient-to-r from-blue-500 to-purple-600'
       },
       elite: {
-        icon: <Zap className="w-5 h-5" />,
-        color: 'text-purple-400',
-        bgColor: 'bg-purple-100 dark:bg-purple-900'
+        name: 'HRVSTR Elite',
+        icon: <Zap className="w-4 h-4" />,
+        iconColor: isLight ? 'text-purple-600' : 'text-purple-400',
+        textColor: isLight ? 'text-purple-600' : 'text-purple-400',
+        bgColor: isLight ? 'bg-purple-200' : 'bg-purple-900'
       },
       institutional: {
-        icon: <Building className="w-5 h-5" />,
-        color: 'text-emerald-400',
-        bgColor: 'bg-emerald-100 dark:bg-emerald-900'
+        name: 'HRVSTR Institutional',
+        icon: <Building className="w-4 h-4" />,
+        iconColor: isLight ? 'text-emerald-400' : 'text-emerald-300',
+        textColor: isLight ? 'text-emerald-400' : 'text-emerald-300',
+        bgColor: isLight ? 'bg-emerald-200' : 'bg-emerald-900'
       }
     };
 
-    return tierData[tier?.toLowerCase() as keyof typeof tierData] || tierData.free;
+    return tierData[tierKey] || tierData.free;
   };
 
   // Fetch user profile data
@@ -141,26 +154,7 @@ const ProfilePage: React.FC = () => {
     }
   };
 
-  // Calculate credits usage percentage
-  const getCreditsUsagePercentage = (remaining: number, limit: number) => {
-    if (limit === 0) return 0;
-    return ((limit - remaining) / limit) * 100;
-  };
-
-  // Get subscription status badge color
-  const getSubscriptionStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'active':
-        return 'text-green-600 bg-green-100 dark:bg-green-900 dark:text-green-400';
-      case 'expired':
-      case 'cancelled':
-        return 'text-red-600 bg-red-100 dark:bg-red-900 dark:text-red-400';
-      case 'pending':
-        return 'text-yellow-600 bg-yellow-100 dark:bg-yellow-900 dark:text-yellow-400';
-      default:
-        return 'text-gray-600 bg-gray-100 dark:bg-gray-800 dark:text-gray-400';
-    }
-  };
+  // Note: getCreditsUsagePercentage and getSubscriptionStatusColor are kept for future use
 
   if (loading) {
     return (
@@ -195,7 +189,7 @@ const ProfilePage: React.FC = () => {
         <div className={`${cardBgColor} rounded-lg p-6 border ${borderColor}`}>
           <div className="flex items-center space-x-4">
             <div className={`w-16 h-16 rounded-full ${cardBgColor} border-2 ${borderColor} flex items-center justify-center`}>
-              <span className={`${getTierInfo(profileData?.tier || 'free').color}`}>
+              <span className={`${getTierInfo(profileData?.tier || 'free').iconColor}`}>
                 {React.cloneElement(getTierInfo(profileData?.tier || 'free').icon, { 
                   className: 'w-8 h-8' 
                 })}
@@ -212,11 +206,11 @@ const ProfilePage: React.FC = () => {
                 {/* Tier Badge */}
                 {profileData?.tier && (
                   <div className={`flex items-center space-x-2 px-3 py-1 rounded-full ${getTierInfo(profileData.tier).bgColor}`}>
-                    <span className={getTierInfo(profileData.tier).color}>
+                    <span className={getTierInfo(profileData.tier).iconColor}>
                       {getTierInfo(profileData.tier).icon}
                     </span>
-                    <span className={`text-sm font-medium ${getTierInfo(profileData.tier).color}`}>
-                      HRVSTR {profileData.tier.charAt(0).toUpperCase() + profileData.tier.slice(1)}
+                    <span className={`text-sm font-medium ${getTierInfo(profileData.tier).textColor}`}>
+                      {getTierInfo(profileData.tier).name}
                     </span>
                   </div>
                 )}
@@ -236,7 +230,9 @@ const ProfilePage: React.FC = () => {
             {/* Account Creation */}
             <div className="space-y-2">
               <div className="flex items-center space-x-2">
-                <Calendar className="w-4 h-4 text-purple-600" />
+                <div className="w-4 h-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-md flex items-center justify-center">
+                  <Calendar className="w-3 h-3 text-white" />
+                </div>
                 <h3 className={`font-medium ${textColor}`}>Account Created</h3>
               </div>
               <p className={secondaryTextColor}>

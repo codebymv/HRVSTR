@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Save, RefreshCw, AlertTriangle, HelpCircle, Eye, EyeOff, Crown, Lock } from 'lucide-react';
+import { Save, RefreshCw, AlertTriangle, HelpCircle, Eye, EyeOff, Crown, Lock, Key } from 'lucide-react';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useToast } from '../../../contexts/ToastContext';
@@ -335,6 +335,7 @@ const ApiKeysPage: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className={`text-lg font-semibold ${textColor} flex items-center`}>
+                  <Key className="w-5 h-5 mr-2" />
                   External API Keys
                   <Link to="/help/API/authentication" className="ml-2 text-blue-500 hover:text-blue-700">
                     <HelpCircle size={18} />

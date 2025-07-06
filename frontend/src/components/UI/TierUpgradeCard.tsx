@@ -48,7 +48,7 @@ const TierUpgradeCard: React.FC<TierUpgradeCardProps> = ({
   
   return (
     <div className={`${cardBg} rounded-lg border p-8 text-center`}>
-      <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+      <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
         <Crown className="w-8 h-8 text-white" />
       </div>
       
@@ -75,7 +75,9 @@ const TierUpgradeCard: React.FC<TierUpgradeCardProps> = ({
         onClick={handleUpgradeClick}
         className={`${buttonBg} text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center mx-auto`}
       >
-        <Crown className="w-4 h-4 mr-2" />
+        <div className="w-4 h-4 lg:w-5 lg:h-5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mr-2">
+          <Crown className="w-2 h-2 lg:w-2.5 lg:h-2.5 text-white" />
+        </div>
         Upgrade to {requiredTier}
       </button>
     </div>

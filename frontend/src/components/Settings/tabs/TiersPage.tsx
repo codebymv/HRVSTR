@@ -77,9 +77,11 @@ const TiersPage: React.FC = () => {
       },
       pro: {
         name: 'HRVSTR Pro',
-        icon: <Crown className="w-4 h-4" />,
-        iconColor: 'text-blue-500',
-        textColor: 'text-blue-400'
+        icon: <div className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-gradient-to-r from-blue-500 to-purple-600">
+          <Crown className="w-2.5 h-2.5 text-white" />
+        </div>,
+        iconColor: 'text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-purple-600',
+        textColor: 'text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-purple-600'
       },
       elite: {
         name: 'HRVSTR Elite',
