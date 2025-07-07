@@ -2,7 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Add default dark theme background */
 :root {
+  background-color: rgb(3, 7, 17); /* matches bg-gray-950 */
   /* Default theme (dark) */
   --bg-primary: #030712; /* black/very dark gray for bg */
   --bg-secondary: #111827;

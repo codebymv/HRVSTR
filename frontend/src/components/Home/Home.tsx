@@ -13,12 +13,26 @@ import {
 import PricingSection from '../Pricing/PricingSection';
 import YearlyPricingCards from '../Pricing/YearlyPricingCards';
 import { createCheckoutSession } from '../../utils/pricing';
+import { useImagePreloader } from '../../hooks/useImagePreloader';
+
+// Define image arrays for preloading
+const LOGO_IMAGES = [
+  "/hrvstr_logo.png",
+  "/hrvstr_icon.png"
+];
 
 const Home: React.FC = () => {
   const { theme } = useTheme();
   const { isAuthenticated, signIn, token } = useAuth();
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
   const [upgrading, setUpgrading] = useState(false);
+  
+  // Use image preloader
+  const { imagesLoaded: logosLoaded, loadedImages: loadedLogos } = useImagePreloader({
+    images: LOGO_IMAGES
+  });
+
+  const allLogosReady = logosLoaded && loadedLogos.size === LOGO_IMAGES.length;
   
   // Theme-specific styling
   const isLight = theme === 'light';
@@ -98,19 +112,27 @@ const Home: React.FC = () => {
           {/* Logo */}
           <div className="flex justify-center mb-8">
             {/* Show full logo on sm screens and up */}
-            <img 
-              src="/hrvstr_logo.png" 
-              alt="HRVSTR Logo"
-              className="hidden sm:block h-16 md:h-24 w-auto object-contain"
-              style={{ filter: logoFilter }}
-            />
+            <div className={`transition-opacity duration-350 ${allLogosReady ? 'opacity-100' : 'opacity-0'}`}>
+              <img 
+                src="/hrvstr_logo.png" 
+                alt="HRVSTR Logo"
+                className="hidden sm:block h-16 md:h-24 w-auto object-contain"
+                style={{ filter: logoFilter }}
+                loading="eager"
+                decoding="sync"
+              />
+            </div>
             {/* Show icon on screens smaller than sm */}
-            <img 
-              src="/hrvstr_icon.png" 
-              alt="HRVSTR Icon"
-              className="block sm:hidden h-16 w-auto object-contain"
-              style={{ filter: logoFilter }}
-            />
+            <div className={`transition-opacity duration-350 ${allLogosReady ? 'opacity-100' : 'opacity-0'}`}>
+              <img 
+                src="/hrvstr_icon.png" 
+                alt="HRVSTR Icon"
+                className="block sm:hidden h-16 w-auto object-contain"
+                style={{ filter: logoFilter }}
+                loading="eager"
+                decoding="sync"
+              />
+            </div>
           </div>
           <h1 className={`text-4xl md:text-6xl font-bold mb-6 ${textColor}`}>
             Strategic Web Scraping,{" "}

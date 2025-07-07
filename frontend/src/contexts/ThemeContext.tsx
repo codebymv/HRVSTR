@@ -7,14 +7,33 @@ interface ThemeContextType {
   setTheme: (theme: ThemeType) => void;
 }
 
+// Get initial theme synchronously before component renders
+const getInitialTheme = (): ThemeType => {
+  // Check localStorage
+  const savedTheme = localStorage.getItem('swTheme') as ThemeType;
+  if (savedTheme) return savedTheme;
+  
+  // If no saved theme, check system preference
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
+    }
+  }
+  
+  // Default to dark
+  return 'dark';
+};
+
+// Initialize theme immediately
+const initialTheme = getInitialTheme();
+document.documentElement.classList.add(`${initialTheme}-theme`);
+document.documentElement.setAttribute('data-theme', initialTheme);
+document.documentElement.style.backgroundColor = initialTheme === 'dark' ? 'rgb(3, 7, 17)' : 'rgb(231, 229, 228)';
+
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Get saved theme from localStorage or default to 'dark'
-  const [theme, setTheme] = useState<ThemeType>(() => {
-    const savedTheme = localStorage.getItem('swTheme');
-    return (savedTheme as ThemeType) || 'dark';
-  });
+  const [theme, setTheme] = useState<ThemeType>(initialTheme);
 
   // Update localStorage and apply theme classes when theme changes
   useEffect(() => {
@@ -27,7 +46,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Also update the data-theme attribute for components that might use it
     document.documentElement.setAttribute('data-theme', theme);
     
-    console.log('Theme changed to:', theme); // For debugging
+    // Update background color
+    document.documentElement.style.backgroundColor = theme === 'dark' ? 'rgb(3, 7, 17)' : 'rgb(231, 229, 228)';
   }, [theme]);
 
   return (
