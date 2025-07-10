@@ -4,6 +4,11 @@
 
 // Get the proxy URL from environment variables or use relative path
 export const getProxyUrl = (): string => {
+  // Check for test environment first (Vitest sets process.env.NODE_ENV to 'test')
+  if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'test') {
+    return process.env.VITE_PROXY_URL || 'http://localhost:3001';
+  }
+  
   // In production, use the public Railway backend service URL
   if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.PROD) {
     // Use the public backend URL since Railway internal network may not be accessible

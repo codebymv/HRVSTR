@@ -70,7 +70,7 @@ describe('Reddit Client Data Authenticity', () => {
       );
       
       // Verify it correctly calls multiple subreddits
-      expect(global.fetch).toHaveBeenCalledTimes(2); // stocks and wallstreetbets
+      expect(global.fetch).toHaveBeenCalledTimes(3); // wallstreetbets, stocks, and investing
     });
 
     it('should fetch and process real Reddit posts with correct data structure', async () => {

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SentimentData, TimeRange } from '../src/types';
 import { setupWindowMock, setupFetchMock } from './setupTestEnv';
+import axios from 'axios';
 
 // Function to clean up mocks
 let cleanupWindow: () => void;
@@ -47,7 +48,7 @@ describe('API Data Authenticity Tests', () => {
       
       // Verify the API request was made with the correct parameters
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/sentiment/reddit/market'),
+        expect.stringContaining('/api/sentiment-unified/reddit/market'),
         expect.any(Object)
       );
       
@@ -77,11 +78,22 @@ describe('API Data Authenticity Tests', () => {
         }
       ];
       
-      // Configure mock to exactly match the API implementation by examining src/services/api.ts
-      // The API checks different response formats, so we need to structure our mock properly
+      // Configure mock to match the actual API response format from the unified endpoint
+      // The API expects a nested structure: { success: true, data: { data: sentimentData } }
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ sentimentData: mockSentimentData }) // Key is sentimentData not data
+        json: async () => ({
+          success: true,
+          data: {
+            data: {
+              timestamps: ['2025-05-07T08:00:00Z', '2025-05-07T08:30:00Z'],
+              bullish: [0.78, 0.65],
+              bearish: [0.15, 0.20],
+              neutral: [0.07, 0.15],
+              total: [345, 120]
+            }
+          }
+        })
       });
       
       // Import module and call function
@@ -96,14 +108,23 @@ describe('API Data Authenticity Tests', () => {
       // Call with valid time range parameter
       const result = await apiModule.fetchSentimentData('1d');
       
-      // Check that the data is properly extracted from the correct response format
-      expect(result).toEqual(mockSentimentData);
-      expect(result.length).toBe(2);
-      expect(result[0].ticker).toBe('TSLA');
-      expect(result[0].score).toBe(0.78);
+      // Check that the data is properly extracted and converted from time series format
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBe(2); // Two time points
+      
+      // Check first data point (bullish dominant: 0.78 > 0.15 and 0.78 > 0.07)
+      expect(result[0].ticker).toBe('MARKET');
+      expect(result[0].source).toBe('reddit');
       expect(result[0].sentiment).toBe('bullish');
-      expect(result[1].source).toBe('finviz');
-      expect(result[1].sentiment).toBe('neutral');
+      expect(result[0].score).toBe(0.78);
+      expect(result[0].timestamp).toBe('2025-05-07T08:00:00Z');
+      
+      // Check second data point (bullish dominant: 0.65 > 0.20 and 0.65 > 0.15)
+      expect(result[1].ticker).toBe('MARKET');
+      expect(result[1].source).toBe('reddit');
+      expect(result[1].sentiment).toBe('bullish');
+      expect(result[1].score).toBe(0.65);
+      expect(result[1].timestamp).toBe('2025-05-07T08:30:00Z');
     });
     
     it('properly handles different time ranges with appropriate parameters', async () => {
@@ -135,6 +156,33 @@ describe('API Data Authenticity Tests', () => {
   
   describe('FinViz API', () => {
     it('fetches FinViz data with correct ticker parameters', async () => {
+      // Mock axios for FinViz client
+      const mockAxiosGet = vi.spyOn(axios, 'get').mockResolvedValue({
+        data: {
+          sentimentData: [
+            {
+              ticker: 'AAPL',
+              score: 0.75,
+              sentiment: 'bullish',
+              timestamp: '2025-01-15T10:00:00Z',
+              confidence: 0.85,
+              postCount: 150,
+              commentCount: 45,
+              upvotes: 120
+            }
+          ],
+          credits: {
+            used: 1,
+            remaining: 99,
+            operation: 'finviz_sentiment',
+            tier: 'basic'
+          }
+        }
+      });
+      
+      // Mock localStorage for auth token
+      const mockGetItem = vi.spyOn(Storage.prototype, 'getItem').mockReturnValue('mock-auth-token');
+      
       // Import the FinViz client module
       const finvizModule = await import('../src/services/finvizClient');
       
@@ -148,17 +196,29 @@ describe('API Data Authenticity Tests', () => {
       const tickers = ['AAPL', 'MSFT', 'GOOG'];
       
       // Call the function
-      await finvizModule.fetchFinvizSentiment(tickers);
+      const result = await finvizModule.fetchFinvizSentiment(tickers);
       
-      // Verify fetch was called with the correct parameters
-      expect(global.fetch).toHaveBeenCalledWith(
+      // Verify axios was called with the correct parameters
+      expect(mockAxiosGet).toHaveBeenCalledWith(
         expect.stringContaining('/api/finviz/ticker-sentiment'),
-        expect.any(Object)
+        expect.objectContaining({
+          params: { tickers: tickers.join(',') },
+          headers: expect.objectContaining({
+            'Authorization': 'Bearer mock-auth-token',
+            'Content-Type': 'application/json'
+          })
+        })
       );
       
-      // Check URL contains our tickers, not hardcoded values
-      const url = (global.fetch as any).mock.calls[0][0];
-      expect(url).toContain(`tickers=${tickers.join(',')}`);
+      // Verify the result is properly formatted
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBe(1);
+      expect(result[0].ticker).toBe('AAPL');
+      expect(result[0].source).toBe('finviz');
+      
+      // Clean up mocks
+      mockAxiosGet.mockRestore();
+      mockGetItem.mockRestore();
     });
   });
 });

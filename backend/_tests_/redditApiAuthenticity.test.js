@@ -6,9 +6,21 @@
  */
 
 // Mock the entire modules instead of trying to call real implementations
-jest.mock('../src/utils/reddit');
-jest.mock('../src/config/api-keys');
-jest.mock('../src/utils/cacheManager');
+jest.mock('../src/utils/reddit', () => ({
+  authenticateReddit: jest.fn(),
+  fetchSubredditPosts: jest.fn(),
+  extractTickers: jest.fn(),
+  formatRedditPost: jest.fn()
+}));
+jest.mock('../src/config/api-keys', () => ({
+  getRedditClientId: jest.fn(),
+  getRedditClientSecret: jest.fn(),
+  getRedditUserAgent: jest.fn()
+}));
+jest.mock('../src/utils/cacheManager', () => ({
+  getOrFetch: jest.fn(),
+  registerRateLimit: jest.fn()
+}));
 
 // Import the actual modules after mocking
 const redditUtils = require('../src/utils/reddit');
@@ -24,9 +36,9 @@ describe('Reddit API Data Authenticity', () => {
     jest.clearAllMocks();
     
     // Set up API keys mock
-    apiKeys.getRedditClientId = jest.fn().mockReturnValue('test-client-id');
-    apiKeys.getRedditClientSecret = jest.fn().mockReturnValue('test-client-secret');
-    apiKeys.getRedditUserAgent = jest.fn().mockReturnValue('test-user-agent');
+    apiKeys.getRedditClientId.mockReturnValue('test-client-id');
+    apiKeys.getRedditClientSecret.mockReturnValue('test-client-secret');
+    apiKeys.getRedditUserAgent.mockReturnValue('test-user-agent');
     
     // Set up mock implementation for redditUtils
     redditUtils.authenticateReddit.mockImplementation(async () => {
@@ -115,8 +127,8 @@ describe('Reddit API Data Authenticity', () => {
     });
     
     // Set up cache manager mock
-    cacheManager.getOrFetch = jest.fn().mockImplementation((key, limiter, fetchFn) => fetchFn());
-    cacheManager.registerRateLimit = jest.fn();
+    cacheManager.getOrFetch.mockImplementation((key, limiter, fetchFn) => fetchFn());
+    cacheManager.registerRateLimit.mockImplementation(() => {});
     
     // Set up axios mock
     axios.mockImplementation((config) => {
@@ -178,7 +190,6 @@ describe('Reddit API Data Authenticity', () => {
     
     it('should throw an error when credentials are missing', async () => {
       // Mock missing credentials
-      jest.clearAllMocks();
       apiKeys.getRedditClientId.mockReturnValue(null);
       
       await expect(redditUtils.authenticateReddit()).rejects.toThrow('Reddit API credentials not configured');
@@ -208,8 +219,8 @@ describe('Reddit API Data Authenticity', () => {
       const timeframes = ['day', 'week', 'month', 'year', 'all'];
       
       for (const timeframe of timeframes) {
-        // Reset mocks for each iteration
-        jest.clearAllMocks();
+        // Reset axios mocks for each iteration
+        axios.get.mockClear();
         
         await redditUtils.fetchSubredditPosts('wallstreetbets', { timeframe });
         

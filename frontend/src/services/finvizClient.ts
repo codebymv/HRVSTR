@@ -110,6 +110,12 @@ export async function fetchFinvizSentiment(
   tickers: string[], 
   signal?: AbortSignal
 ): Promise<SentimentData[]> {
+  // Return early if no tickers provided
+  if (!tickers || tickers.length === 0) {
+    console.log('No tickers provided to FinViz API, returning empty array');
+    return [];
+  }
+
   try {
     console.log('FinViz API call starting for tickers:', tickers);
     

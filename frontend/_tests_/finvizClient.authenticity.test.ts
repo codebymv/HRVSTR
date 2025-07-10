@@ -1,50 +1,36 @@
-import { describe, it, expect, vi, beforeEach, afterEach, MockInstance } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fetchFinvizSentiment } from '../src/services/finvizClient';
-import * as redditClient from '../src/services/redditClient';
 import { SentimentData } from '../src/types';
+import axios from 'axios';
 
-// Define a type for partial mock Response
-type PartialMockResponse = Partial<Response> & {
-  json: () => Promise<any>;
-  ok: boolean;
-};
+// We'll use vi.spyOn for better TypeScript support instead of vi.mock
 
-// Mock fetch API
-global.fetch = vi.fn().mockImplementation(() => {
-  return Promise.resolve({
-    ok: true,
-    json: async () => ({}),
-    status: 200,
-    statusText: 'OK',
-    headers: new Headers(),
-    redirected: false,
-    type: 'basic',
-    url: '',
-    clone: () => ({} as Response),
-    body: null,
-    bodyUsed: false,
-    arrayBuffer: async () => new ArrayBuffer(0),
-    blob: async () => new Blob(),
-    formData: async () => new FormData(),
-    text: async () => ''
-  } as Response);
+// Mock localStorage
+Object.defineProperty(window, 'localStorage', {
+  value: {
+    getItem: vi.fn(() => 'mock-auth-token'),
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+    clear: vi.fn(),
+  },
+  writable: true,
 });
 
-const mockFetch = vi.mocked(global.fetch);
-
-// Mock the redditClient's getProxyUrl function
-vi.mock('../src/services/redditClient', () => ({
-  getProxyUrl: vi.fn()
-}));
-
 describe('FinViz Client Data Authenticity', () => {
+  let mockAxiosGet: any;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(redditClient.getProxyUrl).mockReturnValue('http://test-proxy:3001');
+    // Create a fresh spy for each test
+    mockAxiosGet = vi.spyOn(axios, 'get');
   });
 
   afterEach(() => {
     vi.resetAllMocks();
+    // Restore the spy
+    if (mockAxiosGet) {
+      mockAxiosGet.mockRestore();
+    }
   });
 
   it('should make real API requests with correct tickers', async () => {
@@ -56,7 +42,10 @@ describe('FinViz Client Data Authenticity', () => {
         source: 'finviz',
         timestamp: new Date().toISOString(),
         postCount: 12,
-        sentiment: "bullish"  // Use string enum value instead of number
+        sentiment: "bullish",
+        commentCount: 0,
+        confidence: 0,
+        upvotes: 0
       },
       {
         ticker: 'MSFT',
@@ -64,37 +53,36 @@ describe('FinViz Client Data Authenticity', () => {
         source: 'finviz',
         timestamp: new Date().toISOString(),
         postCount: 8,
-        sentiment: "bullish"  // Use string enum value instead of number
+        sentiment: "bullish",
+        commentCount: 0,
+        confidence: 0,
+        upvotes: 0
       }
     ];
 
-    // Set up the fetch mock response
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ sentimentData: mockSentimentData }),
+    // Set up the axios mock response
+    mockAxiosGet.mockResolvedValueOnce({
+      data: { sentimentData: mockSentimentData },
       status: 200,
       statusText: 'OK',
-      headers: new Headers(),
-      redirected: false,
-      type: 'basic',
-      url: '',
-      clone: () => ({} as Response),
-      body: null,
-      bodyUsed: false,
-      arrayBuffer: async () => new ArrayBuffer(0),
-      blob: async () => new Blob(),
-      formData: async () => new FormData(),
-      text: async () => ''
-    } as Response);
+      headers: {},
+      config: {},
+      request: {}
+    });
 
     // Call the function with multiple tickers to test comma-separated format
     const tickers = ['AAPL', 'MSFT', 'GOOG'];
     const result = await fetchFinvizSentiment(tickers);
 
-    // Verify the API was called with the right URL including all tickers
-    expect(mockFetch).toHaveBeenCalledWith(
-      'http://test-proxy:3001/api/finviz/ticker-sentiment?tickers=AAPL,MSFT,GOOG',
-      expect.any(Object)
+    // Verify the API was called with the right parameters
+    expect(mockAxiosGet).toHaveBeenCalledWith(
+      'http://localhost:3001/api/finviz/ticker-sentiment',
+      expect.objectContaining({
+        params: { tickers: 'AAPL,MSFT,GOOG' },
+        headers: expect.objectContaining({
+          'Authorization': 'Bearer mock-auth-token'
+        })
+      })
     );
 
     // Verify the result is the mock data
@@ -108,34 +96,24 @@ describe('FinViz Client Data Authenticity', () => {
     
     // Should return empty array without making API call
     expect(result).toEqual([]);
-    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockAxiosGet).not.toHaveBeenCalled();
   });
 
   it('should throw error when API returns non-ok response', async () => {
     // Mock error response
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 429, // Too Many Requests
-      statusText: 'Too Many Requests',
-      headers: new Headers(),
-      redirected: false,
-      type: 'basic',
-      url: '',
-      clone: () => ({} as Response),
-      body: null,
-      bodyUsed: false,
-      arrayBuffer: async () => new ArrayBuffer(0),
-      blob: async () => new Blob(),
-      formData: async () => new FormData(),
-      text: async () => '',
-      json: async () => ({})
-    } as Response);
+    mockAxiosGet.mockRejectedValueOnce({
+      response: {
+        status: 429,
+        statusText: 'Too Many Requests',
+        data: { error: 'Rate limit exceeded' }
+      }
+    });
 
     // Call with valid tickers
     const tickers = ['AAPL', 'MSFT'];
     
-    // Should throw an error with status code
-    await expect(fetchFinvizSentiment(tickers)).rejects.toThrow('FinViz API error: 429');
+    // Should throw an error with rate limiting message
+    await expect(fetchFinvizSentiment(tickers)).rejects.toThrow('Rate limit exceeded');
   });
 
   it('should support abort signal for request cancellation', async () => {
@@ -144,29 +122,20 @@ describe('FinViz Client Data Authenticity', () => {
     const signal = controller.signal;
     
     // Mock a successful response
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ sentimentData: [] }),
+    mockAxiosGet.mockResolvedValueOnce({
+      data: { sentimentData: [] },
       status: 200,
       statusText: 'OK',
-      headers: new Headers(),
-      redirected: false,
-      type: 'basic',
-      url: '',
-      clone: () => ({} as Response),
-      body: null,
-      bodyUsed: false,
-      arrayBuffer: async () => new ArrayBuffer(0),
-      blob: async () => new Blob(),
-      formData: async () => new FormData(),
-      text: async () => ''
-    } as Response);
+      headers: {},
+      config: {},
+      request: {}
+    });
     
     // Start the request with the signal
     const requestPromise = fetchFinvizSentiment(['AAPL'], signal);
     
-    // Verify fetch was called with the signal
-    expect(mockFetch).toHaveBeenCalledWith(
+    // Verify axios was called with the signal
+    expect(mockAxiosGet).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({ signal })
     );
@@ -203,24 +172,15 @@ describe('FinViz Client Data Authenticity', () => {
       ]
     };
     
-    // Mock the fetch response
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => realisticAPIResponse,
+    // Mock the axios response
+    mockAxiosGet.mockResolvedValueOnce({
+      data: realisticAPIResponse,
       status: 200,
       statusText: 'OK',
-      headers: new Headers(),
-      redirected: false,
-      type: 'basic',
-      url: '',
-      clone: () => ({} as Response),
-      body: null,
-      bodyUsed: false,
-      arrayBuffer: async () => new ArrayBuffer(0),
-      blob: async () => new Blob(),
-      formData: async () => new FormData(),
-      text: async () => ''
-    } as Response);
+      headers: {},
+      config: {},
+      request: {}
+    });
     
     // Call the function
     const result = await fetchFinvizSentiment(['AAPL', 'GOOG']);

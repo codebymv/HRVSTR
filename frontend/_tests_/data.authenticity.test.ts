@@ -21,15 +21,17 @@ describe('Data Authenticity Tests', () => {
 
   describe('Sentiment Utilities', () => {
     it('properly categorizes sentiment values based on real thresholds', () => {
-      // Test all relevant ranges with actual threshold values
+      // Test all relevant ranges with actual threshold values (BULLISH_THRESHOLD = 0.6, BEARISH_THRESHOLD = 0.4)
       expect(getSentimentCategory(0.9)).toBe('bullish'); // Strongly bullish
-      expect(getSentimentCategory(0.7)).toBe('bullish'); // Clearly bullish
-      expect(getSentimentCategory(0.6)).toBe('bullish'); // At bullish threshold
-      expect(getSentimentCategory(0.5)).toBe('neutral'); // Middle of neutral range
-      expect(getSentimentCategory(0.45)).toBe('neutral'); // Slightly bearish but in neutral range
-      expect(getSentimentCategory(0.4)).toBe('bearish'); // At bearish threshold
-      expect(getSentimentCategory(0.3)).toBe('bearish'); // Clearly bearish
-      expect(getSentimentCategory(0.1)).toBe('bearish'); // Strongly bearish
+      expect(getSentimentCategory(0.6)).toBe('bullish'); // Exactly at bullish threshold
+      expect(getSentimentCategory(0.7)).toBe('bullish'); // Above bullish threshold
+      expect(getSentimentCategory(0.59)).toBe('neutral'); // Just below bullish threshold
+      expect(getSentimentCategory(0.5)).toBe('neutral'); // In neutral range
+      expect(getSentimentCategory(0.45)).toBe('neutral'); // In neutral range
+      expect(getSentimentCategory(0.41)).toBe('neutral'); // Just above bearish threshold
+      expect(getSentimentCategory(0.4)).toBe('bearish'); // Exactly at bearish threshold
+      expect(getSentimentCategory(0.3)).toBe('bearish'); // Below bearish threshold
+      expect(getSentimentCategory(0.1)).toBe('bearish'); // Clearly bearish
       
       // Ensure values exactly at thresholds are handled correctly
       expect(getSentimentCategory(0.6)).toBe('bullish');  // >= 0.6 is bullish
@@ -147,7 +149,7 @@ describe('Data Authenticity Tests', () => {
         );
       
         // Verify it's called multiple times for each subreddit
-        expect(global.fetch).toHaveBeenCalledTimes(2); // For 'stocks' and 'wallstreetbets'
+        expect(global.fetch).toHaveBeenCalledTimes(3); // For 'wallstreetbets', 'stocks', and 'investing'
       } finally {
         // Always clean up the window mock, even if the test fails
         cleanup();

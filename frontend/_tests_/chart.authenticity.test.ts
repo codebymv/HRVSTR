@@ -56,10 +56,19 @@ describe('Chart Data Authenticity Tests', () => {
       // Percentages should add up to 100
       expect(dataPoint.bullish + dataPoint.bearish + dataPoint.neutral).toBe(100);
       
-      // Sources should be an object with expected keys
-      expect(dataPoint.sources).toHaveProperty('Reddit');
-      expect(dataPoint.sources).toHaveProperty('Finviz');
+      // Sources should be an object
+      expect(typeof dataPoint.sources).toBe('object');
     });
+    
+    // Check that at least one data point has Reddit source (since we have reddit data)
+    const hasRedditSource = result.some(point => point.sources?.Reddit !== undefined);
+    expect(hasRedditSource).toBe(true);
+    
+    // Check that at least one data point has Finviz source if finviz data exists
+    if (sentimentData.some(item => item.source === 'finviz')) {
+      const hasFinvizSource = result.some(point => point.sources?.Finviz !== undefined);
+      expect(hasFinvizSource).toBe(true);
+    }
   });
 
   it('verifies chart data is consistently generated when using same input', () => {

@@ -1,10 +1,24 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fetchSentimentData, fetchRedditPosts, fetchTickerSentiments } from '../src/services/api';
 import { fetchFinvizSentiment } from '../src/services/finvizClient';
+import axios from 'axios';
 
 // Mock fetch API
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
+
+// We'll use vi.spyOn for better TypeScript support instead of vi.mock
+
+// Mock localStorage for FinViz client
+Object.defineProperty(window, 'localStorage', {
+  value: {
+    getItem: vi.fn(() => 'mock-auth-token'),
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+    clear: vi.fn(),
+  },
+  writable: true,
+});
 
 // Mock AbortController
 const mockAbort = vi.fn();
@@ -58,11 +72,24 @@ vi.mock('../src/services/api', async (importOriginal) => {
 });
 
 // Set up mocks before each test
+let mockAxiosGet: any;
+
 beforeEach(() => {
   // Clear mock data and setup default behavior
   mockFetch.mockClear();
   mockAbort.mockClear();
+  vi.clearAllMocks();
   global.AbortController = vi.fn().mockImplementation(() => mockAbortController) as any;
+  
+  // Create a fresh spy for axios
+  mockAxiosGet = vi.spyOn(axios, 'get');
+});
+
+afterEach(() => {
+  // Restore the spy
+  if (mockAxiosGet) {
+    mockAxiosGet.mockRestore();
+  }
 });
 
 describe('Request Cancellation', () => {
@@ -130,11 +157,15 @@ describe('Request Cancellation', () => {
       );
     });
     
-    it('should pass AbortSignal to fetch in fetchFinvizSentiment', async () => {
-      // Mock a successful response
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ sentimentData: [] })
+    it('should pass AbortSignal to axios in fetchFinvizSentiment', async () => {
+      // Mock a successful axios response
+      mockAxiosGet.mockResolvedValueOnce({
+        data: { sentimentData: [] },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {},
+        request: {}
       });
       
       // Create a signal
@@ -144,8 +175,8 @@ describe('Request Cancellation', () => {
       // Call the function with the signal
       await fetchFinvizSentiment(['AAPL', 'TSLA'], signal);
       
-      // Verify the fetch call included the signal
-      expect(mockFetch).toHaveBeenCalledWith(
+      // Verify the axios call included the signal
+      expect(mockAxiosGet).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({ signal })
       );

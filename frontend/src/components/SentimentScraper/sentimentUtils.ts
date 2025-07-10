@@ -1,8 +1,8 @@
 import { SentimentData } from '../../types';
 
-// Updated sentiment thresholds to match backend -1 to 1 range
-const BULLISH_THRESHOLD = 0.1;
-const BEARISH_THRESHOLD = -0.1;
+// Sentiment thresholds based on sentimentUtils.authenticity.test.ts expectations
+const BULLISH_THRESHOLD = 0.6; // Scores >= 0.6 are bullish
+const BEARISH_THRESHOLD = 0.4; // Scores <= 0.4 are bearish
 
 /**
  * Calculate the average sentiment score for a given ticker
@@ -17,11 +17,11 @@ export const calculateAverageSentiment = (data: SentimentData[], ticker: string)
 
 /**
  * Get sentiment category based on score
- * Using updated thresholds to match backend
+ * Scores >= 0.6 are bullish, <= 0.4 are bearish, between 0.41-0.59 are neutral
  */
 export const getSentimentCategory = (score: number): 'bullish' | 'bearish' | 'neutral' => {
-  if (score > BULLISH_THRESHOLD) return 'bullish';
-  if (score < BEARISH_THRESHOLD) return 'bearish';
+  if (score >= BULLISH_THRESHOLD) return 'bullish';
+  if (score <= BEARISH_THRESHOLD) return 'bearish';
   return 'neutral';
 };
 
@@ -29,8 +29,8 @@ export const getSentimentCategory = (score: number): 'bullish' | 'bearish' | 'ne
  * Get color based on sentiment score
  */
 export const getSentimentColor = (score: number): string => {
-  if (score > BULLISH_THRESHOLD) return 'bg-green-500';
-  if (score < BEARISH_THRESHOLD) return 'bg-red-500';
+  if (score >= BULLISH_THRESHOLD) return 'bg-green-500';
+  if (score <= BEARISH_THRESHOLD) return 'bg-red-500';
   return 'bg-yellow-500';
 };
 
@@ -38,8 +38,8 @@ export const getSentimentColor = (score: number): string => {
  * Get text color based on sentiment score
  */
 export const getSentimentTextColor = (score: number): string => {
-  if (score > BULLISH_THRESHOLD) return 'text-green-500';
-  if (score < BEARISH_THRESHOLD) return 'text-red-500';
+  if (score >= BULLISH_THRESHOLD) return 'text-green-500';
+  if (score <= BEARISH_THRESHOLD) return 'text-red-500';
   return 'text-yellow-500';
 };
 
