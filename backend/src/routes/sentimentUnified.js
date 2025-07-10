@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authenticateToken = require('../middleware/authMiddleware');
+const { checkSentimentSession } = require('../middleware/sentimentSessionMiddleware');
 const sentimentController = require('../controllers/sentimentControllerUnified');
 
 /**
@@ -14,94 +15,94 @@ const sentimentController = require('../controllers/sentimentControllerUnified')
 /**
  * @route GET /api/sentiment-unified/reddit/tickers
  * @desc Get Reddit ticker sentiment with unified caching
- * @access Private (requires authentication)
+ * @access Private (requires authentication + active session)
  * @query {string} timeRange - Time range (1d, 3d, 1w, 1m, 3m, 6m)
  * @query {string} refresh - Force refresh (true/false)
  * @query {string} tickers - Comma-separated ticker list (optional, uses watchlist if not provided)
  */
-router.get('/reddit/tickers', authenticateToken, sentimentController.getRedditTickerSentimentWithCache);
+router.get('/reddit/tickers', authenticateToken, checkSentimentSession, sentimentController.getRedditTickerSentimentWithCache);
 
 /**
  * @route GET /api/sentiment-unified/yahoo/tickers
  * @desc Get Yahoo ticker sentiment with unified caching
- * @access Private (requires authentication)
+ * @access Private (requires authentication + active session)
  * @query {string} timeRange - Time range (1d, 3d, 1w, 1m, 3m, 6m)
  * @query {string} refresh - Force refresh (true/false)
  * @query {string} tickers - Comma-separated ticker list (optional, uses watchlist if not provided)
  */
-router.get('/yahoo/tickers', authenticateToken, sentimentController.getYahooTickerSentimentWithCache);
+router.get('/yahoo/tickers', authenticateToken, checkSentimentSession, sentimentController.getYahooTickerSentimentWithCache);
 
 /**
  * @route GET /api/sentiment-unified/finviz/tickers
  * @desc Get Finviz ticker sentiment with unified caching
- * @access Private (requires authentication)
+ * @access Private (requires authentication + active session)
  * @query {string} timeRange - Time range (1d, 3d, 1w, 1m, 3m, 6m)
  * @query {string} refresh - Force refresh (true/false)
  * @query {string} tickers - Comma-separated ticker list (optional, uses watchlist if not provided)
  */
-router.get('/finviz/tickers', authenticateToken, sentimentController.getFinvizTickerSentimentWithCache);
+router.get('/finviz/tickers', authenticateToken, checkSentimentSession, sentimentController.getFinvizTickerSentimentWithCache);
 
 /**
  * @route GET /api/sentiment-unified/combined/tickers
  * @desc Get combined ticker sentiment from multiple sources with unified caching
- * @access Private (requires authentication)
+ * @access Private (requires authentication + active session)
  * @query {string} timeRange - Time range (1d, 3d, 1w, 1m, 3m, 6m)
  * @query {string} refresh - Force refresh (true/false)
  * @query {string} tickers - Comma-separated ticker list (optional, uses watchlist if not provided)
  * @query {string} sources - Comma-separated source list (reddit,yahoo,finviz)
  */
-router.get('/combined/tickers', authenticateToken, sentimentController.getCombinedTickerSentimentWithCache);
+router.get('/combined/tickers', authenticateToken, checkSentimentSession, sentimentController.getCombinedTickerSentimentWithCache);
 
 // ===== MARKET SENTIMENT ROUTES =====
 
 /**
  * @route GET /api/sentiment-unified/reddit/market
  * @desc Get Reddit market sentiment with unified caching
- * @access Private (requires authentication)
+ * @access Private (requires authentication + active session)
  * @query {string} timeRange - Time range (1d, 3d, 1w, 1m, 3m, 6m)
  * @query {string} refresh - Force refresh (true/false)
  */
-router.get('/reddit/market', authenticateToken, sentimentController.getRedditMarketSentimentWithCache);
+router.get('/reddit/market', authenticateToken, checkSentimentSession, sentimentController.getRedditMarketSentimentWithCache);
 
 /**
  * @route GET /api/sentiment-unified/yahoo/market
  * @desc Get Yahoo market sentiment with unified caching
- * @access Private (requires authentication)
+ * @access Private (requires authentication + active session)
  * @query {string} timeRange - Time range (1d, 3d, 1w, 1m, 3m, 6m)
  * @query {string} refresh - Force refresh (true/false)
  */
-router.get('/yahoo/market', authenticateToken, sentimentController.getYahooMarketSentimentWithCache);
+router.get('/yahoo/market', authenticateToken, checkSentimentSession, sentimentController.getYahooMarketSentimentWithCache);
 
 /**
  * @route GET /api/sentiment-unified/finviz/market
  * @desc Get Finviz market sentiment with unified caching
- * @access Private (requires authentication)
+ * @access Private (requires authentication + active session)
  * @query {string} timeRange - Time range (1d, 3d, 1w, 1m, 3m, 6m)
  * @query {string} refresh - Force refresh (true/false)
  */
-router.get('/finviz/market', authenticateToken, sentimentController.getFinvizMarketSentimentWithCache);
+router.get('/finviz/market', authenticateToken, checkSentimentSession, sentimentController.getFinvizMarketSentimentWithCache);
 
 /**
  * @route GET /api/sentiment-unified/aggregated/market
  * @desc Get aggregated market sentiment from multiple sources with unified caching
- * @access Private (requires authentication)
+ * @access Private (requires authentication + active session)
  * @query {string} timeRange - Time range (1d, 3d, 1w, 1m, 3m, 6m)
  * @query {string} refresh - Force refresh (true/false)
  * @query {string} sources - Comma-separated source list (reddit,yahoo,finviz)
  */
-router.get('/aggregated/market', authenticateToken, sentimentController.getAggregatedMarketSentimentWithCache);
+router.get('/aggregated/market', authenticateToken, checkSentimentSession, sentimentController.getAggregatedMarketSentimentWithCache);
 
 // ===== STREAMING ROUTES =====
 
 /**
  * @route GET /api/sentiment-unified/stream
  * @desc Get sentiment data with real-time progress updates (Server-Sent Events)
- * @access Private (requires authentication)
+ * @access Private (requires authentication + active session)
  * @query {string} dataType - Data type (reddit_tickers, yahoo_tickers, etc.)
  * @query {string} timeRange - Time range (1d, 3d, 1w, 1m, 3m, 6m)
  * @query {string} refresh - Force refresh (true/false)
  */
-router.get('/stream', authenticateToken, sentimentController.streamSentimentDataWithCache);
+router.get('/stream', authenticateToken, checkSentimentSession, sentimentController.streamSentimentDataWithCache);
 
 // ===== CACHE MANAGEMENT ROUTES =====
 
@@ -126,39 +127,39 @@ router.delete('/cache', authenticateToken, sentimentController.clearUserSentimen
 /**
  * @route POST /api/sentiment-unified/reddit/analyze-post
  * @desc Analyze a Reddit post with AI to explain its sentiment contribution
- * @access Private (requires authentication, Pro+ tier)
+ * @access Private (requires authentication + active session, Pro+ tier)
  * @body {object} post - Reddit post object with title, content, upvotes, etc.
  */
-router.post('/reddit/analyze-post', authenticateToken, sentimentController.analyzeRedditPost);
+router.post('/reddit/analyze-post', authenticateToken, checkSentimentSession, sentimentController.analyzeRedditPost);
 
 /**
  * @route POST /api/sentiment-unified/ticker/analyze
  * @desc Analyze a ticker's sentiment data with AI on-demand
- * @access Private (requires authentication, Pro+ tier)
+ * @access Private (requires authentication + active session, Pro+ tier)
  * @body {object} sentimentData - Ticker sentiment data object
  */
-router.post('/ticker/analyze', authenticateToken, sentimentController.analyzeTickerSentiment);
+router.post('/ticker/analyze', authenticateToken, checkSentimentSession, sentimentController.analyzeTickerSentiment);
 
 /**
  * @route POST /api/sentiment-unified/chart/market/analyze
  * @desc Analyze market sentiment chart data with AI for a given time period
- * @access Private (requires authentication, Pro+ tier)
+ * @access Private (requires authentication + active session, Pro+ tier)
  * @body {array} chartData - Chart data points array
  * @body {string} timeRange - Time range (1d, 3d, 1w)
  * @body {object} sentimentContext - Additional context for analysis
  */
-router.post('/chart/market/analyze', authenticateToken, sentimentController.analyzeMarketSentimentChart);
+router.post('/chart/market/analyze', authenticateToken, checkSentimentSession, sentimentController.analyzeMarketSentimentChart);
 
 /**
  * @route POST /api/sentiment-unified/chart/ticker/analyze
  * @desc Analyze ticker sentiment chart data with AI for selected tickers over time period
- * @access Private (requires authentication, Pro+ tier)
+ * @access Private (requires authentication + active session, Pro+ tier)
  * @body {array} chartData - Chart data points array
  * @body {array} selectedTickers - Array of selected ticker symbols
  * @body {string} timeRange - Time range (1d, 3d, 1w)
  * @body {object} sentimentContext - Additional context for analysis
  */
-router.post('/chart/ticker/analyze', authenticateToken, sentimentController.analyzeTickerSentimentChart);
+router.post('/chart/ticker/analyze', authenticateToken, checkSentimentSession, sentimentController.analyzeTickerSentimentChart);
 
 // ===== LEGACY COMPATIBILITY ROUTES =====
 // These routes provide backward compatibility with the old sentiment API
@@ -210,4 +211,4 @@ router.get('/health', (req, res) => {
   });
 });
 
-module.exports = router; 
+module.exports = router;

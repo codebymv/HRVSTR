@@ -100,14 +100,25 @@ const SECFilingsDashboard: React.FC<SECFilingsDashboardProps> = ({
     setShowTierDialog(true);
   };
   
-  // Handle tab switching
+  // Handle tab switching with proper loading state reset
   const handleTabChange = (tab: 'insider' | 'institutional') => {
-    // SAFETY FIX: Reset stuck loading state when switching to institutional tab
+    // SAFETY FIX: Reset any stuck loading states when switching tabs
     if (tab === 'institutional' && loadingState.institutionalHoldings.isLoading) {
       console.warn('🔄 SEC DASHBOARD - Resetting stuck institutional loading state...');
       setLoadingState(prev => ({
         ...prev,
         institutionalHoldings: { 
+          isLoading: false, 
+          needsRefresh: false
+        }
+      }));
+    }
+    
+    if (tab === 'insider' && loadingState.insiderTrades.isLoading) {
+      console.warn('🔄 SEC DASHBOARD - Resetting stuck insider trades loading state...');
+      setLoadingState(prev => ({
+        ...prev,
+        insiderTrades: { 
           isLoading: false, 
           needsRefresh: false
         }

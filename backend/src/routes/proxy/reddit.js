@@ -7,6 +7,7 @@ const router = express.Router();
 const redditController = require('../../controllers/redditController');
 const validateDataSource = require('../../middleware/dataSourceValidator');
 const authenticateToken = require('../../middleware/authMiddleware');
+const { checkSentimentSession } = require('../../middleware/sentimentSessionMiddleware');
 
 // Apply the data source validator middleware to all routes
 router.use(validateDataSource('reddit'));
@@ -21,20 +22,22 @@ router.get('/subreddit/:subreddit', authenticateToken, redditController.getSubre
 /**
  * @route GET /api/reddit/ticker-sentiment
  * @desc Get ticker-specific sentiment data from Reddit
- * @access Protected (requires authentication only - no credits charged)
+ * @access Protected (requires authentication + active session - no credits charged)
  */
 router.get('/ticker-sentiment', 
   authenticateToken,
+  checkSentimentSession,
   redditController.getTickerSentiment
 );
 
 /**
  * @route GET /api/reddit/sentiment
  * @desc Get overall market sentiment data from Reddit
- * @access Protected (requires authentication only - no credits charged)
+ * @access Protected (requires authentication + active session - no credits charged)
  */
 router.get('/sentiment', 
   authenticateToken,
+  checkSentimentSession,
   redditController.getSentiment
 );
 

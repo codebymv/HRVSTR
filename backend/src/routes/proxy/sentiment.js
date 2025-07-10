@@ -7,6 +7,7 @@ const router = express.Router();
 const sentimentController = require('../../controllers/sentimentController');
 const validateDataSource = require('../../middleware/dataSourceValidator');
 const authenticateToken = require('../../middleware/authMiddleware');
+const { checkSentimentSession } = require('../../middleware/sentimentSessionMiddleware');
 const {
   getHistoricalSentimentController,
   getSentimentTrendsController,
@@ -20,80 +21,88 @@ router.use(validateDataSource('sentiment'));
 /**
  * @route GET /api/sentiment/reddit/tickers
  * @desc Get ticker sentiment data from Reddit
- * @access Protected (requires authentication only - no credits charged)
+ * @access Protected (requires authentication + active session - no credits charged)
  */
 router.get('/reddit/tickers', 
   authenticateToken,
+  checkSentimentSession,
   sentimentController.getRedditTickerSentiment
 );
 
 /**
  * @route GET /api/sentiment/reddit/market
  * @desc Get market sentiment data from Reddit
- * @access Protected (requires authentication only - no credits charged)
+ * @access Protected (requires authentication + active session - no credits charged)
  */
 router.get('/reddit/market', 
   authenticateToken,
+  checkSentimentSession,
   sentimentController.getRedditMarketSentiment
 );
 
 /**
  * @route GET /api/sentiment/finviz/tickers
  * @desc Get ticker sentiment data from Finviz
- * @access Protected (requires authentication only - no credits charged)
+ * @access Protected (requires authentication + active session - no credits charged)
  */
 router.get('/finviz/tickers', 
   authenticateToken,
+  checkSentimentSession,
   sentimentController.getFinvizSentiment
 );
 
 /**
  * @route GET /api/sentiment/yahoo/tickers
  * @desc Get ticker sentiment data from Yahoo Finance
- * @access Protected (requires authentication only - no credits charged)
+ * @access Protected (requires authentication + active session - no credits charged)
  */
 router.get('/yahoo/tickers', 
   authenticateToken,
+  checkSentimentSession,
   sentimentController.getYahooSentiment
 );
 
 /**
  * @route GET /api/sentiment/yahoo/market
  * @desc Get market sentiment data from Yahoo Finance
- * @access Protected (requires authentication only - no credits charged)
+ * @access Protected (requires authentication + active session - no credits charged)
  */
 router.get('/yahoo/market', 
   authenticateToken,
+  checkSentimentSession,
   sentimentController.getYahooMarketSentiment
 );
 
 /**
  * @route GET /api/sentiment/yahoo-market
  * @desc Get historical market sentiment data from Yahoo Finance
- * @access Protected (requires authentication only - no credits charged)
+ * @access Protected (requires authentication + active session - no credits charged)
  */
 router.get('/yahoo-market', 
   authenticateToken,
+  checkSentimentSession,
   sentimentController.getYahooMarketSentiment
 );
 
 /**
  * @route GET /api/sentiment/finviz-market
  * @desc Get historical market sentiment data from FinViz
- * @access Protected (requires authentication only - no credits charged)
+ * @access Protected (requires authentication + active session - no credits charged)
  */
 router.get('/finviz-market', 
   authenticateToken,
+  checkSentimentSession,
   sentimentController.getFinvizMarketSentiment
 );
 
 /**
  * @route GET /api/sentiment/aggregate
  * @desc Get aggregated sentiment data from multiple sources
- * @access Protected (requires authentication only - no credits charged)
+ * @access Protected (requires authentication + active session - no credits charged)
  */
 router.get('/aggregate', 
   authenticateToken,
+  checkSentimentSession,
   sentimentController.getAggregatedSentiment
 );
 

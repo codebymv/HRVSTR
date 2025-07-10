@@ -89,13 +89,12 @@ async function getRedditTickerSentimentWithCache(req, res) {
       limit: userSentimentCacheService.getDataLimit(userTier, 'reddit_tickers')
     };
     
-    // Use unified cache service
+    // Use unified cache service with session-based approach
     const result = await userSentimentCacheService.getSentimentDataForUser(
       userId,
-      userTier,
+      'sentimentReddit', // Component name for research_sessions
       'reddit_tickers',
       timeRange,
-      forceRefresh,
       options,
       (progressData) => {
         // Progress callback for streaming updates
@@ -172,13 +171,12 @@ async function getRedditMarketSentimentWithCache(req, res) {
       limit: userSentimentCacheService.getDataLimit(userTier, 'reddit_market')
     };
     
-    // Use unified cache service
+    // Use unified cache service with session-based approach
     const result = await userSentimentCacheService.getSentimentDataForUser(
       userId,
-      userTier,
+      'sentimentReddit', // Component name for research_sessions
       'reddit_market',
       timeRange,
-      forceRefresh,
       options,
       (progressData) => {
         console.log(`[SENTIMENT UNIFIED] Reddit market progress: ${progressData.progress}% - ${progressData.stage}`);
@@ -234,13 +232,12 @@ async function getYahooTickerSentimentWithCache(req, res) {
       limit: userSentimentCacheService.getDataLimit(userTier, 'yahoo_tickers')
     };
     
-    // Use unified cache service
+    // Use unified cache service with session-based approach
     const result = await userSentimentCacheService.getSentimentDataForUser(
       userId,
-      userTier,
+      'sentimentScores', // Component name for research_sessions
       'yahoo_tickers',
       timeRange,
-      forceRefresh,
       options,
       (progressData) => {
         console.log(`[SENTIMENT UNIFIED] Yahoo tickers progress: ${progressData.progress}% - ${progressData.stage}`);
@@ -325,13 +322,12 @@ async function getYahooMarketSentimentWithCache(req, res) {
       limit: userSentimentCacheService.getDataLimit(userTier, 'yahoo_market')
     };
     
-    // Use unified cache service
+    // Use unified cache service with session-based approach
     const result = await userSentimentCacheService.getSentimentDataForUser(
       userId,
-      userTier,
+      'sentimentScores', // Component name for research_sessions
       'yahoo_market',
       timeRange,
-      forceRefresh,
       options,
       (progressData) => {
         console.log(`[SENTIMENT UNIFIED] Yahoo market progress: ${progressData.progress}% - ${progressData.stage}`);
@@ -387,13 +383,12 @@ async function getFinvizTickerSentimentWithCache(req, res) {
       limit: userSentimentCacheService.getDataLimit(userTier, 'finviz_tickers')
     };
     
-    // Use unified cache service
+    // Use unified cache service with session-based approach
     const result = await userSentimentCacheService.getSentimentDataForUser(
       userId,
-      userTier,
+      'sentimentChart', // Component name for research_sessions
       'finviz_tickers',
       timeRange,
-      forceRefresh,
       options,
       (progressData) => {
         console.log(`[SENTIMENT UNIFIED] Finviz tickers progress: ${progressData.progress}% - ${progressData.stage}`);
@@ -459,13 +454,12 @@ async function getFinvizMarketSentimentWithCache(req, res) {
       limit: userSentimentCacheService.getDataLimit(userTier, 'finviz_market')
     };
     
-    // Use unified cache service
+    // Use unified cache service with session-based approach
     const result = await userSentimentCacheService.getSentimentDataForUser(
       userId,
-      userTier,
+      'sentimentChart', // Component name for research_sessions
       'finviz_market',
       timeRange,
-      forceRefresh,
       options,
       (progressData) => {
         console.log(`[SENTIMENT UNIFIED] Finviz market progress: ${progressData.progress}% - ${progressData.stage}`);
@@ -522,13 +516,12 @@ async function getCombinedTickerSentimentWithCache(req, res) {
       limit: userSentimentCacheService.getDataLimit(userTier, 'combined_tickers')
     };
     
-    // Use unified cache service
+    // Use unified cache service with session-based approach
     const result = await userSentimentCacheService.getSentimentDataForUser(
       userId,
-      userTier,
+      'sentimentScores', // Component name for research_sessions
       'combined_tickers',
       timeRange,
-      forceRefresh,
       options,
       (progressData) => {
         console.log(`[SENTIMENT UNIFIED] Combined tickers progress: ${progressData.progress}% - ${progressData.stage}`);
@@ -595,13 +588,12 @@ async function getAggregatedMarketSentimentWithCache(req, res) {
       limit: userSentimentCacheService.getDataLimit(userTier, 'aggregated_market')
     };
     
-    // Use unified cache service
+    // Use unified cache service with session-based approach
     const result = await userSentimentCacheService.getSentimentDataForUser(
       userId,
-      userTier,
+      'sentimentScores', // Component name for research_sessions
       'aggregated_market',
       timeRange,
-      forceRefresh,
       options,
       (progressData) => {
         console.log(`[SENTIMENT UNIFIED] Aggregated market progress: ${progressData.progress}% - ${progressData.stage}`);
@@ -732,13 +724,13 @@ async function streamSentimentDataWithCache(req, res) {
       })}\n\n`);
     };
     
-    // Use unified cache service with streaming callback
+    // Use unified cache service with streaming callback and session-based approach
+    const componentName = userSentimentCacheService.SENTIMENT_CACHE_CONFIG.COMPONENT_MAPPING[dataType] || 'sentimentScores';
     const result = await userSentimentCacheService.getSentimentDataForUser(
       userId,
-      userTier,
+      componentName, // Component name for research_sessions
       dataType,
       timeRange,
-      forceRefresh,
       options,
       progressCallback
     );
@@ -1455,4 +1447,4 @@ module.exports = {
   analyzeTickerSentiment,
   analyzeMarketSentimentChart,
   analyzeTickerSentimentChart
-}; 
+};

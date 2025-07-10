@@ -261,7 +261,7 @@ const InstitutionalHoldingsTab: React.FC<InstitutionalHoldingsTabProps> = ({
     // CRITICAL FIX: Set loading state here, not in useEffect
     isLoadingRef.current = true;
     
-    // Set up timeout to prevent infinite loading
+    // Set up timeout to prevent infinite loading with proper cleanup
     const timeoutId = setTimeout(() => {
       if (isLoadingRef.current) {
         console.warn('📋 INSTITUTIONAL TAB: Loading timeout reached, resetting...');
@@ -269,7 +269,7 @@ const InstitutionalHoldingsTab: React.FC<InstitutionalHoldingsTabProps> = ({
         setError('Loading timeout - please try again');
         onLoadingChange(false, 0, 'Loading timeout', [], 'Loading timeout - please try again');
       }
-    }, 60000); // 60 second timeout
+    }, 45000); // Reduced to 45 seconds for better UX
     
     // Start with loading animation - especially important for initial fetch
     const updateProgress = (step: number, stage: string) => {

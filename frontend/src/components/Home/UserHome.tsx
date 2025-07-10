@@ -159,7 +159,9 @@ const UserHome: React.FC = () => {
   // Update legacy watchlist state when infinite scroll watchlist changes
   useEffect(() => {
     setWatchlist(infiniteWatchlist);
-    setLoadingWatchlist(watchlistLoading.watchlist); // Fix: access the watchlist property directly
+    // LOADING STATE FIX: Ensure proper boolean conversion and handle undefined states
+    const isWatchlistLoading = watchlistLoading?.watchlist ?? false;
+    setLoadingWatchlist(Boolean(isWatchlistLoading));
     setWatchlistError(infiniteWatchlistError);
   }, [infiniteWatchlist, watchlistLoading, infiniteWatchlistError]);
 

@@ -178,29 +178,28 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
 
 
 
-  // Sync loading states from useSentimentData to useSentimentLoading
+  // Update chart loading state based on data availability and access
   useEffect(() => {
-    // Update chart loading state
-    if (hasChartAccess) {
-      const chartLoading = loading.chart || (chartData.length === 0 && !dataErrors.chart);
-      handleChartLoading(chartLoading, dataErrors.chart);
-    }
+    // LOADING STATE FIX: Ensure proper boolean conversion and handle undefined states
+    const isChartLoading = Boolean(loading.chart) || (chartData.length === 0 && !dataErrors.chart);
+    handleChartLoading(isChartLoading, dataErrors.chart);
+    
   }, [hasChartAccess, loading.chart, chartData.length, dataErrors.chart, handleChartLoading]);
-
+  
+  // Update scores loading state based on data availability and access
   useEffect(() => {
-    // Update scores loading state  
-    if (hasScoresAccess) {
-      const scoresLoading = loading.sentiment || (topSentiments.length === 0 && finvizSentiments.length === 0 && !dataErrors.sentiment);
-      handleScoresLoading(scoresLoading, dataErrors.sentiment);
-    }
+    // LOADING STATE FIX: Ensure proper boolean conversion and handle undefined states
+    const isScoresLoading = Boolean(loading.sentiment) || (topSentiments.length === 0 && finvizSentiments.length === 0 && !dataErrors.sentiment);
+    handleScoresLoading(isScoresLoading, dataErrors.sentiment);
+    
   }, [hasScoresAccess, loading.sentiment, topSentiments.length, finvizSentiments.length, dataErrors.sentiment, handleScoresLoading]);
-
+  
+  // Update reddit loading state based on data availability and access
   useEffect(() => {
-    // Update reddit loading state
-    if (hasRedditAccess) {
-      const redditLoading = loading.posts || (redditPosts.length === 0 && !dataErrors.posts);
-      handleRedditLoading(redditLoading, dataErrors.posts);
-    }
+    // LOADING STATE FIX: Ensure proper boolean conversion and handle undefined states
+    const isRedditLoading = Boolean(loading.posts) || (redditPosts.length === 0 && !dataErrors.posts);
+    handleRedditLoading(isRedditLoading, dataErrors.posts);
+    
   }, [hasRedditAccess, loading.posts, redditPosts.length, dataErrors.posts, handleRedditLoading]);
 
   // Handle component unlocking
@@ -587,4 +586,4 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
   );
 };
 
-export default SentimentMonitor; 
+export default SentimentMonitor;

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/data-sources');
 const authenticateToken = require('../middleware/authMiddleware');
+const { checkSentimentSession } = require('../middleware/sentimentSessionMiddleware');
 const redditSentimentService = require('../services/redditSentimentService');
 const yahooSentimentService = require('../services/yahooSentimentService');
 const {
@@ -11,7 +12,7 @@ const {
   getHistoricalSummaryController
 } = require('../controllers/historicalSentimentController');
 
-router.get('/yahoo/tickers', authenticateToken, async (req, res) => {
+router.get('/yahoo/tickers', authenticateToken, checkSentimentSession, async (req, res) => {
   const startTime = Date.now();
   
   try {
@@ -68,7 +69,7 @@ router.get('/yahoo/tickers', authenticateToken, async (req, res) => {
   }
 });
 
-router.get('/reddit/tickers', authenticateToken, async (req, res) => {
+router.get('/reddit/tickers', authenticateToken, checkSentimentSession, async (req, res) => {
   const startTime = Date.now();
   
   try {
@@ -179,4 +180,4 @@ router.post('/test/manual-aggregation', authenticateToken, async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;
