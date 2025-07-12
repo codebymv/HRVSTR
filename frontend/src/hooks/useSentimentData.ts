@@ -346,8 +346,8 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
       });
       
       setErrors({
-        sentiment: null,
-        posts: null,
+        scores: null,
+        reddit: null,
         chart: null,
         rateLimited: false
       });
@@ -380,10 +380,14 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
           setChartData([]);
         }
         
+        // Update chart loading state immediately when chart data is ready
+        updateLoadingState({ chart: false });
+        
       } catch (error: unknown) {
         if (error instanceof DOMException && error.name === 'AbortError') return;
         logger.error('Market sentiment error:', error);
-        setErrors(prev => ({ ...prev, scores: error instanceof Error ? error.message : 'Failed to fetch market sentiment timeline' }));
+        setErrors(prev => ({ ...prev, chart: error instanceof Error ? error.message : 'Failed to fetch market sentiment timeline' }));
+        updateLoadingState({ chart: false });
       }
       
       try {
@@ -565,8 +569,8 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
             rateLimited: isRateLimited || prev.rateLimited
           }));
           updateLoadingState({
-            sentiment: false,
-            posts: false,
+            scores: false,
+            reddit: false,
             chart: false,
           });
       }
@@ -603,7 +607,7 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
       return;
     }
 
-    updateLoadingState({ posts: true });
+    updateLoadingState({ reddit: true });
 
     // Add a minimum loading duration for better UX
     const minimumLoadingTime = 500; // 500ms minimum loading time
@@ -703,8 +707,8 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
   
       // Clear any existing errors
       setErrors({
-        sentiment: null,
-        posts: null,
+        scores: null,
+        reddit: null,
         chart: null,
         rateLimited: false
       });
@@ -746,8 +750,8 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
       
       // Clear any existing errors
       setErrors({
-        sentiment: null,
-        posts: null,
+        scores: null,
+        reddit: null,
         chart: null,
         rateLimited: false
       });
