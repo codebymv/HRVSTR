@@ -23,6 +23,9 @@ const requestLogger = require('./middleware/requestLogger');
 // Import cache manager
 const cacheManager = require('./utils/cacheManager');
 
+// Import Python service manager
+const pythonServiceManager = require('./utils/pythonServiceManager');
+
 // Load environment variables
 dotenv.config();
 
@@ -33,6 +36,7 @@ const secRoutes = require('./routes/proxy/sec');
 const earningsRoutes = require('./routes/proxy/earnings');
 const sentimentRoutes = require('./routes/proxy/sentiment');
 const sentimentUnifiedRoutes = require('./routes/sentimentUnified');
+const enhancedSentimentRoutes = require('./routes/enhancedSentiment');
 const yahooRoutes = require('./routes/proxy/yahoo');
 const watchlistRoutes = require('./routes/watchlist');
 const authRoutes = require('./routes/auth');
@@ -272,10 +276,11 @@ app.get('/api/status', async (req, res) => {
       services: {
         api: 'operational',
         rateLimit: 'operational',
-        cors: 'operational'
+        cors: 'operational',
+        pythonSentiment: pythonServiceManager.getStatus()
       },
       endpoints: {
-        total: 39,
+        total: 44,
         available: [
           '/api/reddit/*',
           '/api/finviz/*',
@@ -287,6 +292,11 @@ app.get('/api/status', async (req, res) => {
           '/api/sentiment/comparative',
           '/api/sentiment/summary/:ticker',
           '/api/sentiment-unified/*',
+          '/api/enhanced-sentiment/ticker/:ticker',
+          '/api/enhanced-sentiment/compare',
+          '/api/enhanced-sentiment/analyze-text',
+          '/api/enhanced-sentiment/status',
+          '/api/enhanced-sentiment/health',
           '/api/yahoo/*',
           '/api/watchlist',
           '/api/auth',
@@ -361,6 +371,12 @@ app.get('/', (req, res) => {
       '/api/sentiment-unified/stream',
       '/api/sentiment-unified/cache/status',
       '/api/sentiment-unified/health',
+      '/api/enhanced-sentiment/ticker/:ticker',
+      '/api/enhanced-sentiment/compare',
+      '/api/enhanced-sentiment/analyze-text',
+      '/api/enhanced-sentiment/status',
+      '/api/enhanced-sentiment/health',
+      '/api/enhanced-sentiment/pricing',
       '/api/settings/key-status',
       '/api/settings/update-keys',
       '/api/settings/keys',
@@ -386,6 +402,7 @@ app.use('/api/sec', secRoutes);
 app.use('/api/earnings', earningsRoutes);
 app.use('/api/sentiment', sentimentRoutes);
 app.use('/api/sentiment-unified', sentimentUnifiedRoutes);
+app.use('/api/enhanced-sentiment', enhancedSentimentRoutes);
 app.use('/api/yahoo', yahooRoutes);
 app.use('/api/watchlist', watchlistRoutes);
 app.use('/api/auth', authLimiter, authRoutes);
@@ -436,17 +453,31 @@ if (process.env.NODE_ENV === 'production' || process.env.ENABLE_SENTIMENT_JOB ==
 }
 
 // Graceful shutdown handling
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('🛑 Received SIGTERM signal, shutting down gracefully...');
   sessionCleanupScheduler.stop();
+  await pythonServiceManager.stopService();
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('🛑 Received SIGINT signal, shutting down gracefully...');
   sessionCleanupScheduler.stop();
+  await pythonServiceManager.stopService();
   process.exit(0);
 });
+
+// Start Python sentiment service
+(async () => {
+  try {
+    console.log('🚀 Initializing Python sentiment service...');
+    await pythonServiceManager.startService();
+    console.log('✅ Python sentiment service initialized successfully');
+  } catch (error) {
+    console.error('❌ Failed to start Python sentiment service:', error.message);
+    console.log('⚠️  Enhanced sentiment analysis will not be available');
+  }
+})();
 
 // Start server
 app.listen(PORT, () => {
