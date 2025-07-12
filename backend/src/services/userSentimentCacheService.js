@@ -577,245 +577,152 @@ async function storeIndividualMarketSentiment(cacheId, userId, marketData, sourc
  * @param {Function} progressCallback - Progress callback
  * @returns {Promise<Object>} - Sentiment data response
  */
-async function getSentimentDataForUser(userId, component, dataType, timeRange, options = {}, progressCallback = null) {
+async function getSentimentDataForUser(userId, userTier, dataType, timeRange, forceRefresh = false, options = {}, progressCallback = null) {
   try {
-    console.log(`🔍 [SENTIMENT CACHE] Getting ${dataType} data for user ${userId}, component: ${component}, timeRange: ${timeRange}`);
+    console.log(`[userSentimentCache] Getting sentiment data for user ${userId}, type: ${dataType}, tier: ${userTier}`);
     
-    // Get user tier for cache and credit calculations
-    const userTier = await getUserTier(userId);
-    const cacheKey = generateCacheKey(dataType, timeRange, options);
+    // TIER 1: Check for active unlock session first
+    const componentMap = {
+      'reddit_tickers': 'sentimentReddit',
+      'yahoo_tickers': 'sentimentScores',
+      'finviz_tickers': 'sentimentChart',
+      'reddit_market': 'sentimentReddit',
+      'yahoo_market': 'sentimentScores',
+      'finviz_market': 'sentimentChart',
+      'combined_tickers': 'sentimentChart',
+      'aggregated_market': 'sentimentChart'
+    };
     
-    if (progressCallback) {
-      progressCallback({
-        stage: 'Checking active sessions...',
-        progress: 5
-      });
-    }
+    const componentName = componentMap[dataType] || 'sentimentChart';
+    const sessionQuery = `
+      SELECT session_id, expires_at, credits_used, metadata
+      FROM research_sessions 
+      WHERE user_id = $1 
+        AND component = $2 
+        AND status = 'active' 
+        AND expires_at > CURRENT_TIMESTAMP
+      ORDER BY unlocked_at DESC 
+      LIMIT 1
+    `;
     
-    // Check for active unlock session first
-    const activeSession = await checkActiveUnlockSession(userId, component);
+    const sessionResult = await db.query(sessionQuery, [userId, componentName]);
+    const hasActiveSession = sessionResult.rows.length > 0;
     
-    if (activeSession) {
-      console.log(`🔓 [SENTIMENT CACHE] Active session found for user ${userId}, component: ${component}`);
+    if (hasActiveSession) {
+      const session = sessionResult.rows[0];
+      const timeRemaining = new Date(session.expires_at) - new Date();
+      const hoursRemaining = Math.round(timeRemaining / (1000 * 60 * 60) * 10) / 10;
       
-      if (progressCallback) {
-        progressCallback({
-          stage: 'Session active - checking cache...',
-          progress: 15
-        });
+      console.log(`[userSentimentCache] User ${userId} has active session for ${componentName}, ${hoursRemaining}h remaining`);
+      
+      // TIER 2: Check cache first (unless force refresh)
+      if (!forceRefresh) {
+        const cachedData = await getCachedSentimentData(userId, dataType, timeRange, options);
+        if (cachedData) {
+          console.log(`[userSentimentCache] Returning cached data for user ${userId} with active session`);
+          
+          if (progressCallback) {
+            progressCallback({
+              stage: `${dataType.replace('_', ' ')} loaded from cache`,
+              progress: 100,
+              total: cachedData.metadata?.dataCount || 0,
+              current: cachedData.metadata?.dataCount || 0,
+              fromCache: true,
+              hasActiveSession: true
+            });
+          }
+          
+          return {
+            success: true,
+            data: cachedData.data,
+            metadata: cachedData.metadata,
+            fromCache: true,
+            expiresAt: cachedData.metadata.expiresAt,
+            secondsUntilExpiry: cachedData.metadata.secondsUntilExpiry,
+            hasActiveSession: true,
+            creditsUsed: 0 // No credits used for active sessions
+          };
+        }
       }
       
-      // Try to get cached data first (no credit deduction for active sessions)
-       const cachedData = await getCachedSentimentData(userId, dataType, timeRange, cacheKey);
-       if (cachedData.success && cachedData.data) {
-         console.log(`✅ [SENTIMENT CACHE] Cache hit with active session for user ${userId}`);
-         
-         if (progressCallback) {
-           progressCallback({
-             stage: 'Returning cached data...',
-             progress: 100
-           });
-         }
-         
-         return {
-           success: true,
-           data: cachedData.data,
-           cached: true,
-           sessionActive: true,
-           creditsUsed: 0,
-           sessionId: activeSession.session_id
-         };
-       }
+      // TIER 3: If active session but no cache, fetch data without charging credits
+      console.log(`[userSentimentCache] Active session found but no cache, fetching data for free for user ${userId}`);
       
-      // If no cache, fetch fresh data without credit deduction
-      if (progressCallback) {
-        progressCallback({
-          stage: 'Fetching fresh data (session active)...',
-          progress: 30
-        });
-      }
-      
+      // Fetch fresh data (no credit deduction for active sessions)
       const freshData = await fetchFreshSentimentData(userId, dataType, timeRange, options, progressCallback);
-      
-      // Add null check to prevent crashes - force restart
-      if (freshData && freshData.success) {
-         // Store in cache
-         await storeSentimentDataInCache(userId, dataType, timeRange, cacheKey, freshData.data, userTier, 0);
-         
-         if (progressCallback) {
-           progressCallback({
-             stage: 'Complete!',
-             progress: 100
-           });
-         }
-         
-         return {
-           success: true,
-           data: freshData.data,
-           cached: false,
-           sessionActive: true,
-           creditsUsed: 0,
-           sessionId: activeSession.session_id
-         };
-       }
-      
-      // Handle null freshData response
-      if (!freshData) {
-        return {
-          success: false,
-          error: 'API_UNAVAILABLE',
-          message: 'Sentiment data service temporarily unavailable',
-          userMessage: 'Unable to fetch fresh sentiment data. Please try again later.'
-        };
+      if (!freshData.success) {
+        return freshData;
       }
       
-      return freshData;
+      // Cache the fresh data (no credits charged)
+      await storeSentimentDataInCache(userId, dataType, timeRange, freshData.data, 0, userTier, options);
+      
+      console.log(`[userSentimentCache] Successfully fetched and cached ${dataType} for user ${userId} with active session (no credits charged)`);
+      
+      return {
+        success: true,
+        data: freshData.data,
+        creditsUsed: 0,
+        fromCache: false,
+        freshlyFetched: true,
+        hasActiveSession: true
+      };
     }
     
     // No active session - proceed with normal credit-based flow
-    console.log(`🔒 [SENTIMENT CACHE] No active session for user ${userId}, component: ${component}`);
+    console.log(`[userSentimentCache] No active session found for user ${userId}, proceeding with credit-based access`);
     
-    if (progressCallback) {
-      progressCallback({
-        stage: 'Checking cache...',
-        progress: 15
-      });
+    // TIER 2: Check cache first (unless force refresh)
+    if (!forceRefresh) {
+      const cachedData = await getCachedSentimentData(userId, dataType, timeRange, options);
+      if (cachedData) {
+        console.log(`[userSentimentCache] Returning cached data for user ${userId}`);
+        
+        if (progressCallback) {
+          progressCallback({
+            stage: `${dataType.replace('_', ' ')} loaded from cache`,
+            progress: 100,
+            total: cachedData.metadata?.dataCount || 0,
+            current: cachedData.metadata?.dataCount || 0,
+            fromCache: true
+          });
+        }
+        
+        return {
+          success: true,
+          data: cachedData.data,
+          metadata: cachedData.metadata,
+          fromCache: true,
+          expiresAt: cachedData.metadata.expiresAt,
+          secondsUntilExpiry: cachedData.metadata.secondsUntilExpiry,
+          hasActiveSession: false
+        };
+      }
     }
     
-    // Check cache first
-     const cachedData = await getCachedSentimentData(userId, dataType, timeRange, cacheKey);
-     if (cachedData.success && cachedData.data) {
-       console.log(`✅ [SENTIMENT CACHE] Cache hit for user ${userId}, ${dataType}`);
-       
-       if (progressCallback) {
-         progressCallback({
-           stage: 'Returning cached data...',
-           progress: 100
-         });
-       }
-       
-       return {
-         success: true,
-         data: cachedData.data,
-         cached: true,
-         sessionActive: false,
-         creditsUsed: 0
-       };
-     }
+    // TIER 3: No cache available, need to fetch fresh data (NO CREDITS CHARGED)
+    // Note: Credit charging moved to unlock buttons only
+    let creditsUsed = 0;
     
-    console.log(`❌ [SENTIMENT CACHE] Cache miss for user ${userId}, ${dataType}`);
+    console.log(`[userSentimentCache] Fetching fresh ${dataType} data for user ${userId} (free - no credits charged)`);
     
-    if (progressCallback) {
-      progressCallback({
-        stage: 'Checking tier limits...',
-        progress: 25
-      });
-    }
-    
-    // Check tier-based data limits
-    const dataLimit = getDataLimit(userTier, dataType);
-    if (options.tickers && options.tickers.length > dataLimit) {
-      return {
-        success: false,
-        error: 'TIER_LIMIT_EXCEEDED',
-        message: `Your ${userTier} tier allows up to ${dataLimit} tickers for ${dataType}`,
-        userMessage: `Upgrade your plan to analyze more tickers. Current limit: ${dataLimit} tickers.`,
-        limit: dataLimit,
-        requested: options.tickers.length
-      };
-    }
-    
-    if (progressCallback) {
-      progressCallback({
-        stage: 'Calculating credits...',
-        progress: 35
-      });
-    }
-    
-    // Calculate credit cost
-    const creditCost = getCreditCost(userTier, dataType, timeRange);
-    
-    // Check user credits
-    const userCredits = await getUserCredits(userId);
-    if (userCredits < creditCost) {
-      return {
-        success: false,
-        error: 'INSUFFICIENT_CREDITS',
-        message: `Insufficient credits. Required: ${creditCost}, Available: ${userCredits}`,
-        userMessage: `You need ${creditCost} credits for this request. You have ${userCredits} credits remaining.`,
-        creditsRequired: creditCost,
-        creditsAvailable: userCredits
-      };
-    }
-    
-    if (progressCallback) {
-      progressCallback({
-        stage: 'Fetching fresh data...',
-        progress: 45
-      });
-    }
-    
-    // Fetch fresh data
     const freshData = await fetchFreshSentimentData(userId, dataType, timeRange, options, progressCallback);
-    
-    // Handle null freshData response
-    if (!freshData) {
-      return {
-        success: false,
-        error: 'API_UNAVAILABLE',
-        message: 'Sentiment data service temporarily unavailable',
-        userMessage: 'Unable to fetch fresh sentiment data. Please try again later.'
-      };
-    }
-    
     if (!freshData.success) {
       return freshData;
     }
     
-    if (progressCallback) {
-      progressCallback({
-        stage: 'Deducting credits...',
-        progress: 90
-      });
-    }
+    // Cache the fresh data (no credits used)
+    await storeSentimentDataInCache(userId, dataType, timeRange, freshData.data, creditsUsed, userTier, options);
     
-    // Deduct credits
-    const creditDeduction = await deductUserCredits(userId, creditCost, {
-      action: 'sentiment_data_fetch',
-      component,
-      dataType,
-      timeRange,
-      tickerCount: options.tickers ? options.tickers.length : 0
-    });
-    
-    if (!creditDeduction.success) {
-      return {
-        success: false,
-        error: 'CREDIT_DEDUCTION_FAILED',
-        message: 'Failed to deduct credits',
-        userMessage: 'Unable to process payment. Please try again.'
-      };
-    }
-    
-    // Store in cache
-     await storeSentimentDataInCache(userId, dataType, timeRange, cacheKey, freshData.data, userTier, creditCost);
-    
-    if (progressCallback) {
-      progressCallback({
-        stage: 'Complete!',
-        progress: 100
-      });
-    }
-    
-    console.log(`✅ [SENTIMENT CACHE] Successfully fetched and cached ${dataType} data for user ${userId}`);
+    console.log(`[userSentimentCache] Successfully fetched and cached ${dataType} for user ${userId} (free - no credits charged)`);
     
     return {
       success: true,
       data: freshData.data,
-      cached: false,
-      sessionActive: false,
-      creditsUsed: creditCost,
-      remainingCredits: userCredits - creditCost
+      creditsUsed: 0, // No credits charged for sentiment data
+      fromCache: false,
+      freshlyFetched: true,
+      hasActiveSession: false
     };
     
   } catch (error) {
