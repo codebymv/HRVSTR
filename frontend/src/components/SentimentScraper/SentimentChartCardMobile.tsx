@@ -1,4 +1,4 @@
-import React, { useState, useEffect, startTransition } from 'react';
+import React, { useState, useEffect, startTransition, useMemo } from 'react';
 import { ChartData, TimeRange, HistoricalTimeRange, ChartViewMode, HistoricalSentimentData } from '../../types';
 
 type DataSource = 'reddit' | 'finviz' | 'yahoo' | 'combined';
@@ -130,7 +130,14 @@ const SentimentChartCardMobile: React.FC<SentimentChartCardMobileProps> = ({
     }
   };
 
-  const currentSentiments = getSentimentData();
+  const currentSentiments = useMemo(() => getSentimentData(), [
+    dataSource,
+    redditSentiments,
+    finvizSentiments,
+    yahooSentiments,
+    combinedSentiments,
+    hasRedditAccess
+  ]);
 
   // Calculate source distribution percentages (matching SentimentScoresSection logic)
   const getSourceDistribution = () => {
@@ -145,7 +152,7 @@ const SentimentChartCardMobile: React.FC<SentimentChartCardMobileProps> = ({
         // Calculate actual source distribution from combined sentiment data
         const sourceCounts = { reddit: 0, finviz: 0, yahoo: 0 };
         
-        combinedSentiments!.forEach(item => {
+        combinedSentiments!.forEach((item: any) => {
           if (item.source === 'reddit') sourceCounts.reddit++;
           else if (item.source === 'finviz') sourceCounts.finviz++;
           else if (item.source === 'yahoo') sourceCounts.yahoo++;
@@ -255,7 +262,7 @@ const SentimentChartCardMobile: React.FC<SentimentChartCardMobileProps> = ({
       
       selectedTickers.forEach(ticker => {
         // Find sentiment data for this ticker
-        const tickerData = tickerFilteredData.filter(item => item.ticker === ticker);
+        const tickerData = tickerFilteredData.filter((item: any) => item.ticker === ticker);
         const baseSentiment = tickerData[0];
         
         if (!baseSentiment) return;

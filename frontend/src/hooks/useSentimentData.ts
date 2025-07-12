@@ -437,7 +437,7 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
             reddit: errorMessage,
             rateLimited: isRateLimited || prev.rateLimited
           }));
-          setLoading(prev => ({ ...prev, posts: false }));
+          updateLoadingState({ reddit: false });
       }
       
       try {
@@ -549,11 +549,8 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
         const combinedSentiments = aggregateByTicker(mergedSentimentData);
         setCombinedSentiments(combinedSentiments);
         
-        updateLoadingState({
-          scores: false,
-          reddit: false,
-          chart: false,
-        });
+        // Update only the scores loading state - reddit and chart are managed separately
+        updateLoadingState({ scores: false });
       } catch (error: unknown) {
         if (error instanceof DOMException && error.name === 'AbortError') return;
         logger.error('Ticker sentiment error:', error);
@@ -568,11 +565,8 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
             scores: isRateLimited ? 'Rate limit exceeded. Please try again later.' : errorMessage,
             rateLimited: isRateLimited || prev.rateLimited
           }));
-          updateLoadingState({
-            scores: false,
-            reddit: false,
-            chart: false,
-          });
+          // Update only the scores loading state in error case
+          updateLoadingState({ scores: false });
       }
       
       // Complete the loading process
