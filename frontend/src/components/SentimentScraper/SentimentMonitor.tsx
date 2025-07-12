@@ -220,29 +220,9 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
 
 
 
-  // Update chart loading state based on data availability and access
-  useEffect(() => {
-    // LOADING STATE FIX: Ensure proper boolean conversion and handle undefined states
-    const isChartLoading = Boolean(loading.chart) || (chartData.length === 0 && !dataErrors.chart);
-    handleChartLoading(isChartLoading, dataErrors.chart);
-    
-  }, [hasChartAccess, loading.chart, chartData.length, dataErrors.chart, handleChartLoading]);
-  
-  // Update scores loading state based on data availability and access
-  useEffect(() => {
-    // LOADING STATE FIX: Ensure proper boolean conversion and handle undefined states
-    const isScoresLoading = Boolean(loading.scores) || (topSentiments.length === 0 && finvizSentiments.length === 0 && !dataErrors.scores);
-    handleScoresLoading(isScoresLoading, dataErrors.scores);
-    
-  }, [hasScoresAccess, loading.scores, topSentiments.length, finvizSentiments.length, dataErrors.scores, handleScoresLoading]);
-  
-  // Update reddit loading state based on data availability and access
-  useEffect(() => {
-    // LOADING STATE FIX: Ensure proper boolean conversion and handle undefined states
-    const isRedditLoading = Boolean(loading.reddit) || (redditPosts.length === 0 && !dataErrors.reddit);
-    handleRedditLoading(isRedditLoading, dataErrors.reddit);
-    
-  }, [hasRedditAccess, loading.reddit, redditPosts.length, dataErrors.reddit, handleRedditLoading]);
+  // RACE CONDITION FIX: Removed the synchronization useEffect hooks that were causing 
+  // feedback loops between useSentimentData and useSentimentLoading. 
+  // useSentimentData already manages loading states properly, so no additional sync needed.
 
   // Handle component unlocking
   const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
@@ -409,7 +389,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                 </div>
               ) : hasChartAccess ? (
                 <>
-                  {loadingState.chart.isLoading || (chartData.length === 0 && !dataErrors.chart) ? (
+                  {loading.chart || (chartData.length === 0 && !dataErrors.chart) ? (
                     <div className={`${cardBg} rounded-lg border ${cardBorder} overflow-hidden h-96`}>
                       <div className={`${headerBg} p-4`}>
                         <h2 className={`text-lg font-semibold ${textColor}`}>Market Sentiment Chart</h2>
@@ -491,7 +471,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                 />
               ) : hasScoresAccess ? (
                 <>
-                  {loadingState.scores.isLoading ? (
+                  {loading.scores || (topSentiments.length === 0 && finvizSentiments.length === 0 && yahooSentiments.length === 0 && !dataErrors.scores) ? (
                     <SentimentScoresSection
                       redditSentiments={[]}
                       finvizSentiments={[]}
@@ -512,7 +492,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                       finvizSentiments={finvizSentiments}
                       yahooSentiments={yahooSentiments}
                       combinedSentiments={combinedSentiments}
-                      isLoading={loadingState.scores.isLoading}
+                      isLoading={loading.scores}
                       loadingProgress={loadingProgress}
                       loadingStage={loadingStage}
                       error={dataErrors.scores}
@@ -588,7 +568,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                 </div>
               ) : hasRedditAccess ? (
                 <>
-                  {loadingState.reddit.isLoading || (redditPosts.length === 0 && !dataErrors.reddit) ? (
+                  {loading.reddit || (redditPosts.length === 0 && !dataErrors.reddit) ? (
                     <RedditPostsSection
                       posts={[]}
                       isLoading={true}
@@ -600,7 +580,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                   ) : (
                     <RedditPostsSection
                       posts={redditPosts}
-                      isLoading={loadingState.reddit.isLoading}
+                      isLoading={loading.reddit}
                       loadingProgress={loadingProgress}
                       loadingStage={loadingStage}
                       error={dataErrors.reddit}

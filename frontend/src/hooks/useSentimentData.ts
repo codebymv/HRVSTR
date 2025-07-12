@@ -532,6 +532,14 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
         } catch (yahooError) {
           console.error('❌ Yahoo sentiment API error:', yahooError);
           logger.error('Yahoo Finance sentiment data error:', yahooError);
+          
+          // Check if it's a timeout and log additional context
+          const isTimeout = yahooError instanceof Error && 
+            (yahooError.message.includes('timeout') || yahooError.message.includes('ECONNABORTED'));
+          if (isTimeout) {
+            console.warn('⚠️ Yahoo API timed out - continuing with available data from other sources');
+          }
+          
           setYahooSentiments([]);
         }
         
