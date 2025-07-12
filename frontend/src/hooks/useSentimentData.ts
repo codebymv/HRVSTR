@@ -29,8 +29,8 @@ interface SentimentDataHookReturn {
   
   // Loading states
   loading: {
-    scores: boolean;
-    reddit: boolean;
+    sentiment: boolean;
+    posts: boolean;
     chart: boolean;
   };
   loadingProgress: number;
@@ -40,8 +40,8 @@ interface SentimentDataHookReturn {
   
   // Error states
   errors: {
-    scores: string | null;
-    reddit: string | null;
+    sentiment: string | null;
+    posts: string | null;
     chart: string | null;
     rateLimited: boolean;
   };
@@ -186,8 +186,8 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
   // Loading states - Always start with loading = true to prevent empty state flash
   const [loading, setLoading] = useState(() => {
     return {
-      scores: true,
-      reddit: true,
+      sentiment: true,
+      posts: true,
       chart: true
     };
   });
@@ -200,13 +200,13 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
   
   // Error states
   const [errors, setErrors] = useState<{
-    scores: string | null;
-    reddit: string | null;
+    sentiment: string | null;
+    posts: string | null;
     chart: string | null;
     rateLimited: boolean;
   }>({
-    scores: null,
-    reddit: null,
+    sentiment: null,
+    posts: null,
     chart: null,
     rateLimited: false,
   });
@@ -314,12 +314,12 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
           setTopSentiments([]);
         }
         
-        // Reset ALL loading states properly for cached data
-        setLoading({
-          scores: false,
-          reddit: false,
-          chart: false
-        });
+              // Reset ALL loading states properly for cached data
+      setLoading({
+        sentiment: false,
+        posts: false,
+        chart: false
+      });
         setIsDataLoading(false);
         setLoadingProgress(100); // Complete progress for cached data
         setLoadingStage('Cached data loaded');
@@ -340,14 +340,14 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
 
       // Reset all states - ensure everything shows as loading
       updateLoadingState({
-        scores: true,
-        reddit: true,
+        sentiment: true,
+        posts: true,
         chart: true
       });
       
       setErrors({
-        scores: null,
-        reddit: null,
+        sentiment: null,
+        posts: null,
         chart: null,
         rateLimited: false
       });
@@ -407,7 +407,7 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
               logger.error('Error fetching Reddit posts:', error);
               setErrors(prev => ({
                 ...prev,
-                reddit: error.message || 'Failed to fetch Reddit posts'
+                posts: error.message || 'Failed to fetch Reddit posts'
               }));
             }
           } else {
@@ -422,7 +422,7 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
           setRedditPage(1);
           updateProgress(30, 'Skipping Reddit posts (Pro feature)...');
         }
-        updateLoadingState({ reddit: false });
+        updateLoadingState({ posts: false });
       } catch (error: unknown) {
         if (error instanceof DOMException && error.name === 'AbortError') return;
         logger.error('Reddit posts error:', error);
@@ -434,10 +434,10 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
           
           setErrors(prev => ({ 
             ...prev, 
-            reddit: errorMessage,
+            posts: errorMessage,
             rateLimited: isRateLimited || prev.rateLimited
           }));
-          updateLoadingState({ reddit: false });
+          updateLoadingState({ posts: false });
       }
       
       try {
@@ -557,12 +557,12 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
         const combinedSentiments = aggregateByTicker(mergedSentimentData);
         setCombinedSentiments(combinedSentiments);
         
-        // Update only the scores loading state - reddit and chart are managed separately
-        updateLoadingState({ scores: false });
+        // Update only the sentiment loading state - posts and chart are managed separately
+        updateLoadingState({ sentiment: false });
       } catch (error: unknown) {
         if (error instanceof DOMException && error.name === 'AbortError') return;
-        logger.error('Ticker sentiment error:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Failed to fetch ticker sentiment data';
+        logger.error('Sentiment scores error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to fetch sentiment scores';
         const isRateLimited = error instanceof Error && 
           (error.message.includes('429') || 
            error.message.toLowerCase().includes('rate limit') || 
@@ -570,11 +570,11 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
           
           setErrors(prev => ({ 
             ...prev, 
-            scores: isRateLimited ? 'Rate limit exceeded. Please try again later.' : errorMessage,
+            sentiment: isRateLimited ? 'Rate limit exceeded. Please try again later.' : errorMessage,
             rateLimited: isRateLimited || prev.rateLimited
           }));
-          // Update only the scores loading state in error case
-          updateLoadingState({ scores: false });
+          // Update only the sentiment loading state in error case
+          updateLoadingState({ sentiment: false });
       }
       
       // Complete the loading process
@@ -605,11 +605,11 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
   }, [loadData]);
   
   const handleLoadMorePosts = useCallback(() => {
-    if (!hasMorePosts || loading.reddit) {
+    if (!hasMorePosts || loading.posts) {
       return;
     }
 
-    updateLoadingState({ reddit: true });
+            updateLoadingState({ posts: true });
 
     // Add a minimum loading duration for better UX
     const minimumLoadingTime = 500; // 500ms minimum loading time
@@ -661,7 +661,7 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
           setHasMorePosts(false);
         }
         
-        updateLoadingState({ reddit: false });
+        updateLoadingState({ posts: false });
       }, remainingTime);
       
     } catch (error) {
@@ -670,10 +670,10 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
       const remainingTime = Math.max(0, minimumLoadingTime - elapsedTime);
       
       setTimeout(() => {
-        updateLoadingState({ reddit: false });
+        updateLoadingState({ posts: false });
       }, remainingTime);
     }
-  }, [redditPage, hasMorePosts, loading.reddit, cachedRedditPosts, timeRange, updateLoadingState]);
+  }, [redditPage, hasMorePosts, loading.posts, cachedRedditPosts, timeRange, updateLoadingState]);
   
   // Debug function to clear all sentiment cache - available in browser console
   useEffect(() => {
@@ -687,8 +687,8 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
       setAllTickerSentiments([]);
       setCachedRedditPosts([]);
       setLastFetchTime(null);
-      setErrors({ scores: null, reddit: null, chart: null, rateLimited: false });
-      setLoading({ scores: false, reddit: false, chart: false });
+      setErrors({ sentiment: null, posts: null, chart: null, rateLimited: false });
+      setLoading({ sentiment: false, posts: false, chart: false });
     };
   }, []);
 
@@ -709,8 +709,8 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
   
       // Clear any existing errors
       setErrors({
-        scores: null,
-        reddit: null,
+        sentiment: null,
+        posts: null,
         chart: null,
         rateLimited: false
       });
@@ -752,8 +752,8 @@ export function useSentimentData(timeRange: TimeRange, hasRedditAccess: boolean 
       
       // Clear any existing errors
       setErrors({
-        scores: null,
-        reddit: null,
+        sentiment: null,
+        posts: null,
         chart: null,
         rateLimited: false
       });

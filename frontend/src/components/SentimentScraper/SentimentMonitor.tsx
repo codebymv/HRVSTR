@@ -471,7 +471,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                 />
               ) : hasScoresAccess ? (
                 <>
-                  {loading.scores || (topSentiments.length === 0 && finvizSentiments.length === 0 && yahooSentiments.length === 0 && !dataErrors.scores) ? (
+                  {loading.sentiment || (topSentiments.length === 0 && finvizSentiments.length === 0 && yahooSentiments.length === 0 && !dataErrors.sentiment) ? (
                     <SentimentScoresSection
                       redditSentiments={[]}
                       finvizSentiments={[]}
@@ -492,10 +492,10 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                       finvizSentiments={finvizSentiments}
                       yahooSentiments={yahooSentiments}
                       combinedSentiments={combinedSentiments}
-                      isLoading={loading.scores}
+                      isLoading={loading.sentiment}
                       loadingProgress={loadingProgress}
                       loadingStage={loadingStage}
-                      error={dataErrors.scores}
+                      error={dataErrors.sentiment}
                       isRateLimited={false}
                       hasRedditAccess={stableRedditAccess}
                       hasRedditTierAccess={hasRedditTierAccess}
@@ -568,7 +568,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                 </div>
               ) : hasRedditAccess ? (
                 <>
-                  {loading.reddit || (redditPosts.length === 0 && !dataErrors.reddit) ? (
+                  {loading.posts || (redditPosts.length === 0 && !dataErrors.posts) ? (
                     <RedditPostsSection
                       posts={[]}
                       isLoading={true}
@@ -580,10 +580,10 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                   ) : (
                     <RedditPostsSection
                       posts={redditPosts}
-                      isLoading={loading.reddit}
+                      isLoading={loading.posts}
                       loadingProgress={loadingProgress}
                       loadingStage={loadingStage}
-                      error={dataErrors.reddit}
+                      error={dataErrors.posts}
                       hasMore={hasMorePosts}
                       onLoadMore={originalHandleLoadMorePosts}
                     />
