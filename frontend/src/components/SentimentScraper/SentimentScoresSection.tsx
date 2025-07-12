@@ -516,12 +516,12 @@ const SentimentScoresSection: React.FC<SentimentScoresSectionProps> = ({
             <>
               <p className={`${textColor} font-medium mb-2`}>No sentiment data available</p>
               <p className={`${mutedTextColor} mb-4`}>Add stocks to your watchlist to see sentiment analysis from {dataSource === 'combined' ? 'FinViz, Yahoo Finance' + (hasRedditAccess ? ', and Reddit' : '') : dataSource}.</p>
-              <button
+              {/* <button
                 className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors mb-2"
                 onClick={clearTickerSentimentCache}
               >
                 🧹 Clear Cache & Retry
-              </button>
+              </button> */}
             </>
           )}
         </div>

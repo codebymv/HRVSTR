@@ -340,13 +340,13 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
             </select>
             
             {/* Cache Clear button (Debug) - Always visible */}
-            <button
+            {/* <button
               className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs font-medium transition-colors"
               onClick={clearAllSentimentCache}
               title="Clear all sentiment cache (backend & frontend) and force fresh data reload"
             >
               🧹 Clear Cache
-            </button>
+            </button> */}
             
             {/* Refresh button */}
             <button
