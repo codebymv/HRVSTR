@@ -17,15 +17,17 @@ const SENTIMENT_CACHE_CONFIG = {
   INSTITUTIONAL_TIER_TTL: 30 * 60,  // 30 minutes for institutional (ultra-fresh data)
   
   // Component mapping for research_sessions integration
+  // 🔧 FIX: Map all sentiment data endpoints to 'scores' component
+  // This ensures that unlocking sentiment scores provides access to all required data sources
   COMPONENT_MAPPING: {
-    'reddit_tickers': 'sentimentReddit',
-    'yahoo_tickers': 'sentimentScores', 
-    'finviz_tickers': 'sentimentChart',
-    'reddit_market': 'sentimentReddit',
-    'yahoo_market': 'sentimentScores',
-    'finviz_market': 'sentimentChart',
-    'combined_tickers': 'sentimentChart',
-    'aggregated_market': 'sentimentChart'
+    'reddit_tickers': 'scores',
+    'yahoo_tickers': 'scores', 
+    'finviz_tickers': 'scores',
+    'reddit_market': 'scores',
+    'yahoo_market': 'scores',
+    'finviz_market': 'scores',
+    'combined_tickers': 'scores',
+    'aggregated_market': 'scores'
   },
   
   // Data limits based on tier
@@ -364,8 +366,20 @@ async function getCachedSentimentData(userId, dataType, timeRange, options = {})
     const cachedData = result.rows[0];
     console.log(`📋 Cache HIT for user ${userId}, dataType: ${dataType}, key: ${cacheKey}, expires in ${Math.round(cachedData.seconds_until_expiry)} seconds`);
     
+    // Handle format conversion for cached data
+    let processedData = cachedData.data_json;
+    
+    // For market sentiment data, check if we have old nested format and convert it
+    if (dataType.includes('_market')) {
+      // If cached data has nested structure {data: {data: actualData}}, extract the inner data
+      if (processedData && processedData.data && processedData.data.data) {
+        console.log(`📋 [CACHE FORMAT FIX] Converting old nested format for ${dataType}`);
+        processedData = processedData.data;
+      }
+    }
+    
     return {
-      data: cachedData.data_json,
+      data: processedData,
       metadata: {
         fromCache: true,
         cacheAge: Date.now() - new Date(cachedData.created_at).getTime(),
@@ -623,7 +637,8 @@ async function getSentimentDataForUser(userId, component, dataType, timeRange, o
       
       const freshData = await fetchFreshSentimentData(userId, dataType, timeRange, options, progressCallback);
       
-      if (freshData.success) {
+      // Add null check to prevent crashes - force restart
+      if (freshData && freshData.success) {
          // Store in cache
          await storeSentimentDataInCache(userId, dataType, timeRange, cacheKey, freshData.data, userTier, 0);
          
@@ -643,6 +658,16 @@ async function getSentimentDataForUser(userId, component, dataType, timeRange, o
            sessionId: activeSession.session_id
          };
        }
+      
+      // Handle null freshData response
+      if (!freshData) {
+        return {
+          success: false,
+          error: 'API_UNAVAILABLE',
+          message: 'Sentiment data service temporarily unavailable',
+          userMessage: 'Unable to fetch fresh sentiment data. Please try again later.'
+        };
+      }
       
       return freshData;
     }
@@ -733,6 +758,16 @@ async function getSentimentDataForUser(userId, component, dataType, timeRange, o
     // Fetch fresh data
     const freshData = await fetchFreshSentimentData(userId, dataType, timeRange, options, progressCallback);
     
+    // Handle null freshData response
+    if (!freshData) {
+      return {
+        success: false,
+        error: 'API_UNAVAILABLE',
+        message: 'Sentiment data service temporarily unavailable',
+        userMessage: 'Unable to fetch fresh sentiment data. Please try again later.'
+      };
+    }
+    
     if (!freshData.success) {
       return freshData;
     }
@@ -805,10 +840,26 @@ async function getSentimentDataForUser(userId, component, dataType, timeRange, o
  */
 async function fetchFreshSentimentData(userId, dataType, timeRange, options, progressCallback) {
   try {
-    // Import sentiment services
-    const redditService = require('./redditSentimentService');
-    const yahooService = require('./yahooSentimentService'); 
-    const finvizService = require('./finvizSentimentService');
+    // Import sentiment services with error handling
+    let redditService, yahooService, finvizService;
+    
+    try {
+      redditService = require('./redditSentimentService');
+    } catch (e) {
+      console.warn('❌ [SENTIMENT CACHE] redditSentimentService not available:', e.message);
+    }
+    
+    try {
+      yahooService = require('./yahooSentimentService');
+    } catch (e) {
+      console.warn('❌ [SENTIMENT CACHE] yahooSentimentService not available:', e.message);
+    }
+    
+    try {
+      finvizService = require('./finvizSentimentService');
+    } catch (e) {
+      console.warn('❌ [SENTIMENT CACHE] finvizSentimentService not available:', e.message);
+    }
     
     if (progressCallback) {
       progressCallback({
@@ -821,21 +872,69 @@ async function fetchFreshSentimentData(userId, dataType, timeRange, options, pro
     
     switch (dataType) {
       case 'reddit_tickers':
+        if (!redditService) {
+          return {
+            success: false,
+            error: 'SERVICE_UNAVAILABLE',
+            message: 'Reddit sentiment service is not available',
+            userMessage: 'Reddit sentiment analysis is temporarily unavailable. Please try again later.'
+          };
+        }
         result = await redditService.getRedditTickerSentiment(timeRange, userId, options.tickers);
         break;
       case 'yahoo_tickers':
+        if (!yahooService) {
+          return {
+            success: false,
+            error: 'SERVICE_UNAVAILABLE',
+            message: 'Yahoo sentiment service is not available',
+            userMessage: 'Yahoo sentiment analysis is temporarily unavailable. Please try again later.'
+          };
+        }
         result = await yahooService.getYahooTickerSentiment(options.tickers ? options.tickers.join(',') : '');
         break;
       case 'finviz_tickers':
+        if (!finvizService) {
+          return {
+            success: false,
+            error: 'SERVICE_UNAVAILABLE',
+            message: 'FinViz sentiment service is not available',
+            userMessage: 'FinViz sentiment analysis is temporarily unavailable. Please try again later.'
+          };
+        }
         result = await finvizService.getFinvizTickerSentiment(options.tickers ? options.tickers.join(',') : '');
         break;
       case 'reddit_market':
+        if (!redditService) {
+          return {
+            success: false,
+            error: 'SERVICE_UNAVAILABLE',
+            message: 'Reddit sentiment service is not available',
+            userMessage: 'Reddit market sentiment is temporarily unavailable. Please try again later.'
+          };
+        }
         result = await redditService.getRedditMarketSentiment(timeRange, userId);
         break;
       case 'yahoo_market':
+        if (!yahooService) {
+          return {
+            success: false,
+            error: 'SERVICE_UNAVAILABLE',
+            message: 'Yahoo sentiment service is not available',
+            userMessage: 'Yahoo market sentiment is temporarily unavailable. Please try again later.'
+          };
+        }
         result = await yahooService.getYahooMarketSentiment(timeRange);
         break;
       case 'finviz_market':
+        if (!finvizService) {
+          return {
+            success: false,
+            error: 'SERVICE_UNAVAILABLE',
+            message: 'FinViz sentiment service is not available',
+            userMessage: 'FinViz market sentiment is temporarily unavailable. Please try again later.'
+          };
+        }
         result = await finvizService.getFinvizMarketSentiment(timeRange);
         break;
       default:
@@ -853,6 +952,25 @@ async function fetchFreshSentimentData(userId, dataType, timeRange, options, pro
       });
     }
     
+    // For market sentiment data, return the result directly to match frontend expectations
+    if (dataType.includes('_market')) {
+      return {
+        success: true,
+        data: result, // Direct result for market sentiment (contains timestamps, bullish, bearish, neutral arrays)
+        fromCache: false,
+        timeRange,
+        dataType,
+        source: dataType.split('_')[0],
+        refreshed: true,
+        lastUpdated: new Date().toISOString(),
+        metadata: {
+          fetchDuration: result.fetchDuration || 'unknown',
+          options
+        }
+      };
+    }
+    
+    // For ticker sentiment data, use the nested structure
     return {
       success: true,
       data: {

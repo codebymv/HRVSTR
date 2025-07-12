@@ -92,7 +92,7 @@ async function getRedditTickerSentimentWithCache(req, res) {
     // Use unified cache service with session-based approach
     const result = await userSentimentCacheService.getSentimentDataForUser(
       userId,
-      'sentimentReddit', // Component name for research_sessions
+      'scores', // Component name for research_sessions - unified under scores
       'reddit_tickers',
       timeRange,
       options,
@@ -174,7 +174,7 @@ async function getRedditMarketSentimentWithCache(req, res) {
     // Use unified cache service with session-based approach
     const result = await userSentimentCacheService.getSentimentDataForUser(
       userId,
-      'sentimentReddit', // Component name for research_sessions
+      'scores', // Component name for research_sessions - unified under scores
       'reddit_market',
       timeRange,
       options,
@@ -182,6 +182,26 @@ async function getRedditMarketSentimentWithCache(req, res) {
         console.log(`[SENTIMENT UNIFIED] Reddit market progress: ${progressData.progress}% - ${progressData.stage}`);
       }
     );
+    
+    // Debug: Log the exact structure being returned
+    console.log('🔍 [REDDIT MARKET DEBUG] Controller result structure:', {
+      success: result.success,
+      hasData: !!result.data,
+      dataKeys: result.data ? Object.keys(result.data) : 'no data',
+      dataType: typeof result.data,
+      fromCache: result.cached,
+      resultKeys: Object.keys(result)
+    });
+    
+    if (result.data) {
+      console.log('🔍 [REDDIT MARKET DEBUG] Data content preview:', {
+        hasTimestamps: !!result.data.timestamps,
+        hasBullish: !!result.data.bullish,
+        hasPosts: !!result.data.posts,
+        hasSentimentData: !!result.data.sentimentData,
+        dataStructure: Object.keys(result.data)
+      });
+    }
     
     res.json(result);
     
@@ -235,7 +255,7 @@ async function getYahooTickerSentimentWithCache(req, res) {
     // Use unified cache service with session-based approach
     const result = await userSentimentCacheService.getSentimentDataForUser(
       userId,
-      'sentimentScores', // Component name for research_sessions
+      'scores', // Component name for research_sessions - unified under scores
       'yahoo_tickers',
       timeRange,
       options,
@@ -325,7 +345,7 @@ async function getYahooMarketSentimentWithCache(req, res) {
     // Use unified cache service with session-based approach
     const result = await userSentimentCacheService.getSentimentDataForUser(
       userId,
-      'sentimentScores', // Component name for research_sessions
+      'scores', // Component name for research_sessions - unified under scores
       'yahoo_market',
       timeRange,
       options,
@@ -386,7 +406,7 @@ async function getFinvizTickerSentimentWithCache(req, res) {
     // Use unified cache service with session-based approach
     const result = await userSentimentCacheService.getSentimentDataForUser(
       userId,
-      'sentimentChart', // Component name for research_sessions
+      'scores', // Component name for research_sessions - unified under scores
       'finviz_tickers',
       timeRange,
       options,
@@ -457,7 +477,7 @@ async function getFinvizMarketSentimentWithCache(req, res) {
     // Use unified cache service with session-based approach
     const result = await userSentimentCacheService.getSentimentDataForUser(
       userId,
-      'sentimentChart', // Component name for research_sessions
+      'scores', // Component name for research_sessions - unified under scores
       'finviz_market',
       timeRange,
       options,
@@ -519,7 +539,7 @@ async function getCombinedTickerSentimentWithCache(req, res) {
     // Use unified cache service with session-based approach
     const result = await userSentimentCacheService.getSentimentDataForUser(
       userId,
-      'sentimentScores', // Component name for research_sessions
+      'scores', // Component name for research_sessions - unified under scores
       'combined_tickers',
       timeRange,
       options,
@@ -591,7 +611,7 @@ async function getAggregatedMarketSentimentWithCache(req, res) {
     // Use unified cache service with session-based approach
     const result = await userSentimentCacheService.getSentimentDataForUser(
       userId,
-      'sentimentScores', // Component name for research_sessions
+      'scores', // Component name for research_sessions - unified under scores
       'aggregated_market',
       timeRange,
       options,

@@ -55,7 +55,13 @@ async function getRedditMarketSentiment(req, res, next) {
     const { timeRange = '1w' } = req.query;
     const userId = req.user?.id; // Get user ID from authenticated request
     const result = await redditSentimentService.getRedditMarketSentiment(timeRange, userId);
-    res.json(result);
+    
+    // Wrap response in expected format for frontend compatibility
+    res.json({
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString()
+    });
   } catch (error) {
     console.error('Error fetching Reddit market sentiment:', error.message);
     next(error);
@@ -162,7 +168,13 @@ async function getYahooMarketSentiment(req, res) {
   try {
     const { timeRange = '1w' } = req.query;
     const result = await yahooSentimentService.getYahooMarketSentiment(timeRange);
-    res.json(result);
+    
+    // Wrap response in expected format for frontend compatibility
+    res.json({
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString()
+    });
   } catch (error) {
     console.error('Yahoo market sentiment error:', error);
     res.status(500).json({ error: error.message });
@@ -178,7 +190,13 @@ async function getFinvizMarketSentiment(req, res) {
   try {
     const { timeRange = '1w' } = req.query;
     const result = await finvizSentimentService.getFinvizMarketSentiment(timeRange);
-    res.json(result);
+    
+    // Wrap response in expected format for frontend compatibility
+    res.json({
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString()
+    });
   } catch (error) {
     console.error('FinViz market sentiment error:', error);
     res.status(500).json({ error: error.message });

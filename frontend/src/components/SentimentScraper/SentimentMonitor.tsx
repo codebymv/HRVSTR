@@ -160,6 +160,48 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
   // Combined ready state
   const isFullyReady = !isCheckingSessions && !checkingApiKeys;
   
+  // Cache clearing function for debugging - always accessible
+  const clearAllSentimentCache = async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        console.error('❌ No auth token found for cache clearing');
+        info('No authentication token found. Please log in again.');
+        return;
+      }
+      
+      console.log('🧹 Starting comprehensive cache clear process...');
+      
+      // Clear frontend localStorage cache
+      localStorage.removeItem('sentiment_allSentiments');
+      localStorage.removeItem('sentiment_allTickerSentiments');
+      localStorage.removeItem('sentiment_cachedRedditPosts');
+      localStorage.removeItem('sentiment_lastFetchTime');
+      
+      // Clear backend cache
+      const response = await fetch(`http://localhost:3001/api/sentiment-unified/cache`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Cache cleared successfully:', result);
+        info('✅ Cache cleared! Please refresh the page to reload with fresh data.');
+      } else {
+        const errorText = await response.text();
+        console.error('❌ Backend cache clear failed:', response.status, errorText);
+        info('⚠️ Frontend cache cleared, but backend cache clear failed. Refresh the page to try again.');
+      }
+    } catch (error) {
+      console.error('❌ Error during cache clear:', error);
+      info(`❌ Error clearing cache: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+  
   // Use sentiment data hook for the actual data fetching (only when fully ready)
   const {
     topSentiments,
@@ -189,18 +231,18 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
   // Update scores loading state based on data availability and access
   useEffect(() => {
     // LOADING STATE FIX: Ensure proper boolean conversion and handle undefined states
-    const isScoresLoading = Boolean(loading.sentiment) || (topSentiments.length === 0 && finvizSentiments.length === 0 && !dataErrors.sentiment);
-    handleScoresLoading(isScoresLoading, dataErrors.sentiment);
+    const isScoresLoading = Boolean(loading.scores) || (topSentiments.length === 0 && finvizSentiments.length === 0 && !dataErrors.scores);
+    handleScoresLoading(isScoresLoading, dataErrors.scores);
     
-  }, [hasScoresAccess, loading.sentiment, topSentiments.length, finvizSentiments.length, dataErrors.sentiment, handleScoresLoading]);
+  }, [hasScoresAccess, loading.scores, topSentiments.length, finvizSentiments.length, dataErrors.scores, handleScoresLoading]);
   
   // Update reddit loading state based on data availability and access
   useEffect(() => {
     // LOADING STATE FIX: Ensure proper boolean conversion and handle undefined states
-    const isRedditLoading = Boolean(loading.posts) || (redditPosts.length === 0 && !dataErrors.posts);
-    handleRedditLoading(isRedditLoading, dataErrors.posts);
+    const isRedditLoading = Boolean(loading.reddit) || (redditPosts.length === 0 && !dataErrors.reddit);
+    handleRedditLoading(isRedditLoading, dataErrors.reddit);
     
-  }, [hasRedditAccess, loading.posts, redditPosts.length, dataErrors.posts, handleRedditLoading]);
+  }, [hasRedditAccess, loading.reddit, redditPosts.length, dataErrors.reddit, handleRedditLoading]);
 
   // Handle component unlocking
   const handleUnlockComponent = async (component: keyof typeof unlockedComponents, cost: number) => {
@@ -296,6 +338,15 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
               <option value="3d">3 Days</option>
               <option value="1w">1 Week</option>
             </select>
+            
+            {/* Cache Clear button (Debug) - Always visible */}
+            <button
+              className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs font-medium transition-colors"
+              onClick={clearAllSentimentCache}
+              title="Clear all sentiment cache (backend & frontend) and force fresh data reload"
+            >
+              🧹 Clear Cache
+            </button>
             
             {/* Refresh button */}
             <button
@@ -464,7 +515,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                       isLoading={loadingState.scores.isLoading}
                       loadingProgress={loadingProgress}
                       loadingStage={loadingStage}
-                      error={dataErrors.sentiment}
+                      error={dataErrors.scores}
                       isRateLimited={false}
                       hasRedditAccess={stableRedditAccess}
                       hasRedditTierAccess={hasRedditTierAccess}
@@ -537,7 +588,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                 </div>
               ) : hasRedditAccess ? (
                 <>
-                  {loadingState.reddit.isLoading || (redditPosts.length === 0 && !dataErrors.posts) ? (
+                  {loadingState.reddit.isLoading || (redditPosts.length === 0 && !dataErrors.reddit) ? (
                     <RedditPostsSection
                       posts={[]}
                       isLoading={true}
@@ -552,7 +603,7 @@ const SentimentMonitor: React.FC<SentimentMonitorProps> = ({ onLoadingProgressCh
                       isLoading={loadingState.reddit.isLoading}
                       loadingProgress={loadingProgress}
                       loadingStage={loadingStage}
-                      error={dataErrors.posts}
+                      error={dataErrors.reddit}
                       hasMore={hasMorePosts}
                       onLoadMore={originalHandleLoadMorePosts}
                     />

@@ -12,16 +12,18 @@ const db = require('../database/db');
 
 /**
  * Map data types to component names for session checking
+ * 🔧 FIX: Map all sentiment data endpoints to 'scores' component
+ * This ensures that unlocking sentiment scores provides access to all required data sources
  */
 const COMPONENT_MAP = {
-  'reddit_tickers': 'sentimentReddit',
-  'yahoo_tickers': 'sentimentScores', 
-  'finviz_tickers': 'sentimentChart',
-  'reddit_market': 'sentimentReddit',
-  'yahoo_market': 'sentimentScores',
-  'finviz_market': 'sentimentChart',
-  'combined_tickers': 'sentimentChart',
-  'aggregated_market': 'sentimentChart'
+  'reddit_tickers': 'scores',
+  'yahoo_tickers': 'scores', 
+  'finviz_tickers': 'scores',
+  'reddit_market': 'scores',
+  'yahoo_market': 'scores',
+  'finviz_market': 'scores',
+  'combined_tickers': 'scores',
+  'aggregated_market': 'scores'
 };
 
 /**
@@ -39,16 +41,13 @@ function getComponentFromRequest(req) {
   }
   
   // For specific endpoints, determine from path
-  if (path.includes('/reddit/')) {
-    return 'sentimentReddit';
-  } else if (path.includes('/yahoo/')) {
-    return 'sentimentScores';
-  } else if (path.includes('/finviz/') || path.includes('/combined/') || path.includes('/aggregated/')) {
-    return 'sentimentChart';
+  // 🔧 FIX: All sentiment endpoints now map to 'scores' component for unified access
+  if (path.includes('/reddit/') || path.includes('/yahoo/') || path.includes('/finviz/') || path.includes('/combined/') || path.includes('/aggregated/')) {
+    return 'scores';
   }
   
   // Default fallback
-  return 'sentimentChart';
+  return 'scores';
 }
 
 /**
@@ -100,9 +99,10 @@ async function checkActiveSession(userId, componentName) {
  * Generate placeholder/empty response for locked components
  * @param {string} componentName - Component name
  * @param {string} timeRange - Time range
+ * @param {Object} req - Express request object (optional, for endpoint detection)
  * @returns {Object} - Placeholder response
  */
-function generatePlaceholderResponse(componentName, timeRange) {
+function generatePlaceholderResponse(componentName, timeRange, req = null) {
   const baseResponse = {
     success: true,
     data: {
@@ -122,42 +122,104 @@ function generatePlaceholderResponse(componentName, timeRange) {
     requiresUnlock: true
   };
   
-  // Customize response based on component type
+  // Check if this is a market sentiment endpoint
+  const isMarketEndpoint = req && req.path && req.path.includes('/market');
+  
+  // Customize response based on component type and endpoint
   switch (componentName) {
+    case 'scores':
     case 'sentimentReddit':
-      baseResponse.data.data = {
-        sentimentData: [],
-        posts: [],
-        summary: {
-          totalPosts: 0,
-          averageSentiment: 0,
-          sentimentDistribution: { positive: 0, neutral: 0, negative: 0 }
-        }
-      };
+      if (isMarketEndpoint) {
+        // Market sentiment format - time series with empty arrays
+        baseResponse.data.data = {
+          timestamps: [],
+          bullish: [],
+          bearish: [],
+          neutral: [],
+          total: [],
+          meta: {
+            source: 'reddit',
+            timeRange,
+            lastUpdated: new Date().toISOString(),
+            totalPosts: 0,
+            subreddits: [],
+            isPlaceholder: true
+          }
+        };
+      } else {
+        // Ticker sentiment format
+        baseResponse.data.data = {
+          sentimentData: [],
+          posts: [],
+          summary: {
+            totalPosts: 0,
+            averageSentiment: 0,
+            sentimentDistribution: { positive: 0, neutral: 0, negative: 0 }
+          }
+        };
+      }
       break;
       
     case 'sentimentScores':
-      baseResponse.data.data = {
-        sentimentData: [],
-        scores: [],
-        summary: {
-          totalTickers: 0,
-          averageScore: 0,
-          scoreDistribution: { bullish: 0, neutral: 0, bearish: 0 }
-        }
-      };
+      if (isMarketEndpoint) {
+        // Market sentiment format for Yahoo
+        baseResponse.data.data = {
+          timestamps: [],
+          bullish: [],
+          bearish: [],
+          neutral: [],
+          total: [],
+          meta: {
+            source: 'yahoo',
+            timeRange,
+            lastUpdated: new Date().toISOString(),
+            totalDataPoints: 0,
+            isPlaceholder: true
+          }
+        };
+      } else {
+        // Ticker sentiment format
+        baseResponse.data.data = {
+          sentimentData: [],
+          scores: [],
+          summary: {
+            totalTickers: 0,
+            averageScore: 0,
+            scoreDistribution: { bullish: 0, neutral: 0, bearish: 0 }
+          }
+        };
+      }
       break;
       
     case 'sentimentChart':
-      baseResponse.data.data = {
-        sentimentData: [],
-        chartData: [],
-        summary: {
-          totalDataPoints: 0,
-          trendDirection: 'neutral',
-          volatility: 0
-        }
-      };
+      if (isMarketEndpoint) {
+        // Market sentiment format for FinViz
+        baseResponse.data.data = {
+          timestamps: [],
+          bullish: [],
+          bearish: [],
+          neutral: [],
+          total: [],
+          meta: {
+            source: 'finviz',
+            timeRange,
+            lastUpdated: new Date().toISOString(),
+            totalDataPoints: 0,
+            isPlaceholder: true
+          }
+        };
+      } else {
+        // Chart/ticker sentiment format
+        baseResponse.data.data = {
+          sentimentData: [],
+          chartData: [],
+          summary: {
+            totalDataPoints: 0,
+            trendDirection: 'neutral',
+            volatility: 0
+          }
+        };
+      }
       break;
       
     default:
@@ -217,7 +279,7 @@ async function checkSentimentSession(req, res, next) {
     
     // No active session - return placeholder data without processing
     console.log(`🔒 [SENTIMENT SESSION] No session found - returning placeholder data`);
-    const placeholderResponse = generatePlaceholderResponse(componentName, timeRange);
+    const placeholderResponse = generatePlaceholderResponse(componentName, timeRange, req);
     
     return res.json(placeholderResponse);
     
