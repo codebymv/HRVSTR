@@ -198,7 +198,14 @@ router.post('/clear-cache', async (req, res) => {
     const marketCleared = cacheManager.clearCacheByPattern('*-market-sentiment');
     console.log(`Cleared ${marketCleared} market sentiment cache entries`);
     
-    const totalCleared = finvizCleared + yahooCleared + marketCleared;
+    // Clear Python sentiment service cache
+    const pythonSingleCleared = cacheManager.clearCacheByPattern('python-sentiment:single:*');
+    console.log(`Cleared ${pythonSingleCleared} Python single sentiment cache entries`);
+    
+    const pythonBatchCleared = cacheManager.clearCacheByPattern('python-sentiment:batch:*');
+    console.log(`Cleared ${pythonBatchCleared} Python batch sentiment cache entries`);
+    
+    const totalCleared = finvizCleared + yahooCleared + marketCleared + pythonSingleCleared + pythonBatchCleared;
     
     res.json({
       success: true,
@@ -207,6 +214,8 @@ router.post('/clear-cache', async (req, res) => {
         finviz: finvizCleared,
         yahoo: yahooCleared,
         market: marketCleared,
+        python_single: pythonSingleCleared,
+        python_batch: pythonBatchCleared,
         total: totalCleared
       }
     });

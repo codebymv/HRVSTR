@@ -92,15 +92,23 @@ async function getYahooTickerSentiment(tickers) {
       try {
         console.log(`Fetching Yahoo Finance sentiment for ${ticker}...`);
         
-        // Get news sentiment from Yahoo Finance
+        // Get news sentiment from Yahoo Finance with enhanced analysis
         const sentimentResult = await yahooUtils.analyzeYahooNewsSentiment(ticker, 10);
         console.log(`[YAHOO SERVICE] Raw sentiment result for ${ticker}:`, {
           ticker: sentimentResult?.ticker,
           score: sentimentResult?.score,
           comparative: sentimentResult?.comparative,
           newsCount: sentimentResult?.newsCount,
+          enhanced: sentimentResult?.enhanced,
+          finbert: sentimentResult?.finbert,
+          vader: sentimentResult?.vader,
           hasError: !!sentimentResult?.error
         });
+        
+        // Log if enhanced analysis was used
+        if (sentimentResult?.newsItems?.some(item => item.enhanced)) {
+          console.log(`[YAHOO SERVICE] Enhanced Python sentiment analysis used for ${ticker}`);
+        }
         
         // Get current stock data with error handling
         let stockData = null;

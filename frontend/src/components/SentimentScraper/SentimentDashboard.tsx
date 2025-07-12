@@ -216,13 +216,36 @@ const SentimentDashboard: React.FC = () => {
   }, [currentTier, stableRedditAccess, isFullyReady, topSentiments, finvizSentiments, yahooSentiments, combinedSentiments, redditPosts, loading, errors]);
 
   // Refresh data handler
-  const refreshData = () => {
+  const refreshData = async () => {
     // Check if any components are actually unlocked
     const hasUnlockedComponents = unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit;
     
     if (!hasUnlockedComponents) {
       info('Please unlock at least one component before refreshing');
       return;
+    }
+    
+    try {
+      // Clear sentiment cache before refreshing
+      const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
+      const response = await fetch(`${proxyUrl}/api/sentiment/clear-cache`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Cache cleared successfully:', result);
+        info('Cache cleared - refreshing with fresh data');
+      } else {
+        console.warn('⚠️ Cache clearing failed, proceeding with refresh anyway');
+        info('Refreshing data (cache clear failed)');
+      }
+    } catch (error) {
+      console.error('❌ Error clearing cache:', error);
+      info('Refreshing data (cache clear unavailable)');
     }
     
     handleRefresh();
@@ -410,9 +433,9 @@ const SentimentDashboard: React.FC = () => {
                   (unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)
                     ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white' // Unlocked: gradient purple
                     : 'bg-gray-400 cursor-not-allowed text-gray-200' // Locked: grayed out
-                } ${(isDataLoading || loading.chart || loading.scores || loading.reddit) ? 'opacity-50' : ''}`}
+                } ${(isDataLoading || loading.chart || loadingState.scores.isLoading || loadingState.reddit.isLoading) ? 'opacity-50' : ''}`}
                 onClick={refreshData}
-                disabled={(isDataLoading || loading.chart || loading.scores || loading.reddit) || !(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)}
+                disabled={(isDataLoading || loadingState.chart.isLoading || loadingState.scores.isLoading || loadingState.reddit.isLoading) || !(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)}
                 title={
                   (unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit)
                     ? 'Refresh sentiment data'
@@ -420,7 +443,7 @@ const SentimentDashboard: React.FC = () => {
                 }
               >
                 {/* Only show spinner if components are unlocked AND loading */}
-                {(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit) && (isDataLoading || loading.chart || loading.scores || loading.reddit) ? (
+                {(unlockedComponents.chart || unlockedComponents.scores || unlockedComponents.reddit) && (isDataLoading || loadingState.chart.isLoading || loadingState.scores.isLoading || loadingState.reddit.isLoading) ? (
                   <Loader2 size={18} className="text-white animate-spin" />
                 ) : (
                   <RefreshCw size={18} className={
@@ -537,7 +560,7 @@ const SentimentDashboard: React.FC = () => {
                 finvizSentiments={finvizSentiments}
                 yahooSentiments={yahooSentiments}
                 combinedSentiments={combinedSentiments}
-                isLoading={loading.scores}
+                isLoading={loadingState.scores.isLoading}
                 loadingProgress={loadingProgress}
                 loadingStage={loadingStage}
                 error={errors.scores}
@@ -623,7 +646,7 @@ const SentimentDashboard: React.FC = () => {
                 unlockedComponents.reddit ? (
               <RedditPostsSection
                 posts={redditPosts}
-                isLoading={loading.reddit}
+                isLoading={loadingState.reddit.isLoading}
                 loadingProgress={loadingProgress}
                 loadingStage={loadingStage}
                 error={errors.reddit}
@@ -687,7 +710,7 @@ const SentimentDashboard: React.FC = () => {
               finvizSentiments={finvizSentiments}
               yahooSentiments={yahooSentiments}
               combinedSentiments={combinedSentiments}
-              isLoading={loading.scores}
+              isLoading={loadingState.scores.isLoading}
             loadingProgress={loadingProgress}
             loadingStage={loadingStage}
             error={errors.scores}

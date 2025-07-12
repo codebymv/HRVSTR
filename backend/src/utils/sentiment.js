@@ -7,6 +7,15 @@ const Sentiment = require('sentiment');
 // Initialize sentiment analyzer
 const sentimentAnalyzer = new Sentiment();
 
+// Import Python sentiment service for enhanced analysis
+let PythonSentimentService;
+try {
+  const { PythonSentimentService: PSS } = require('../services/pythonSentimentService');
+  PythonSentimentService = PSS;
+} catch (error) {
+  console.warn('Python sentiment service not available:', error.message);
+}
+
 // Enhanced custom financial terms to improve accuracy
 sentimentAnalyzer.registerLanguage('en', {
   labels: {
@@ -45,11 +54,55 @@ sentimentAnalyzer.registerLanguage('en', {
 });
 
 /**
- * Analyze sentiment in text with improved scoring
+ * Analyze sentiment in text with enhanced Python integration
+ * @param {string} text - Text to analyze
+ * @param {string} ticker - Optional ticker symbol for context
+ * @param {string} source - Data source for context
+ * @param {boolean} useEnhanced - Whether to use Python enhancement (default: true)
+ * @returns {Object} Sentiment analysis result
+ */
+async function analyzeSentiment(text, ticker = null, source = 'unknown', useEnhanced = true) {
+  if (!text || typeof text !== 'string') {
+    return { score: 0, comparative: 0, confidence: 0 };
+  }
+  
+  // Try Python enhanced analysis first if available and requested
+  if (useEnhanced && PythonSentimentService) {
+    try {
+      const pythonService = new PythonSentimentService();
+      if (pythonService.isServiceRunning) {
+        const enhancedResult = await pythonService.analyzeSingleText(text, ticker, source);
+        
+        // Convert Python result to our format
+        return {
+          score: enhancedResult.sentiment.score,
+          comparative: enhancedResult.sentiment.score,
+          confidence: enhancedResult.sentiment.confidence,
+          words: enhancedResult.entities || [],
+          positive: enhancedResult.sentiment.score > 0 ? [enhancedResult.sentiment.label] : [],
+          negative: enhancedResult.sentiment.score < 0 ? [enhancedResult.sentiment.label] : [],
+          wordCount: text.split(' ').length,
+          sentimentWordCount: enhancedResult.entities ? enhancedResult.entities.length : 0,
+          enhanced: true,
+          finbert: enhancedResult.finbert,
+          vader: enhancedResult.vader
+        };
+      }
+    } catch (error) {
+      console.warn('Python sentiment analysis failed, falling back to basic analysis:', error.message);
+    }
+  }
+  
+  // Fallback to basic sentiment analysis
+  return analyzeSentimentBasic(text);
+}
+
+/**
+ * Basic sentiment analysis (original implementation)
  * @param {string} text - Text to analyze
  * @returns {Object} Sentiment analysis result
  */
-function analyzeSentiment(text) {
+function analyzeSentimentBasic(text) {
   if (!text || typeof text !== 'string') {
     return { score: 0, comparative: 0, confidence: 0 };
   }
@@ -85,7 +138,8 @@ function analyzeSentiment(text) {
     negative: result.negative,
     confidence: confidence,
     wordCount: processedText.split(' ').length,
-    sentimentWordCount: result.words.length
+    sentimentWordCount: result.words.length,
+    enhanced: false
   };
 }
 
@@ -222,8 +276,58 @@ function getSentimentStrength(score) {
   return 'very weak';
 }
 
+/**
+ * Analyze sentiment for multiple texts with enhanced Python integration
+ * @param {Array} texts - Array of texts to analyze
+ * @param {Array} tickers - Array of ticker symbols (optional)
+ * @param {string} source - Data source for context
+ * @param {boolean} useEnhanced - Whether to use Python enhancement (default: true)
+ * @returns {Promise<Array>} Array of sentiment analysis results
+ */
+async function analyzeBatchSentiment(texts, tickers = [], source = 'unknown', useEnhanced = true) {
+  if (!texts || !Array.isArray(texts) || texts.length === 0) {
+    return [];
+  }
+  
+  // Try Python enhanced batch analysis first if available and requested
+  if (useEnhanced && PythonSentimentService) {
+    try {
+      const pythonService = new PythonSentimentService();
+      if (pythonService.isServiceRunning) {
+        const enhancedResults = await pythonService.analyzeBatchTexts(texts, tickers, source);
+        
+        // Convert Python results to our format
+        return enhancedResults.results.map((result, index) => ({
+          score: result.sentiment.score,
+          comparative: result.sentiment.score,
+          confidence: result.sentiment.confidence,
+          words: result.entities || [],
+          positive: result.sentiment.score > 0 ? [result.sentiment.label] : [],
+          negative: result.sentiment.score < 0 ? [result.sentiment.label] : [],
+          wordCount: texts[index].split(' ').length,
+          sentimentWordCount: result.entities ? result.entities.length : 0,
+          enhanced: true,
+          finbert: result.finbert,
+          vader: result.vader,
+          text: texts[index]
+        }));
+      }
+    } catch (error) {
+      console.warn('Python batch sentiment analysis failed, falling back to basic analysis:', error.message);
+    }
+  }
+  
+  // Fallback to basic sentiment analysis for each text
+  return texts.map(text => ({
+    ...analyzeSentimentBasic(text),
+    text: text
+  }));
+}
+
 module.exports = {
   analyzeSentiment,
+  analyzeSentimentBasic,
+  analyzeBatchSentiment,
   preprocessText,
   formatSentimentData,
   calculateEnhancedConfidence,

@@ -16,7 +16,6 @@ import redis
 from loguru import logger
 
 from sentiment_analyzer import AdvancedSentimentAnalyzer
-from utils.cache_manager import CacheManager
 from utils.text_preprocessor import TextPreprocessor
 from utils.response_formatter import ResponseFormatter
 
@@ -29,7 +28,6 @@ logger.add("logs/sentiment_service.log", rotation="1 day", retention="30 days")
 
 # Initialize components
 sentiment_analyzer = AdvancedSentimentAnalyzer()
-cache_manager = CacheManager()
 text_preprocessor = TextPreprocessor()
 response_formatter = ResponseFormatter()
 
@@ -72,13 +70,8 @@ def analyze_sentiment():
         source = data.get('source', 'unknown')
         options = data.get('options', {})
         
-        # Check cache first
-        cache_key = cache_manager.generate_cache_key(texts, tickers, source, options)
-        cached_result = cache_manager.get(cache_key)
-        
-        if cached_result:
-            logger.info(f"Cache hit for sentiment analysis: {cache_key[:50]}...")
-            return jsonify(cached_result)
+        # Skip internal caching - let Node.js handle all caching
+        # This ensures unified cache management across the application
         
         # Preprocess texts
         processed_texts = [text_preprocessor.preprocess(text, source) for text in texts]
@@ -96,8 +89,7 @@ def analyze_sentiment():
             results, texts, tickers, source
         )
         
-        # Cache results
-        cache_manager.set(cache_key, formatted_response, ttl=1800)  # 30 minutes
+        # No internal caching - Node.js handles this
         
         logger.info(f"Processed {len(texts)} texts for sentiment analysis")
         return jsonify(formatted_response)
@@ -133,12 +125,8 @@ def analyze_single_text():
         source = data.get('source', 'unknown')
         options = data.get('options', {})
         
-        # Check cache
-        cache_key = cache_manager.generate_cache_key([text], [ticker] if ticker else [], source, options)
-        cached_result = cache_manager.get(cache_key)
-        
-        if cached_result:
-            return jsonify(cached_result)
+        # Skip internal caching - let Node.js handle all caching
+        # This ensures unified cache management across the application
         
         # Preprocess text
         processed_text = text_preprocessor.preprocess(text, source)
@@ -156,8 +144,7 @@ def analyze_single_text():
             result, text, ticker, source
         )
         
-        # Cache result
-        cache_manager.set(cache_key, formatted_response, ttl=1800)
+        # No internal caching - Node.js handles this
         
         return jsonify(formatted_response)
         
@@ -180,23 +167,21 @@ def get_model_info():
 
 @app.route('/cache/stats', methods=['GET'])
 def get_cache_stats():
-    """Get cache statistics"""
-    try:
-        stats = cache_manager.get_stats()
-        return jsonify(stats)
-    except Exception as e:
-        logger.error(f"Error getting cache stats: {str(e)}")
-        return jsonify({'error': 'Failed to get cache stats'}), 500
+    """Get cache statistics - Note: Caching is handled by Node.js application"""
+    return jsonify({
+        'message': 'Cache management is handled by the Node.js application',
+        'note': 'Python service does not maintain internal cache',
+        'cache_location': 'Node.js cacheManager'
+    })
 
 @app.route('/cache/clear', methods=['POST'])
 def clear_cache():
-    """Clear sentiment analysis cache"""
-    try:
-        cache_manager.clear_all()
-        return jsonify({'message': 'Cache cleared successfully'})
-    except Exception as e:
-        logger.error(f"Error clearing cache: {str(e)}")
-        return jsonify({'error': 'Failed to clear cache'}), 500
+    """Clear sentiment analysis cache - Note: Caching is handled by Node.js application"""
+    return jsonify({
+        'message': 'Cache management is handled by the Node.js application',
+        'note': 'To clear cache, use the Node.js application cache endpoints',
+        'cache_location': 'Node.js cacheManager'
+    })
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))

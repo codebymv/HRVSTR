@@ -17,12 +17,12 @@ function selectTtl(range) {
 }
 
 /**
- * Analyze sentiment of Reddit posts for a specific ticker
+ * Analyze sentiment of Reddit posts for a specific ticker with enhanced Python integration
  * @param {string} ticker - Stock ticker symbol
  * @param {Array} posts - Array of Reddit posts
- * @returns {Object} Sentiment analysis result
+ * @returns {Promise<Object>} Sentiment analysis result
  */
-function analyzeTickerSentiment(ticker, posts) {
+async function analyzeTickerSentiment(ticker, posts) {
   console.log(`[REDDIT SENTIMENT DEBUG] Analyzing sentiment for ${ticker} with ${posts.length} total posts`);
   
   const tickerRegex = new RegExp(`\\b${ticker}\\b`, 'i');
@@ -33,41 +33,94 @@ function analyzeTickerSentiment(ticker, posts) {
 
   console.log(`[REDDIT SENTIMENT DEBUG] Found ${relevantPosts.length} relevant posts for ${ticker}`);
 
-  const sentimentScores = [];
-  const sentimentConfidences = [];
-  let totalScore = 0;
-  let totalConfidence = 0;
-  
-  relevantPosts.forEach(post => {
-    const text = `${post.data.title} ${post.data.selftext}`;
-    const sentimentResult = sentimentUtils.analyzeSentiment(text);
-    
-    // Use the enhanced sentiment analysis results
-    const score = sentimentResult.comparative || 0;
-    const confidence = sentimentResult.confidence || 0;
-    
-    sentimentScores.push(score);
-    sentimentConfidences.push(confidence);
-    totalScore += score;
-    totalConfidence += confidence;
-  });
+  if (relevantPosts.length === 0) {
+    return sentimentUtils.formatSentimentData(
+      ticker, 0, 0, 0, 'reddit', new Date().toISOString(), 0, 0
+    );
+  }
 
-  const avgScore = relevantPosts.length > 0 ? totalScore / relevantPosts.length : 0;
-  const avgConfidence = relevantPosts.length > 0 ? Math.round(totalConfidence / relevantPosts.length) : 0;
+  // Prepare texts for batch analysis
+  const texts = relevantPosts.map(post => `${post.data.title} ${post.data.selftext}`);
+  const tickers = new Array(texts.length).fill(ticker);
   
-  console.log(`[REDDIT SENTIMENT DEBUG] ${ticker}: avgScore=${avgScore}, avgConfidence=${avgConfidence}, posts=${relevantPosts.length}`);
-  
-  // Use the enhanced formatSentimentData function with proper confidence
-  return sentimentUtils.formatSentimentData(
-    ticker,
-    avgScore,
-    relevantPosts.length, // postCount
-    relevantPosts.reduce((sum, post) => sum + (post.data.num_comments || 0), 0), // commentCount
-    'reddit',
-    new Date().toISOString(),
-    avgConfidence, // baseConfidence from sentiment analysis
-    Math.round(Math.abs(avgScore) * 100) // strength as percentage
-  );
+  try {
+    // Use enhanced batch sentiment analysis
+    const sentimentResults = await sentimentUtils.analyzeBatchSentiment(texts, tickers, 'reddit', true);
+    
+    // Calculate averages
+    const totalScore = sentimentResults.reduce((sum, result) => sum + (result.score || 0), 0);
+    const totalConfidence = sentimentResults.reduce((sum, result) => sum + (result.confidence || 0), 0);
+    
+    const avgScore = sentimentResults.length > 0 ? totalScore / sentimentResults.length : 0;
+    const avgConfidence = sentimentResults.length > 0 ? Math.round(totalConfidence / sentimentResults.length) : 0;
+    
+    // Check if any results used enhanced analysis
+    const hasEnhanced = sentimentResults.some(result => result.enhanced);
+    
+    console.log(`[REDDIT SENTIMENT DEBUG] ${ticker}: avgScore=${avgScore}, avgConfidence=${avgConfidence}, posts=${relevantPosts.length}, enhanced=${hasEnhanced}`);
+    
+    // Use the enhanced formatSentimentData function with proper confidence
+    const result = sentimentUtils.formatSentimentData(
+      ticker,
+      avgScore,
+      relevantPosts.length, // postCount
+      relevantPosts.reduce((sum, post) => sum + (post.data.num_comments || 0), 0), // commentCount
+      'reddit',
+      new Date().toISOString(),
+      avgConfidence, // baseConfidence from sentiment analysis
+      Math.round(Math.abs(avgScore) * 100) // strength as percentage
+    );
+    
+    // Add enhanced analysis metadata if available
+    if (hasEnhanced) {
+      result.enhanced = true;
+      result.enhancedMetrics = {
+        finbertResults: sentimentResults.filter(r => r.finbert).length,
+        vaderResults: sentimentResults.filter(r => r.vader).length,
+        entitiesExtracted: sentimentResults.reduce((sum, r) => sum + (r.words?.length || 0), 0)
+      };
+    }
+    
+    return result;
+    
+  } catch (error) {
+    console.error(`[REDDIT SENTIMENT ERROR] Enhanced analysis failed for ${ticker}:`, error.message);
+    
+    // Fallback to basic analysis
+    const sentimentScores = [];
+    const sentimentConfidences = [];
+    let totalScore = 0;
+    let totalConfidence = 0;
+    
+    for (const post of relevantPosts) {
+      const text = `${post.data.title} ${post.data.selftext}`;
+      const sentimentResult = sentimentUtils.analyzeSentimentBasic(text);
+      
+      const score = sentimentResult.comparative || 0;
+      const confidence = sentimentResult.confidence || 0;
+      
+      sentimentScores.push(score);
+      sentimentConfidences.push(confidence);
+      totalScore += score;
+      totalConfidence += confidence;
+    }
+
+    const avgScore = relevantPosts.length > 0 ? totalScore / relevantPosts.length : 0;
+    const avgConfidence = relevantPosts.length > 0 ? Math.round(totalConfidence / relevantPosts.length) : 0;
+    
+    console.log(`[REDDIT SENTIMENT DEBUG] ${ticker} (fallback): avgScore=${avgScore}, avgConfidence=${avgConfidence}, posts=${relevantPosts.length}`);
+    
+    return sentimentUtils.formatSentimentData(
+      ticker,
+      avgScore,
+      relevantPosts.length,
+      relevantPosts.reduce((sum, post) => sum + (post.data.num_comments || 0), 0),
+      'reddit',
+      new Date().toISOString(),
+      avgConfidence,
+      Math.round(Math.abs(avgScore) * 100)
+    );
+  }
 }
 
 async function getRedditTickerSentiment(timeRange = '1w', userId = null, userTickers = null) {
@@ -130,10 +183,10 @@ async function getRedditTickerSentiment(timeRange = '1w', userId = null, userTic
       
       for (const ticker of tickers) {
         try {
-          const analysis = analyzeTickerSentiment(ticker, allPosts);
+          const analysis = await analyzeTickerSentiment(ticker, allPosts);
           if (analysis.postCount > 0) {
             sentimentData.push(analysis);
-            console.log(`[REDDIT SENTIMENT DEBUG] Added sentiment data for ${ticker}: score=${analysis.score}, posts=${analysis.postCount}`);
+            console.log(`[REDDIT SENTIMENT DEBUG] Added sentiment data for ${ticker}: score=${analysis.score}, posts=${analysis.postCount}, enhanced=${analysis.enhanced || false}`);
           } else {
             console.log(`[REDDIT SENTIMENT DEBUG] No posts found for ${ticker}, skipping`);
           }

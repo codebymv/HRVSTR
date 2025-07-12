@@ -51,21 +51,65 @@ async function getFinvizTickerSentiment(tickers) {
           }
         });
         
-        // Extract news count (approximate based on news section)
-        const newsCount = $('table.news-table tr').length;
+        // Extract news headlines for sentiment analysis
+        const newsHeadlines = [];
+        $('table.news-table tr').each((i, el) => {
+          const headline = $(el).find('a').text().trim();
+          if (headline && headline.length > 10) {
+            newsHeadlines.push(headline);
+          }
+        });
         
-        // Calculate sentiment score based on price change and news volume
-        let score = 0; // Start with neutral
+        const newsCount = newsHeadlines.length;
         
-        // Convert price change to sentiment score using tanh for better distribution
-        if (!isNaN(changePercent)) {
-          // Use tanh to convert percentage change to -1 to 1 range
-          // Divide by 5 to make it less sensitive (5% change = ~0.76 score)
-          score = Math.tanh(changePercent / 5);
+        // Calculate sentiment score using enhanced analysis on news headlines
+        let score = 0;
+        let confidence = 30; // Base confidence for FinViz data
+        
+        try {
+          if (newsHeadlines.length > 0) {
+            // Use enhanced sentiment analysis on news headlines
+            const sentimentResults = await sentimentUtils.analyzeBatchSentiment(
+              newsHeadlines, 
+              [ticker.toUpperCase()], 
+              'finviz', 
+              true
+            );
+            
+            if (sentimentResults.length > 0) {
+              // Calculate average sentiment from news headlines
+              const totalScore = sentimentResults.reduce((sum, result) => sum + (result.score || 0), 0);
+              const totalConfidence = sentimentResults.reduce((sum, result) => sum + (result.confidence || 0), 0);
+              
+              score = totalScore / sentimentResults.length;
+              const newsConfidence = totalConfidence / sentimentResults.length;
+              
+              // Combine news sentiment confidence with base confidence
+              confidence = Math.max(confidence, newsConfidence);
+              
+              // Check if enhanced analysis was used
+              const hasEnhanced = sentimentResults.some(result => result.enhanced);
+              if (hasEnhanced) {
+                console.log(`[FINVIZ SENTIMENT DEBUG] Enhanced analysis used for ${ticker} news headlines`);
+              }
+            }
+          }
+          
+          // If no news or sentiment analysis failed, fall back to price-based sentiment
+          if (score === 0 && !isNaN(changePercent)) {
+            score = Math.tanh(changePercent / 5);
+          }
+          
+        } catch (error) {
+          console.warn(`[FINVIZ SENTIMENT] Enhanced analysis failed for ${ticker}, using price-based sentiment:`, error.message);
+          
+          // Fallback to price-based sentiment
+          if (!isNaN(changePercent)) {
+            score = Math.tanh(changePercent / 5);
+          }
         }
         
-        // Calculate confidence based on news volume and price movement strength
-        let confidence = 30; // Base confidence for FinViz data
+        // Enhance confidence based on news volume and price movement strength
         confidence += Math.min(20, newsCount * 2); // Up to 20 points for news volume
         confidence += Math.min(25, Math.abs(changePercent) * 2.5); // Up to 25 points for strong moves
         confidence = Math.min(100, Math.round(confidence));

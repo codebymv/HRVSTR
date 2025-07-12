@@ -155,58 +155,107 @@ async function analyzeYahooNewsSentiment(ticker, limit = 10) {
     let validSentiments = 0;
     const sentimentResults = [];
     
-    // Analyze sentiment for each news item
-    for (const item of newsItems) {
-      try {
-        if (!item || typeof item !== 'object') {
-          console.warn('Invalid news item format, skipping');
-          continue;
-        }
-        
+    // Try enhanced batch sentiment analysis first
+    let enhancedAnalysisUsed = false;
+    try {
+      // Extract texts for batch analysis
+      const texts = newsItems.map(item => {
         const title = item.title || '';
         const description = item.description || '';
-        const text = `${title}. ${description}`.substring(0, 1000); // Limit text length for performance
+        return `${title}. ${description}`.substring(0, 1000);
+      }).filter(text => text.trim());
+      
+      if (texts.length > 0) {
+        console.log(`[${ticker}] Attempting enhanced batch sentiment analysis for ${texts.length} news items...`);
         
-        if (!text.trim()) {
-          console.warn('Empty text for sentiment analysis, skipping');
-          continue;
+        const batchResults = await sentimentUtils.analyzeBatchSentiment(
+          texts,
+          ticker,
+          'yahoo',
+          true // useEnhanced
+        );
+        
+        if (batchResults && Array.isArray(batchResults) && batchResults.length > 0) {
+          console.log(`[${ticker}] Enhanced batch analysis successful, processing ${batchResults.length} results`);
+          enhancedAnalysisUsed = true;
+          
+          // Process enhanced results
+          for (let i = 0; i < Math.min(batchResults.length, newsItems.length); i++) {
+            const result = batchResults[i];
+            const item = newsItems[i];
+            
+            if (result && typeof result.score === 'number') {
+              const sentimentResult = {
+                ...item,
+                sentimentScore: result.score,
+                comparative: result.comparative || 0,
+                confidence: Math.max(0, Math.min(1, result.confidence || 0)),
+                positive: Array.isArray(result.positive) ? result.positive : [],
+                negative: Array.isArray(result.negative) ? result.negative : [],
+                enhanced: result.enhanced || false,
+                finbert: result.finbert || false,
+                vader: result.vader || false,
+                entities: result.entities || []
+              };
+              
+              sentimentResults.push(sentimentResult);
+              totalScore += result.comparative || 0;
+              totalConfidence += result.confidence || 0;
+              validSentiments++;
+            }
+          }
         }
-        
-        const sentiment = sentimentUtils.analyzeSentiment(text);
-        
-        console.log(`[${ticker}] Sentiment analysis result for news item ${validSentiments + 1}:`, {
-          score: sentiment?.score,
-          comparative: sentiment?.comparative,
-          confidence: sentiment?.confidence
-        });
-        
-        // Validate sentiment result
-        if (typeof sentiment !== 'object' || 
-            typeof sentiment.score !== 'number' || 
-            typeof sentiment.comparative !== 'number') {
-          console.warn(`[${ticker}] Invalid sentiment result format, skipping:`, sentiment);
-          continue;
+      }
+    } catch (enhancedError) {
+      console.log(`[${ticker}] Enhanced analysis failed, falling back to basic analysis:`, enhancedError.message);
+    }
+    
+    // Fallback to individual analysis if enhanced failed or wasn't used
+    if (!enhancedAnalysisUsed) {
+      console.log(`[${ticker}] Using basic sentiment analysis for news items...`);
+      
+      for (const item of newsItems) {
+        try {
+          if (!item || typeof item !== 'object') {
+            console.warn('Invalid news item format, skipping');
+            continue;
+          }
+          
+          const title = item.title || '';
+          const description = item.description || '';
+          const text = `${title}. ${description}`.substring(0, 1000);
+          
+          if (!text.trim()) {
+            console.warn('Empty text for sentiment analysis, skipping');
+            continue;
+          }
+          
+          const sentiment = await sentimentUtils.analyzeSentiment(text, ticker, 'yahoo', false);
+          
+          // Validate sentiment result
+          if (typeof sentiment !== 'object' || 
+              typeof sentiment.score !== 'number') {
+            console.warn(`[${ticker}] Invalid sentiment result format, skipping:`, sentiment);
+            continue;
+          }
+          
+          const sentimentResult = {
+            ...item,
+            sentimentScore: sentiment.score,
+            comparative: sentiment.comparative || 0,
+            confidence: Math.max(0, Math.min(1, sentiment.confidence || 0)),
+            positive: Array.isArray(sentiment.positive) ? sentiment.positive : [],
+            negative: Array.isArray(sentiment.negative) ? sentiment.negative : []
+          };
+          
+          sentimentResults.push(sentimentResult);
+          totalScore += sentiment.comparative || 0;
+          totalConfidence += sentimentResult.confidence || 0;
+          validSentiments++;
+          
+        } catch (sentimentError) {
+          console.error(`Error analyzing sentiment for news item:`, sentimentError.message);
         }
-        
-        const sentimentResult = {
-          ...item,
-          sentimentScore: sentiment.score,
-          comparative: sentiment.comparative,
-          confidence: Math.max(0, Math.min(1, sentiment.confidence || 0)), // Ensure 0-1 range
-          positive: Array.isArray(sentiment.positive) ? sentiment.positive : [],
-          negative: Array.isArray(sentiment.negative) ? sentiment.negative : []
-        };
-        
-        sentimentResults.push(sentimentResult);
-        
-        // Update running totals using comparative score for better sentiment analysis
-        totalScore += sentiment.comparative;
-        totalConfidence += sentimentResult.confidence || 0;
-        validSentiments++;
-        
-      } catch (sentimentError) {
-        console.error(`Error analyzing sentiment for news item:`, sentimentError.message);
-        // Continue with next item
       }
     }
     
