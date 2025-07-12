@@ -9,6 +9,7 @@ import {
   getSessionTimeRemainingFormatted,
   clearComponentAccessCache
 } from '../utils/sessionStorage';
+import { getApiUrlClient } from '../services/apiService';
 
 export interface ComponentUnlockState {
   [key: string]: boolean;
@@ -168,10 +169,10 @@ export const useComponentUnlock = (config: UseComponentUnlockConfig) => {
     }
     
     try {
-      const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
+      const apiUrl = getApiUrlClient();
       const token = localStorage.getItem('auth_token');
       
-      const response = await fetch(`${proxyUrl}/api/credits/unlock-component`, {
+      const response = await fetch(`${apiUrl}/api/credits/unlock-component`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

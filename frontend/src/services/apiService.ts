@@ -2,25 +2,20 @@
  * API Service - Manages proxy URL and API configuration
  */
 
-// Get the proxy URL from environment variables or use relative path
-export const getProxyUrl = (): string => {
-  // Check for test environment first (Vitest sets process.env.NODE_ENV to 'test')
-  if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'test') {
-    return process.env.VITE_PROXY_URL || 'http://localhost:3001';
-  }
-  
-  // In production, use the public Railway backend service URL
-  if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.PROD) {
-    // Use the public backend URL since Railway internal network may not be accessible
-    return 'https://backend-production-81ee.up.railway.app';
-  }
-  // In development, use the proxy URL from env or default
-  if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
-    return (import.meta as any).env.VITE_PROXY_URL || 'http://localhost:3001';
-  }
-  // Fallback for other environments
-  return 'http://localhost:3001';
-};
+// Function to get API URL for server-side environments
+export function getApiUrl(): string {
+  return process.env.VITE_API_URL || 'http://localhost:3001';
+}
+
+// Function to get API URL for client-side environments
+export function getApiUrlClient(): string {
+  return (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
+}
+
+// Legacy function for backward compatibility
+export function getProxyUrl(): string {
+  return (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
+}
 
 /**
  * Send API keys to the proxy server

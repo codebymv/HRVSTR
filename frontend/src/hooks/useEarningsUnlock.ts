@@ -8,6 +8,7 @@ import {
   checkComponentAccess,
   getSessionTimeRemainingFormatted
 } from '../utils/sessionStorage';
+import { getApiUrlClient } from '../services/apiService';
 
 interface FreshUnlockState {
   earningsAnalysis: boolean;
@@ -120,10 +121,10 @@ export const useEarningsUnlock = () => {
         };
       }
       
-      const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
+      const apiUrl = getApiUrlClient();
       const token = localStorage.getItem('auth_token');
       
-      const response = await fetch(`${proxyUrl}/api/credits/unlock-component`, {
+      const response = await fetch(`${apiUrl}/api/credits/unlock-component`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

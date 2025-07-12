@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { getApiUrlClient } from '../services/apiService';
 
 interface CreditBalance {
   total: number;
@@ -54,14 +55,14 @@ export const useCreditBalance = (): UseCreditBalanceReturn => {
       setLoading(true);
       setError(null);
 
-      const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
+      const apiUrl = getApiUrlClient();
       const token = localStorage.getItem('auth_token');
 
       if (!token) {
         throw new Error('No auth token found');
       }
 
-      const response = await fetch(`${proxyUrl}/api/credits/balance`, {
+      const response = await fetch(`${apiUrl}/api/credits/balance`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -91,14 +92,14 @@ export const useCreditBalance = (): UseCreditBalanceReturn => {
 
   const purchaseCredits = useCallback(async (credits: number): Promise<boolean> => {
     try {
-      const proxyUrl = import.meta.env.VITE_PROXY_URL || 'http://localhost:3001';
+      const apiUrl = getApiUrlClient();
       const token = localStorage.getItem('auth_token');
 
       if (!token) {
         throw new Error('No auth token found');
       }
 
-      const response = await fetch(`${proxyUrl}/api/credits/purchase`, {
+      const response = await fetch(`${apiUrl}/api/credits/purchase`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
